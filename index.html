@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Document type declaration: tells the browser this is an HTML5 document -->
+<html lang="en">
+  <!-- Root HTML element with language set to English for accessibility and SEO -->
+  <head>
+    <!-- Head section contains metadata and resource links, nothing visible here -->
+
+    <meta charset="UTF-8" />
+    <!-- Character encoding set to UTF-8: supports all international characters including Urdu, Arabic, etc. -->
+
+    <link rel="icon" type="image/svg+xml" href="/icons.svg" />
+    <!-- Favicon link: the small icon shown in browser tab, loaded from /icons.svg as an SVG file -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Viewport meta tag: makes the page responsive on mobile devices by matching screen width and setting zoom to 1x -->
+
+    <title>Zyron</title>
+    <!-- Page title: shown in the browser tab and used by search engines -->
+
+    <!-- Inter and JetBrains Mono fonts are being loaded from Google Fonts -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <!-- Preconnect to Google Fonts API domain: establishes early connection to speed up font loading -->
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Preconnect to Google's static font file server with crossorigin attribute for CORS-safe font fetching -->
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Loads two Google Fonts: Inter (weights 400/500/600/700 for UI text) and JetBrains Mono (weights 400/500 for code display); display=swap prevents invisible text during font load -->
+  </head>
+  <body>
+    <!-- Body section: contains everything visible on the page -->
+
+    <div id="root"></div>
+    <!-- Empty div with id="root": this is where React mounts and renders the entire app -->
+
+    <script type="module" src="/src/main.jsx"></script>
+    <!-- Module script tag: loads the React app entry point (main.jsx); type="module" enables ES module imports (import/export syntax) -->
+  </body>
+</html>

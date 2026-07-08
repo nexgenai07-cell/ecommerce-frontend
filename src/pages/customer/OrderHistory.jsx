@@ -1,0 +1,182 @@
+import { useState } from "react"; // useState manages the active tab and selected date range locally
+import { useQuery } from "@tanstack/react-query"; // useQuery handles API fetching, caching, and loading state automatically
+import { AnimatePresence } from "framer-motion"; // AnimatePresence enables exit animations when order cards are filtered out
+import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized query key constants — keeps cache keys consistent across the app
+import { getMyOrders } from "../../api/orders.api"; // API function that calls GET /api/v1/orders/ and returns the logged-in user's orders
+import isWithinDateRange from "../../utils/isWithinDateRange"; // Real date-window comparison — powers the "Last 3 months" etc. dropdown
+import Container from "../../components/layouts/Container"; // Wrapper that applies consistent max-width and horizontal padding to the page
+import OrderFilters, {
+  DATE_RANGES,
+} from "../../components/order-history/OrderFilters"; // Icon-box header + status tabs + date range dropdown; DATE_RANGES re-exported for building accurate empty-state copy
+import OrderCard from "../../components/order-history/OrderCard"; // Single order card — renders one row per order
+import EmptyState from "../../components/ui/EmptyState"; // Generic empty state component shown when no orders match the current filter
+import ErrorState from "../../components/ui/ErrorState"; // Reusable error-state component with a retry button — same pattern used in OrderDetail.jsx, ProductDetail.jsx, NotificationHistory.jsx
+
+const OrderHistory = () => {
+  // activeTab tracks which status filter tab is currently selected — "all" shows every order
+  const [activeTab, setActiveTab] = useState("all");
+
+  // dateRange tracks the selected date window — defaults to last 3 months
+  const [dateRange, setDateRange] = useState("3months");
+
+  // =============================================
+  // MY ORDERS API
+  // API 43 — GET /api/v1/orders/
+  // =============================================
+
+  const {
+    data: ordersData,
+    isLoading,
+    isError, // true if the request itself failed (network drop, 500, expired session) — must be handled separately from "zero orders"
+    refetch, // passed to ErrorState so the customer can retry without a full page reload
+  } = useQuery({
+    queryKey: QUERY_KEYS.MY_ORDERS,
+    queryFn: getMyOrders,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const allOrders = ordersData?.data?.results || [];
+
+  // Date-window filtering is applied FIRST, before the status tab — this is
+  // the set both the tab counts AND the final list are derived from, so a
+  // tab badge like "Cancelled (1)" always matches what actually shows up
+  // when that tab is clicked. Applying date only at the very end (after
+  // tab filtering) would let the two filters disagree with each other.
+  const dateFilteredOrders = allOrders.filter((order) =>
+    isWithinDateRange(order.created_at, dateRange),
+  );
+
+  // Client-side status filtering on top of the date-filtered set —
+  // "all" tab returns everything within the date window; any other tab
+  // narrows further by matching order.status
+  const filteredOrders =
+    activeTab === "all"
+      ? dateFilteredOrders
+      : dateFilteredOrders.filter((order) => order.status === activeTab);
+
+  // Human-readable label for whichever date range is currently active —
+  // reused below to build accurate empty-state copy (e.g. "Last 3 months")
+  const dateRangeLabel = DATE_RANGES.find((d) => d.id === dateRange)?.label;
+
+  // Whether a date restriction is actually narrowing the results right now —
+  // "all" means no restriction, so it shouldn't be mentioned in copy
+  const hasDateFilter = dateRange !== "all";
+
+  return (
+    // relative + overflow-hidden hosts the decorative ambient gradient glow
+    // behind the header without it bleeding into the navbar/footer or causing
+    // horizontal scrollbars — same treatment as Wishlist and Notifications
+    <div className="relative overflow-hidden">
+      {/* Ambient background glow — soft emerald blur behind the page header,
+          purely decorative (pointer-events-none), keeps this page visually
+          consistent with the other account pages
+          -z-10 keeps it strictly behind all real content                    */}
+      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-xl h-144 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      <Container className="py-6 sm:py-8">
+        <div className="flex flex-col gap-6">
+          {/* ── Filters: icon-box heading + status tabs + date range dropdown ──
+              Receives the date-window-filtered orders so tab counts stay
+              accurate for whichever date range is currently selected        */}
+          <OrderFilters
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            orders={dateFilteredOrders} // date-window-filtered list — so tab badge counts (e.g. "Cancelled (1)") match what the date dropdown currently shows, not the full unfiltered history
+          />
+
+          {/* ── Loading skeleton ────────────────────────────────────────────── */}
+          {isLoading && (
+            <div className="flex flex-col gap-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse"
+                >
+                  <div className="flex justify-between mb-4">
+                    <div className="h-4 bg-gray-100 rounded w-32" />
+                    <div className="h-6 bg-gray-100 rounded w-24" />
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    {[1, 2, 3].map((j) => (
+                      <div
+                        key={j}
+                        className="w-16 h-16 bg-gray-100 rounded-xl"
+                      />
+                    ))}
+                  </div>
+                  <div className="flex justify-between pt-3 border-t border-gray-50">
+                    <div className="h-4 bg-gray-100 rounded w-40" />
+                    <div className="h-8 bg-gray-100 rounded w-32" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Error state ──────────────────────────────────────────────────
+              Only shown once loading has finished AND the request genuinely
+              failed — checked BEFORE the empty state, so a failed request is
+              never mistaken for "you simply have no orders"                 */}
+          {!isLoading && isError && (
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
+              <ErrorState
+                title="Couldn't load your orders"
+                message="Something went wrong while fetching your order history. Please try again."
+                onRetry={refetch}
+              />
+            </div>
+          )}
+
+          {/* ── Empty state ───────────────────────────────────────────────────
+              Title and description account for BOTH active filters — a
+              customer who picks "Cancelled" + "Last 3 months" and gets zero
+              results should be told about the date window too, not just the
+              status, otherwise they might think Cancelled orders don't exist
+              at all when really they're just outside the selected window.
+              Wrapped in an elevated white card so it looks properly "raised"
+              off the page, matching Wishlist and Notifications              */}
+          {!isLoading && !isError && filteredOrders.length === 0 && (
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
+              <EmptyState
+                variant="noOrders"
+                title={
+                  activeTab === "all" && !hasDateFilter
+                    ? "No orders yet"
+                    : activeTab === "all"
+                      ? `No orders in the ${dateRangeLabel.toLowerCase()}`
+                      : `No ${activeTab} orders`
+                }
+                description={
+                  activeTab === "all" && !hasDateFilter
+                    ? "When you place an order, it will appear here."
+                    : hasDateFilter
+                      ? `You don't have any ${activeTab === "all" ? "" : activeTab + " "}orders in the ${dateRangeLabel.toLowerCase()}.`
+                      : `You don't have any ${activeTab} orders.`
+                }
+              />
+            </div>
+          )}
+
+          {/* ── Order cards ────────────────────────────────────────────────── */}
+          {!isLoading && !isError && filteredOrders.length > 0 && (
+            <AnimatePresence mode="popLayout">
+              <div className="flex flex-col gap-4">
+                {filteredOrders.map((order, index) => (
+                  <OrderCard
+                    key={order.order_number}
+                    order={order}
+                    index={index}
+                  />
+                ))}
+              </div>
+            </AnimatePresence>
+          )}
+        </div>
+      </Container>
+    </div>
+  );
+};
+
+export default OrderHistory;

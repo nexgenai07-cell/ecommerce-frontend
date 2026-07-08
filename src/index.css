@@ -1,0 +1,133 @@
+/* ================================= */
+/* Main entry point for Tailwind CSS v4 */
+/* This line loads all of Tailwind's utilities */
+/* ================================= */
+@import "tailwindcss";
+
+/* ================================= */
+/* Design tokens are in a separate file */
+/* CSS variables are imported from there */
+/* ================================= */
+@import "./styles/tokens.css";
+
+/* ================================= */
+/* @theme block — Tailwind v4's new approach */
+/* Registering variables here lets Tailwind */
+/* automatically generate utility classes */
+/* For example --color-primary generates the bg-primary class */
+/* ================================= */
+@theme {
+
+  /* ========================= */
+  /* PRIMARY COLORS */
+  /* Zyron's main brand color is emerald */
+  /* Used for buttons, links, and active states */
+  /* ========================= */
+  --color-primary: #10b981;         /* bg-primary, text-primary, border-primary */
+  --color-primary-light: #34d399;   /* bg-primary-light — hover states */
+  --color-primary-dark: #059669;    /* bg-primary-dark — active/pressed states */
+  --color-primary-50: #ecfdf5;      /* bg-primary-50 — light background tints */
+  --color-primary-100: #d1fae5;     /* bg-primary-100 — badge backgrounds */
+
+  /* ========================= */
+  /* SURFACE COLORS */
+  /* For cards, modals, sidebar backgrounds */
+  /* ========================= */
+  --color-surface: #ffffff;               /* bg-surface — cards and modals */
+  --color-surface-secondary: #f9fafb;     /* bg-surface-secondary — page background */
+
+  /* ========================= */
+  /* STATUS COLORS */
+  /* For order status, payment status badges */
+  /* Each status has its own color */
+  /* ========================= */
+  --color-success: #10b981;         /* bg-success — delivered, approved, resolved */
+  --color-success-light: #ecfdf5;   /* bg-success-light — success badge background */
+
+  --color-warning: #f59e0b;         /* bg-warning — pending, in progress */
+  --color-warning-light: #fffbeb;   /* bg-warning-light — warning badge background */
+
+  --color-danger: #ef4444;          /* bg-danger — cancelled, rejected, errors */
+  --color-danger-light: #fef2f2;    /* bg-danger-light — danger badge background */
+
+  --color-info: #3b82f6;            /* bg-info — confirmed, informational */
+  --color-info-light: #eff6ff;      /* bg-info-light — info badge background */
+
+  /* ========================= */
+  /* FONTS */
+  /* Inter — main readable font for the entire project */
+  /* JetBrains Mono — for code blocks */
+  /* ========================= */
+  --font-sans: "Inter", sans-serif;             /* font-sans */
+  --font-mono: "JetBrains Mono", monospace;     /* font-mono */
+
+  /* ========================= */
+  /* BORDER RADIUS */
+  /* Consistent rounded corners across the entire project */
+  /* ========================= */
+  --radius-sm: 0.25rem;    /* rounded-sm — 4px — badges */
+  --radius-md: 0.375rem;   /* rounded-md — 6px — inputs, buttons */
+  --radius-lg: 0.5rem;     /* rounded-lg — 8px — cards */
+  --radius-xl: 0.75rem;    /* rounded-xl — 12px — modals */
+  --radius-2xl: 1rem;      /* rounded-2xl — 16px — large cards */
+  --radius-full: 9999px;   /* rounded-full — pills, avatars */
+
+  /* ========================= */
+  /* SHADOWS */
+  /* To show depth — for cards, modals, drawers */
+  /* ========================= */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);             /* shadow-sm — subtle depth */
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);         /* shadow-md — cards */
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);       /* shadow-lg — modals */
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);       /* shadow-xl — drawers */
+
+  /* ========================= */
+  /* Z-INDEX */
+  /* Defines stacking order — what sits on top of what */
+  /* IMPORTANT: Tailwind v4 only auto-generates the `z-<name>` utility      */
+  /* (z-dropdown, z-sticky, z-drawer, z-modal, z-toast) from variables      */
+  /* namespaced as `--z-index-*` inside @theme — NOT `--z-*`.               */
+  /* The old `--z-dropdown` / `--z-sticky` / etc. names (matching the       */
+  /* pattern used by --color-*, --radius-*, --shadow-* above) do NOT match  */
+  /* Tailwind's z-index namespace, so those utility classes were silently   */
+  /* generating no CSS at all — every "sticky" navbar, dropdown, mobile     */
+  /* drawer, and modal in the app had z-index: auto (i.e. no effect),       */
+  /* which is exactly why navbars/dropdowns/sidebars could end up behind    */
+  /* other page content. Renamed to `--z-index-*` fixes this project-wide.  */
+  /* ========================= */
+  --z-index-dropdown: 100;   /* z-dropdown — category menu, select dropdowns */
+  --z-index-sticky: 200;     /* z-sticky — navbar that stays on top while scrolling */
+  --z-index-drawer: 300;     /* z-drawer — cart or menu that slides in from the side */
+  --z-index-modal: 400;      /* z-modal — confirm delete, success popups */
+  --z-index-toast: 500;      /* z-toast — success/error notifications, topmost layer */
+}
+
+/* ================================================================ */
+/* CUSTOM SCROLLBAR UTILITIES */
+/* Tailwind v4 core has NO built-in "scrollbar-hide" utility.        */
+/* The class was already being used in 6+ components across the app */
+/* (CategoryPills, OrderStepper, TrackingStepper, AdminSidebar,      */
+/* ProductImageGallery, OrderFilters) but was never actually defined */
+/* anywhere — meaning scrollbars were NOT being hidden anywhere.     */
+/* Defining it here fixes all of those usages project-wide, for free.*/
+/* ================================================================ */
+
+/* Fully invisible scrollbar — scrolling still works, just not visible */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and old Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* scrollbar-thin: ab yeh bhi fully invisible hai (scrollbar-hide jaisa), */
+/* taake category pills row par bhi koi scrollbar bilkul nazar na aaye,   */
+/* lekin scrolling normal kaam karti rahe. */
+.scrollbar-thin {
+  -ms-overflow-style: none; /* IE and old Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-thin::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
