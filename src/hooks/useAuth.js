@@ -1,25 +1,13 @@
-// ============================================================
-// useAuth - CUSTOM HOOK
-// ============================================================
-// This is a custom React hook that acts as a SHORTCUT for accessing
-// auth-related state and actions from the Redux store.
-//
-// WHY THIS HOOK EXISTS:
-// Without it, every component that needs auth info would have to write:
-//   const user = useSelector((state) => state.auth.user);
-//   const dispatch = useDispatch();
-//   dispatch(setUser(...));
-// ...repeating this boilerplate everywhere.
-//
-// Instead, components can simply do:
-//   const { user, isAuthenticated, login, logoutUser } = useAuth();
-// This keeps components cleaner and centralizes auth logic in one place.
-
 import { useSelector, useDispatch } from "react-redux";
 // useSelector -> lets us READ data from the Redux store
 // useDispatch -> lets us DISPATCH actions to update the Redux store
 
-import { setUser, logout, setToken } from "../store/slices/authSlice";
+import {
+  setUser,
+  logout,
+  setToken,
+  updateUser,
+} from "../store/slices/authSlice";
 // Importing the specific action creators we defined in authSlice.js,
 // so we can dispatch them from inside this hook.
 
@@ -81,6 +69,17 @@ const useAuth = () => {
   };
 
   // --------------------------------------------------
+  // FUNCTION: updateProfile
+  // --------------------------------------------------
+  // A wrapper function that dispatches the "updateUser" action.
+  // Call this after a successful "Edit Profile" API save so the navbar
+  // avatar/name/email (and localStorage) immediately reflect the new
+  // data — without needing the user to log out and log back in.
+  const updateProfile = (data) => {
+    dispatch(updateUser(data));
+  };
+
+  // --------------------------------------------------
   // RETURNING VALUES & FUNCTIONS
   // --------------------------------------------------
   // Whatever this hook returns becomes available to any component
@@ -96,6 +95,7 @@ const useAuth = () => {
     login, // Function to call after a successful login to save user/tokens
     logoutUser, // Function to call to log the user out completely
     updateToken, // Function to call to update just the access token
+    updateProfile, // Function to call after a profile edit to sync navbar + localStorage
   };
 };
 

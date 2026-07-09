@@ -1,4 +1,3 @@
-// axiosInstance.js
 // Central HTTP client for the entire project
 // Every API call goes through this axios instance — no raw fetch calls anywhere
 // Base URL is read automatically from the .env file

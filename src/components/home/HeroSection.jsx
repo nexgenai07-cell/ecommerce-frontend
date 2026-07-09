@@ -232,7 +232,7 @@ const HeroSection = () => {
   if (!activeSlide) return null;
 
   return (
-    <section className="px-4 sm:px-6 lg:px-8 pt-6 pb-2">
+    <section className="px-2  lg:px-5 pt-6 pb-2">
       <Container className="px-0">
         <div
           className="relative h-90 sm:h-110 lg:h-130 rounded-2xl overflow-hidden group outline-none select-none"

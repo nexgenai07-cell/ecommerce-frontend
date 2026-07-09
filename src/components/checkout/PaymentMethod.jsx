@@ -1,12 +1,3 @@
-// Payment Method Section — Stripe Payment Element
-// COD / JazzCash / manual card entry — sab hata diya gaya hai.
-// Ab sirf Stripe Payment Element render hota hai (card, aur Stripe ke
-// hisaab se dashboard mein enabled kiye gaye baaki methods).
-// Yeh component <Elements> ke ANDAR render hona chahiye (Checkout.jsx
-// mein clientSecret milne ke baad <Elements> wrap karta hai) taake
-// useStripe() / useElements() hooks kaam kar sakein.
-// Fully responsive
-
 import { useState } from "react";
 import {
   PaymentElement,

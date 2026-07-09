@@ -33,7 +33,7 @@ const OrderItems = ({ order }) => {
 
       {/* ── Items list ─────────────────────────────────────────────────────
           divide-y draws a thin separator line between each item row        */}
-      <div className="divide-y divide-gray-50">
+      <div className="divide-y divide-gray-50 max-h-85 overflow-y-auto scrollbar-hide">
         {items.map((item, index) => (
           // Single item row — image on the left, info in the middle, price on the right
           <div

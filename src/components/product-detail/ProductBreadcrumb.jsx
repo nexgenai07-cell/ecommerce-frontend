@@ -1,6 +1,3 @@
-// Breadcrumb navigation — pill-style container for a more premium feel
-// Shows: Home > Category > Product Name
-
 import { Link } from "react-router-dom";
 import { AiOutlineRight } from "react-icons/ai";
 import { ROUTES } from "../../constants/routes";

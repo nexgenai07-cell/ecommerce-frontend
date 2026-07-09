@@ -20,10 +20,40 @@ import { createSlice } from "@reduxjs/toolkit";
 // INITIAL STATE
 // ----------------------------
 // This defines the default shape of the auth state when the app first loads.
+// Reads the persisted user object out of localStorage safely.
+// We wrap this in try/catch because localStorage can contain corrupted
+// or manually-edited JSON (or be unavailable in some browser privacy
+// modes), and a JSON.parse crash here would white-screen the entire app
+// before React even renders anything.
+const getStoredUser = () => {
+  try {
+    // Look up the raw string we saved the last time the user logged in
+    // or their profile was refreshed (see setUser reducer below).
+    const stored = localStorage.getItem("user");
+    // If nothing was ever saved, return null (same as the old default).
+    // Otherwise parse the JSON string back into a real object.
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    // Corrupted/unreadable value — fail safe instead of crashing the app.
+    return null;
+  }
+};
+
 const initialState = {
   // Holds the logged-in user's full profile data (name, email, etc.)
-  // Initially null because no user is loaded until login/profile fetch happens.
-  user: null,
+  //
+  // IMPORTANT FIX: previously this always started as `null`, even when
+  // the person was already logged in with a valid token in localStorage.
+  // That caused the navbar avatar to show "?" and the dropdown email to
+  // go blank on every page refresh, because React had to wait for some
+  // other part of the app to re-fetch the profile — which never actually
+  // happened anywhere in the codebase.
+  //
+  // Now we hydrate `user` directly from localStorage on app boot, exactly
+  // the same way `token` and `refreshToken` already do below. This keeps
+  // the navbar showing the correct name/initials/email immediately after
+  // a refresh, with zero network round-trip delay.
+  user: getStoredUser(),
 
   // The access token used to authenticate API requests.
   // We try to read it from localStorage first — this way, if the user
@@ -93,6 +123,32 @@ const authSlice = createSlice({
 
       // Persist the refresh token in localStorage as well, for the same reason
       localStorage.setItem("refreshToken", action.payload.tokens.refresh);
+
+      // FIX: also persist the user object itself (name, email, avatar, role...).
+      // Without this line, a page refresh always lost the user's name/email
+      // even though the tokens survived — that's exactly what was causing the
+      // navbar avatar to fall back to "?" and the dropdown email to go blank.
+      // JSON.stringify is required because localStorage only stores strings.
+      localStorage.setItem("user", JSON.stringify(action.payload.user));
+    },
+
+    // --------------------------------------------------
+    // REDUCER: updateUser
+    // --------------------------------------------------
+    // Called whenever the user's profile is updated elsewhere in the app
+    // (e.g. after a successful "Edit Profile" save on the Settings page),
+    // so the navbar avatar/name/email reflect the latest data immediately
+    // without requiring a full logout/login cycle. Keeps Redux state AND
+    // localStorage in sync with each other, the same way setUser does.
+    updateUser: (state, action) => {
+      // Merge the incoming fields on top of the existing user object,
+      // so a partial update (e.g. just { name }) doesn't wipe out other
+      // fields like email or avatar that weren't part of this update.
+      state.user = { ...state.user, ...action.payload };
+
+      // Re-persist the merged object so a refresh right after an edit
+      // still shows the freshly updated info instead of stale data.
+      localStorage.setItem("user", JSON.stringify(state.user));
     },
 
     // --------------------------------------------------
@@ -122,6 +178,12 @@ const authSlice = createSlice({
 
       // Remove the refresh token from localStorage
       localStorage.removeItem("refreshToken");
+
+      // FIX: also remove the persisted user object on logout — otherwise
+      // the old user's name/email would still be sitting in localStorage
+      // and could briefly flash on the next person's session on a shared
+      // device before they log in themselves.
+      localStorage.removeItem("user");
     },
 
     // --------------------------------------------------
@@ -150,7 +212,7 @@ const authSlice = createSlice({
 // dispatch(setUser({ user, tokens }))
 // dispatch(logout())
 // dispatch(setToken(newAccessToken))
-export const { setUser, logout, setToken } = authSlice.actions;
+export const { setUser, logout, setToken, updateUser } = authSlice.actions;
 
 // ----------------------------
 // EXPORTING THE REDUCER

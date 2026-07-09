@@ -289,7 +289,7 @@ const Checkout = () => {
   // already ban chuka hai to cart khali hona expected hai, payment step ko na todein)
   if (!cartLoading && cartItems.length === 0 && step === "details") {
     return (
-      <Container className="py-16">
+      <Container className="py-16 px-12">
         <EmptyState
           variant="emptyCart" // Tells the EmptyState component which empty-state design/message to show (specific to empty cart)
           actionLabel="Start Shopping" // Text shown on the call-to-action button
@@ -301,7 +301,7 @@ const Checkout = () => {
 
   return (
     // Full-page wrapper with light gray background and minimum full screen height
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 lg:px-20">
       {/* Stepper — top */}
       <div className="bg-white border-b border-gray-100 py-4">
         <Container>

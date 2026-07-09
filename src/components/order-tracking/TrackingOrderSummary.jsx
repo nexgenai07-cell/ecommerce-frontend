@@ -84,7 +84,7 @@ const TrackingOrderSummary = ({ order }) => {
 
         {/* Product items */}
         {/* Column container holding all product item rows, with gap between each item */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 max-h-32 overflow-y-auto scrollbar-hide pr-1">
           {/* Loop through every item in the order and render a row for each, using the array index as the key */}
           {items.map((item, index) => (
             <div key={index} className="flex items-center gap-3">

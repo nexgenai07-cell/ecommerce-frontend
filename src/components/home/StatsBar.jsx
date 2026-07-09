@@ -1,19 +1,3 @@
-// ============================================================
-// STATS BAR SECTION
-// A full-width, light-mint colored band showcasing 4 quick
-// trust-building stats with icon badges. Uses the project's
-// established brand palette (tokens.css) — "primary-50" as the
-// full-bleed background tint, and the emerald "primary" scale
-// for the icon badges. Section spans the entire viewport width;
-// only the inner content is centered/padded via Container.
-//
-// These numbers are static/hardcoded — same as any real ecommerce
-// platform (Amazon, Daraz, etc.), there is no backend endpoint for
-// platform-wide marketing stats, so this is intentional fixed data.
-//
-// Fully responsive — 2 columns on mobile, 4 columns on desktop.
-// ============================================================
-
 import { FiUsers, FiStar, FiTruck, FiRefreshCw } from "react-icons/fi";
 import Container from "../layouts/Container"; // Wrapper component for consistent max-width/padding
 

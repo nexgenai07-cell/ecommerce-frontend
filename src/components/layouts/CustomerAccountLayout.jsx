@@ -1,16 +1,3 @@
-// CustomerAccountLayout.jsx
-// Layout wrapper for all Customer Account pages
-// Combines CustomerAccountSidebar + page content
-// Sidebar sits on the left, page content on the right
-// On mobile, the sidebar transforms into a bottom tab bar
-// Fully responsive across all screen sizes
-//
-// NOTE: Navbar aur Footer yahan render NAHI hotay — is layout ko App.jsx mein
-// CustomerLayout ke andar nest kiya gaya hai, aur CustomerLayout khud navbar +
-// footer already render kar deta hai. Pehle yeh layout bhi apna navbar/footer
-// render kar raha tha, jiski wajah se account pages par navbar aur footer
-// do do baar (duplicate) aa rahay thay. Ab sirf sidebar + content render hoga.
-
 import { Outlet } from "react-router-dom"; // Outlet renders the matched child route component inside this layout
 import { Suspense } from "react"; // Suspense lets us show a fallback UI while the child route is loading
 import CustomerAccountSidebar from "./CustomerAccountSidebar"; // Left sidebar on desktop, bottom tab bar on mobile

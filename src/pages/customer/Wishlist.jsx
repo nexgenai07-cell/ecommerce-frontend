@@ -3,11 +3,6 @@
 // Handles remove from wishlist and add to cart mutations with toasts and cache invalidation
 // "Add All to Cart" iterates over in-stock items sequentially using mutateAsync
 // Framer Motion AnimatePresence animates cards out when removed
-// VISUAL-ONLY CHANGES in this file: a soft ambient gradient glow behind the
-// header for a premium feel, a wider grid gap, an extra 5-column breakpoint on
-// very large screens, and the empty state now sits inside its own elevated
-// white card instead of floating directly on the page background.
-// NO logic, API calls, or mutation behavior were changed — only presentation.
 // Fully responsive
 
 import { useNavigate } from "react-router-dom"; // useNavigate lets the empty state action button navigate to the products page
@@ -22,7 +17,7 @@ import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAdd
 import { showSuccess, showError } from "../../components/ui/Toast"; // Toast notification helpers for mutation feedback
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
 import WishlistHeader from "../../components/wishlist/WishlistHeader"; // Page heading + item count pill + Share and Add All to Cart buttons
-import WishlistCard from "../../components/wishlist/WishlistCard"; // Single product card with remove, add to cart, rating, stock, price
+import WishlistCard from "../../components/wishlist/WishlistCard"; // Single product card with remove, add to cart, stock status, price
 import WishlistAIBanner from "../../components/wishlist/WishlistAIBanner"; // AI recommendation banner shown below the grid
 import EmptyState from "../../components/ui/EmptyState"; // Generic empty state UI with a configurable action button
 import { SkeletonCard } from "../../components/ui/Skeleton"; // Animated placeholder card shown while wishlist data is loading
@@ -157,7 +152,7 @@ const Wishlist = () => {
 
           {/* ── Empty state ──────────────────────────────────────────────────────────
               Shown only after loading completes and the wishlist has no saved items
-              Now wrapped in an elevated white card (rounded-3xl + shadow-sm + border)
+              Wrapped in an elevated white card (rounded-3xl + shadow-sm + border)
               so it looks properly "raised" off the page instead of floating bare
               "Start Shopping" action button navigates to the products listing page   */}
           {!isLoading && wishlistItems.length === 0 && (

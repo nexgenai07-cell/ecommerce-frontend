@@ -1,11 +1,3 @@
-// Checkout Order Summary — Right sidebar
-// Cart items list with images
-// Coupon code input
-// Subtotal, Discount, Shipping, Tax, Total
-// Buyer Protection card
-// Sticky on desktop
-// Fully responsive
-
 // React hook for managing local component state
 import { useState } from "react";
 // React Query hooks — useMutation for performing API mutations (POST/PUT/DELETE), useQueryClient to access the query cache for invalidation
@@ -105,7 +97,7 @@ const CheckoutOrderSummary = ({
     <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-5 sticky top-6">
       {/* Cart items list */}
       {/* Vertical list container holding each cart item row */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 max-h-60 overflow-y-auto scrollbar-hide pr-1">
         {/* Looping through each item in the cart to render its image and details */}
         {cartItems.map((item) => (
           <div key={item.id} className="flex items-center gap-3">

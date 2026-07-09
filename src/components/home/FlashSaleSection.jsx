@@ -1,20 +1,3 @@
-// ============================================================
-// FLASH SALE / LIMITED OFFERS SECTION
-// Two-column layout on a dark navy background:
-//   LEFT column  — badge + heading + short description + live countdown, stacked vertically
-//   RIGHT column — the 3 product tiles, sitting directly opposite the left content
-// On mobile, the columns stack (left content on top, cards below),
-// since a fixed side-by-side split doesn't fit narrow screens.
-//
-// Products shown are real, ACTUALLY-discounted products fetched
-// from the backend (original_price > price), with a safe fallback
-// to newest products if fewer than 3 discounted ones exist yet.
-// Card heights are fixed (not aspect-ratio based) to keep the
-// section height predictable and compact. Broken image URLs fall
-// back to a placeholder instead of breaking the layout.
-// Fully responsive.
-// ============================================================
-
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -168,14 +151,14 @@ const FlashSaleSection = () => {
   })();
 
   return (
-    <section className="bg-[#0d1b2a] py-12">
+    <section className="bg-[#0d1b2a] py-20 lg:px-20">
       <Container>
         {/* ============ TWO-COLUMN LAYOUT ============ */}
         {/* Mobile: stacked (left content on top, cards below) */}
         {/* lg+: side by side — left column fixed width, right column takes the rest */}
-        <div className="flex flex-col px-12 lg:flex-row lg:items-center gap-8 lg:gap-10">
+        <div className="flex flex-col px-12 lg:flex-row lg:items-center gap-8 lg:gap-15">
           {/* ============ LEFT COLUMN: badge + heading + description + countdown ============ */}
-          <div className="flex flex-col gap-4 lg:w-75 shrink-0">
+          <div className="flex flex-col gap-4 lg:w-95 shrink-0">
             <span className="inline-flex w-fit px-2.5 py-1 bg-danger text-white text-xs font-bold rounded-md uppercase tracking-wide">
               Limited Offers
             </span>
@@ -210,7 +193,7 @@ const FlashSaleSection = () => {
                 ))}
               </div>
             ) : products.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid  sm:grid-cols-3 gap-2">
                 {products.map((product) => (
                   <FlashSaleTile key={product.id} product={product} />
                 ))}

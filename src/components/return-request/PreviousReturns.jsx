@@ -1,12 +1,3 @@
-// PreviousReturns.jsx
-// Previous Returns Table — shown on the /account/returns page, below the return request form
-// ID, Order ID, Reason, Status badge, Filed On date
-// Client-side pagination (4 per page) — same pattern as PreviousComplaints.jsx
-// Real API — getReturns (shared QUERY_KEYS.RETURNS cache key, so it auto-refreshes
-// after a new return is submitted via ReturnRequest.jsx's mutation invalidation)
-// Renders nothing when the customer has no return history at all
-// Modern elevated card with gradient accents, fully responsive
-
 import { useState } from "react"; // useState manages the current pagination page locally
 import { useQuery } from "@tanstack/react-query"; // useQuery handles fetching, caching, and loading state
 import { AiOutlineArrowLeft, AiOutlineArrowRight } from "react-icons/ai"; // Pagination arrow icons

@@ -96,7 +96,7 @@ const ProductDetail = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start">
             <div className="relative">
               {product.original_price > product.price && (
-                <div className="absolute -top-2 -left-2 z-10">
+                <div className="absolute -top-2 -left-2 z-10 ">
                   <span className="px-3 py-1.5 bg-danger text-white text-xs font-bold rounded-xl shadow-lg shadow-danger/30">
                     {Math.round(
                       ((product.original_price - product.price) /

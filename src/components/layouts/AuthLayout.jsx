@@ -1,8 +1,3 @@
-// Auth pages ka layout wrapper — Login, ForgotPassword, ResetPassword ke liye
-// Bilkul CustomerLayout jaisa pattern: AuthNavbar top pe fixed, niche content
-// Koi centered floating card nahi — full width structure jaisa baki project mein hai
-// Content khud center hota hai apne max-width ke saath
-
 import { AuthNavbar } from "./AuthNavbar";
 import Container from "./Container";
 

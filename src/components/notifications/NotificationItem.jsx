@@ -1,4 +1,3 @@
-// Import useMutation for the "mark as read" API call, and useQueryClient to refresh cached notification data afterward
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 // Import truck, tag, shield-warning, box, and check-circle icons from the react-icons Bootstrap icon set, used for different notification types
 import {

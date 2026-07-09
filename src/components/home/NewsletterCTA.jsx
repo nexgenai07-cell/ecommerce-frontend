@@ -1,17 +1,3 @@
-// ============================================================
-// COMMUNITY CTA SECTION
-// Static, purely presentational call-to-action — the 94-endpoint API
-// documentation has NO newsletter subscription endpoint (confirmed
-// across every module), so rather than fake an email form with a
-// simulated success message, this is now an honest static section
-// with a real, working CTA button that takes the user to browse
-// products. No dead/fake inputs.
-//
-// Rendered as a floating rounded-2xl card with visible margins on
-// both sides (not full-bleed edge-to-edge), matching the reference.
-// Fully responsive, richly styled gradient + decorative glow.
-// ============================================================
-
 import { Link } from "react-router-dom";
 import { AiOutlineArrowRight } from "react-icons/ai";
 import { HiOutlineSparkles } from "react-icons/hi2";

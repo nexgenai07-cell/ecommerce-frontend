@@ -1,22 +1,21 @@
-// Change Password Form Section
-// Current Password, New Password (strength bar), Confirm New Password
-// Password strength indicator — Weak/Medium/Strong
-// React Hook Form + Zod
-// Real API — API 9 (v2 backend doc)
-// Fully responsive
-
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
+import {
+  AiOutlineEye,
+  AiOutlineEyeInvisible,
+  AiOutlineCheck,
+  AiOutlineClose,
+} from "react-icons/ai";
 import { HiOutlineLockClosed } from "react-icons/hi2";
 import { showSuccess, showError } from "../ui/Toast";
 import { changePassword } from "../../api/auth.api";
 import {
   getPasswordStrength,
   PASSWORD_STRENGTH,
+  PASSWORD_REQUIREMENTS,
 } from "../../utils/passwordStrength";
 import cn from "../../utils/cn";
 
@@ -63,6 +62,9 @@ const ChangePasswordForm = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [newPasswordValue, setNewPasswordValue] = useState("");
+  // Shows the requirement checklist once the user focuses the New Password
+  // field — same trigger/behavior as the Register page
+  const [showRequirements, setShowRequirements] = useState(false);
 
   const {
     register,
@@ -100,6 +102,7 @@ const ChangePasswordForm = () => {
       showSuccess(response?.data?.message || "Password changed successfully!");
       reset();
       setNewPasswordValue("");
+      setShowRequirements(false);
     },
 
     onError: (error) => {
@@ -186,6 +189,7 @@ const ChangePasswordForm = () => {
               {...register("newPassword", {
                 onChange: (e) => setNewPasswordValue(e.target.value),
               })}
+              onFocus={() => setShowRequirements(true)}
               className={`
                 w-full pl-4 pr-10 py-3 text-sm rounded-xl border bg-gray-50/50
                 placeholder:text-gray-300 text-gray-900
@@ -231,6 +235,33 @@ const ChangePasswordForm = () => {
                   )}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Live requirement checklist — same tick/cross pattern as Register page.
+              Shows once the field is focused, updates in real time as the user types */}
+          {showRequirements && newPasswordValue && (
+            <div className="flex flex-col gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-100 mt-1 max-h-62 overflow-y-auto scrollbar-hide">
+              {PASSWORD_REQUIREMENTS.map((req) => {
+                const isMet = req.test(newPasswordValue);
+                return (
+                  <div key={req.id} className="flex items-center gap-2">
+                    {isMet ? (
+                      <AiOutlineCheck className="w-3.5 h-3.5 text-success shrink-0" />
+                    ) : (
+                      <AiOutlineClose className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                    )}
+                    <span
+                      className={cn(
+                        "text-xs",
+                        isMet ? "text-success" : "text-gray-400",
+                      )}
+                    >
+                      {req.label}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
 

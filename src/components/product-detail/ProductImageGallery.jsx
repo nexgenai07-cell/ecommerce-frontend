@@ -1,7 +1,3 @@
-// // Image gallery — wrapped in a premium white card with shadow
-// Big main image on top, scrollable thumbnail strip below
-// Every image comes from the real product_images table (API 18/22/23/24)
-
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AiOutlineLeft, AiOutlineRight, AiOutlineZoomIn } from "react-icons/ai";
@@ -24,7 +20,7 @@ const ProductImageGallery = ({ images = [], productName = "" }) => {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-4 flex flex-col gap-4">
       {/* ───── Main Image Area ───── */}
-      <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden group">
+      <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden group shadow-xl">
         <AnimatePresence mode="wait">
           <motion.img
             key={activeIndex}

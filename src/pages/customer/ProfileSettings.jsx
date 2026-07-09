@@ -1,5 +1,4 @@
 // Profile Settings Page — Main file
-// Component separation pattern — industry standard
 // Personal Info, Change Password + Account Security, Danger Zone
 // Real API — getMyProfile
 // Fully responsive

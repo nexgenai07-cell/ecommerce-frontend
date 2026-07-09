@@ -1,13 +1,3 @@
-// Customer Account Sidebar — navigation for account pages
-// Avatar + user info at the top
-// Badge counts — orders, notifications
-// Profile completion progress bar
-// AI Support button
-// Mobile bottom tab bar
-// Logout button
-// Fully responsive
-// Real data comes from the API
-
 import { Link, useLocation, useNavigate } from "react-router-dom"; // Import Link for navigation, useLocation to get current path, useNavigate to redirect
 import { useQuery } from "@tanstack/react-query"; // Import hook to fetch and cache data from APIs
 import {
@@ -204,10 +194,19 @@ const CustomerAccountSidebar = () => {
       {/* =============================================
           DESKTOP SIDEBAR
           Hidden on mobile
+          h-screen + sticky top-0 + self-start: pins the sidebar to the
+          viewport instead of stretching to match the (often much taller)
+          right-side page content — so only the page content scrolls,
+          the sidebar visually stays put.
+          overflow-y-auto + scrollbar-hide: if the sidebar's own content
+          (profile card + nav + support card + logout) is ever taller than
+          a short viewport, it scrolls internally instead of breaking the
+          layout — but no scrollbar line is visible (existing project-wide
+          utility from src/index.css), scrolling still works fine.
           ============================================= */}
-      <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#0d1b2a] shrink-0">
+      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 self-start overflow-y-auto scrollbar-hide bg-[#0d1b2a] shrink-0">
         {" "}
-        {/* Hidden on mobile, shown as a column on medium screens and up, fixed width, full height, dark background */}
+        {/* Hidden on mobile, shown as a column on medium screens and up, fixed width, sticky full-viewport height, dark background */}
         {/* ===== USER PROFILE TOP ===== */}
         <div className="p-5 border-b border-white/10">
           {" "}

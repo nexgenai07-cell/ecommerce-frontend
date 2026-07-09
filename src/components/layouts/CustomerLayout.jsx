@@ -1,5 +1,3 @@
-// Customer-facing pages ka main layout wrapper component
-// This wraps every page the customer sees — navbar, content, footer all together
 import { Outlet, useLocation } from "react-router-dom";
 // Outlet renders whichever child page/route is currently active
 // useLocation tells us the current URL path
@@ -14,17 +12,23 @@ import Container from "./Container";
 import { Skeleton } from "../ui/Skeleton";
 // Grey placeholder blocks shown while page content is loading
 
-// List of routes where we do NOT want to show the footer
-// Checkout page has its own minimal layout, so footer is hidden there
-const CHECKOUT_ROUTES = ["/checkout"];
+// List of route prefixes where we do NOT want to show the footer.
+// - "/checkout" — has its own minimal, distraction-free layout
+// - "/account"  — account pages already have their own sidebar/content
+//                 layout (CustomerAccountLayout) and don't need the long
+//                 marketing footer at the bottom; keeps those screens
+//                 focused and consistent across Orders, Profile, Wishlist,
+//                 Returns, Complaints, Notifications, etc.
+const NO_FOOTER_ROUTES = ["/checkout", "/account"];
 
 const CustomerLayout = () => {
   // Get the current URL location so we can check which page the user is on
   const location = useLocation();
 
-  // Check if the current page is a checkout route
-  // startsWith handles sub-routes too, like /checkout/payment or /checkout/confirm
-  const isCheckoutRoute = CHECKOUT_ROUTES.some((route) =>
+  // Check if the current page matches any of the no-footer route prefixes.
+  // startsWith handles all sub-routes too — e.g. "/checkout/payment" and
+  // "/account/orders/42/tracking" are both correctly matched and excluded.
+  const hideFooter = NO_FOOTER_ROUTES.some((route) =>
     location.pathname.startsWith(route),
   );
 
@@ -57,9 +61,9 @@ const CustomerLayout = () => {
         </Suspense>
       </main>
 
-      {/* Footer is shown on all pages EXCEPT checkout */}
-      {/* On checkout we keep the layout clean and distraction-free */}
-      {!isCheckoutRoute && <Footer />}
+      {/* Footer is shown on all customer pages EXCEPT checkout and account pages */}
+      {/* Checkout stays clean/distraction-free; account pages already have their own layout */}
+      {!hideFooter && <Footer />}
     </div>
   );
 };

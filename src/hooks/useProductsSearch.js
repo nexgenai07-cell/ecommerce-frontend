@@ -1,18 +1,3 @@
-// Client-side pagination + multi-category merge layer.
-//
-// PROBLEM 1: /api/v1/products/search/ apna khud ka fixed page size
-// return karta hai — `page_size` param ignore karta hai.
-// PROBLEM 2: Backend ek waqt mein sirf EK category_id accept karta hai —
-// multiple category IDs ek sath OR karke filter karna support nahi karta.
-//
-// SOLUTION: Single/zero category select hone par — efficient partial
-// fetch (sirf jitne backend pages chahiye utne hi fetch hote hain).
-// Multiple categories select hone par — har category ka poora result
-// set alag-alag fetch karke, duplicates hata ke, client-side combine +
-// sort + re-paginate kiya jata hai, taake UI hamesha ek hi merged list
-// dikhaye (5 + 5 = 10 products), bilkul jaisa ek real multi-select
-// filter se expect kiya jata hai.
-
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts } from "../api/products.api";
 

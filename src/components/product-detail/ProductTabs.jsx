@@ -1,7 +1,3 @@
-// Tabbed section — Description + Specifications
-// Specifications redesigned as an attractive icon-card grid instead of plain text rows
-// All values are 100% real fields from the products table (API 18)
-
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsTag, BsBoxSeam, BsGrid, BsCheckCircle } from "react-icons/bs";
@@ -40,7 +36,7 @@ const ProductTabs = ({ product }) => {
   ].filter(Boolean);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-lg p-6 sm:p-8">
       {/* ─── Tab Header Bar ─── */}
       <div className="flex items-center gap-2 border-b border-gray-100 mb-6">
         {TABS.map((tab) => (

@@ -1,9 +1,3 @@
-// Notification Filter Tabs
-// All, Unread, Orders, Promotions, System
-// Pill style — active = emerald gradient filled, inactive = white with gray border
-// Mark all as read button — now a proper elevated pill button instead of a plain text link
-// Fully responsive
-
 // Import useMutation for the "mark all as read" bulk API calls, and useQueryClient to refresh cached notification data afterward
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 // Import a checkmark icon from the react-icons Ant Design icon set, used on the "Mark all as read" button

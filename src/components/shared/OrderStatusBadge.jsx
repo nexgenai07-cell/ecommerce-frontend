@@ -2,7 +2,6 @@
 // Displays a colored badge based on the order's current status
 // Uses the Badge component and the getStatusColor utility for coloring
 // Used in OrderList, OrderDetail, and AdminOrders
-// Fully responsive
 
 // Import the shared Badge component used to render the colored pill
 import Badge from "../ui/Badge";

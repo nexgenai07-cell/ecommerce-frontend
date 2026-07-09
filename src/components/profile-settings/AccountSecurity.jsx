@@ -1,9 +1,3 @@
-// Account Security Section
-// 2FA Authentication toggle — real enable/verify/disable flow (v2 backend doc)
-// Active Sessions list — real API, no more DEMO_SESSIONS
-// Sign out all devices button — real revoke-all API
-// Fully responsive
-
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BsLaptop, BsPhone, BsDeviceHdd, BsShieldLock } from "react-icons/bs";
@@ -248,7 +242,7 @@ const AccountSecurity = ({ user }) => {
           Active Sessions
         </p>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 max-h-76 overflow-y-auto scrollbar-hide pr-1">
           {sessionsLoading ? (
             <>
               <div className="h-14 rounded-xl bg-gray-100 animate-pulse" />

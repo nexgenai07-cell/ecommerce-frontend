@@ -1,7 +1,3 @@
-// Product Info — premium sticky buy-box card
-// Buy Now button removed per requirement — only Add to Cart + Wishlist
-// Every field shown comes directly from the real API 18 response
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -115,7 +111,7 @@ const ProductInfo = ({ product }) => {
       transition={{ duration: 0.3 }}
     >
       {/* ─── Title Card ─── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col gap-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-lg p-6 flex flex-col gap-4">
         {product.category?.name && (
           <span className="w-fit text-xs font-semibold text-primary uppercase tracking-widest bg-primary-50 px-3 py-1 rounded-full">
             {product.category.name}
@@ -153,7 +149,7 @@ const ProductInfo = ({ product }) => {
       </div>
 
       {/* ─── Buy Box Card ─── */}
-      <div className="flex flex-col gap-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="flex flex-col gap-5 bg-white rounded-2xl border border-gray-100 shadow-lg p-6">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-700">Quantity</p>
           <QuantitySelector

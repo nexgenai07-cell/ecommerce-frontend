@@ -1,8 +1,3 @@
-// Contact Information section of the Checkout form
-// Contains two fields: Email Address and Phone Number
-// This is a controlled form section — it doesn't manage its own state
-// register and errors come from the parent's React Hook Form instance
-
 import { AiOutlineMail, AiOutlinePhone } from "react-icons/ai";
 // AiOutlineMail and AiOutlinePhone are imported and available for icon use if needed
 

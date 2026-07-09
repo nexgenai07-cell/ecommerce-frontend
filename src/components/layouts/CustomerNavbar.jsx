@@ -1,9 +1,3 @@
-// ============================================================
-// CustomerNavbar.jsx — Shared navbar across the entire customer-facing site
-// Fully functional: real API categories, real API search (debounced),
-// Redux-driven auth/cart/wishlist state, fully responsive.
-// ============================================================
-
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -29,10 +23,11 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { getCategories } from "../../api/categories.api";
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the categories endpoint)
-import { searchProducts } from "../../api/products.api";
+import { searchProducts, getProducts } from "../../api/products.api";
 import { logoutUser as logoutApi } from "../../api/auth.api";
 import { getWishlist } from "../../api/wishlist.api";
 import { getCart } from "../../api/cart.api";
+import { getNotifications } from "../../api/notifications.api"; // Used to compute the unread-count badge on the bell icon
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
 import useWishlist from "../../hooks/useWishlist";
@@ -106,6 +101,33 @@ const CustomerNavbar = () => {
     }
   }, [cartSyncData]);
 
+  // ===== NOTIFICATIONS — real API, powers the bell icon's unread badge =====
+  // Same pattern as the wishlist/cart sync queries above: fetch once per
+  // cache window, logged-in users only. QUERY_KEYS.NOTIFICATIONS is the
+  // exact same cache key used by NotificationHistory.jsx and
+  // RecentNotifications.jsx, so marking a notification as read on either
+  // of those pages will automatically invalidate this query too and the
+  // navbar badge count will update itself without any extra wiring.
+  const { data: notificationsData } = useQuery({
+    queryKey: QUERY_KEYS.NOTIFICATIONS,
+    queryFn: getNotifications,
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60, // 1 minute — frequent enough to feel "live" without spamming the API
+  });
+
+  // extractListData safely handles both the documented flat-array shape
+  // and the real DRF-paginated shape, exactly like it already does for
+  // categories above — keeps this consistent with the rest of the codebase.
+  const notifications = extractListData(notificationsData);
+
+  // Count only notifications where is_read is false — this is the exact
+  // same field name/logic already used in NotificationHistory.jsx and
+  // RecentNotifications.jsx, so the number shown here always matches
+  // what the person sees on the full Notifications page.
+  const unreadNotificationCount = notifications.filter(
+    (n) => !n.is_read,
+  ).length;
+
   // ===== SEARCH SUGGESTIONS — real API, debounced, min 2 chars =====
   const { data: searchData, isLoading: searchLoading } = useQuery({
     queryKey: ["search-suggestions", searchQuery],
@@ -114,6 +136,68 @@ const CustomerNavbar = () => {
     staleTime: 1000 * 30,
   });
   const searchResults = searchData?.data?.results || [];
+
+  // ===== CATEGORY-NAME FALLBACK FOR SEARCH =====
+  // Problem this solves: the backend's /products/search/ endpoint only
+  // matches against each PRODUCT's own name/description — it does NOT
+  // match category names. So typing a category name (e.g. "Shoes") into
+  // the search bar returned zero product results even though products
+  // in that category obviously exist. This block detects that case and
+  // fills the same dropdown with real products from the matching
+  // category instead of a dead-end "No products found" message.
+
+  // Look for a category whose name contains what the person typed (or
+  // vice versa), case-insensitively — e.g. typing "shoe" matches a
+  // "Shoes" category. `categories` was already fetched above for the
+  // "Popular Categories" pills, so this is just a local array search,
+  // no extra network request needed for the matching step itself.
+  const matchedCategory = categories.find((cat) =>
+    cat.name?.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+  );
+
+  // Only fires when ALL of these are true, to avoid unnecessary API calls:
+  // - the person typed enough characters to search (>= 2)
+  // - the direct product text search has finished loading
+  // - that direct text search came back with zero results
+  // - what they typed actually matches a real category name
+  const shouldFetchCategoryFallback =
+    searchQuery.length >= 2 &&
+    !searchLoading &&
+    searchResults.length === 0 &&
+    !!matchedCategory;
+
+  const { data: categoryFallbackData, isLoading: categoryFallbackLoading } =
+    useQuery({
+      queryKey: ["search-suggestions-by-category", matchedCategory?.id],
+      queryFn: () => getProducts({ category_id: matchedCategory.id, limit: 4 }),
+      enabled: shouldFetchCategoryFallback,
+      staleTime: 1000 * 30,
+    });
+  // Same response shape as searchProducts (DRF paginated: { results: [...] }),
+  // so this is read the exact same way as searchResults above.
+  const categoryFallbackResults = categoryFallbackData?.data?.results || [];
+
+  // ===== FINAL VALUES USED BY THE DROPDOWN UI =====
+  // Prefer direct product-name/description matches. Only when there are
+  // NONE of those do we show the category-matched products instead —
+  // this keeps normal product search behaving exactly as before, and
+  // only kicks in the fallback for the specific "typed a category name"
+  // case described above.
+  const displayedSuggestions =
+    searchResults.length > 0
+      ? searchResults
+      : categoryFallbackResults.slice(0, 4);
+
+  // True only when we're actually showing the fallback category results
+  // (not the normal text-match results) — used to swap the section
+  // heading so it's honest about where these products came from.
+  const isShowingCategoryFallback =
+    searchResults.length === 0 && categoryFallbackResults.length > 0;
+
+  // Combined loading flag so the skeleton shows correctly whether we're
+  // still waiting on the text search OR on the category fallback search.
+  const suggestionsLoading =
+    searchLoading || (shouldFetchCategoryFallback && categoryFallbackLoading);
 
   // Stable debounced setter — created once via useRef so the timer
   // isn't lost/reset on every re-render
@@ -346,10 +430,12 @@ const CustomerNavbar = () => {
                       {searchQuery.length >= 2 && (
                         <div>
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                            Suggested Products
+                            {isShowingCategoryFallback
+                              ? `Products in "${matchedCategory.name}"`
+                              : "Suggested Products"}
                           </p>
 
-                          {searchLoading && (
+                          {suggestionsLoading && (
                             <div className="flex flex-col gap-3">
                               {[1, 2].map((i) => (
                                 <div
@@ -366,62 +452,68 @@ const CustomerNavbar = () => {
                             </div>
                           )}
 
-                          {!searchLoading && searchResults.length > 0 && (
-                            <div className="flex flex-col gap-1">
-                              {searchResults.map((product) => (
-                                <button
-                                  key={product.id}
-                                  onClick={() =>
-                                    handleSearchNavigate(
-                                      ROUTES.PRODUCT_DETAIL.replace(
-                                        ":id",
-                                        product.id,
-                                      ),
-                                      searchQuery,
-                                    )
-                                  }
-                                  className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-primary-50 transition-colors text-left"
-                                >
-                                  <img
-                                    src={
-                                      product.primary_image ||
-                                      "/placeholder-product.png"
+                          {!suggestionsLoading &&
+                            displayedSuggestions.length > 0 && (
+                              <div className="flex flex-col gap-1">
+                                {displayedSuggestions.map((product) => (
+                                  <button
+                                    key={product.id}
+                                    onClick={() =>
+                                      handleSearchNavigate(
+                                        ROUTES.PRODUCT_DETAIL.replace(
+                                          ":id",
+                                          product.id,
+                                        ),
+                                        searchQuery,
+                                      )
                                     }
-                                    alt={product.name}
-                                    className="w-12 h-12 object-cover rounded-lg border border-gray-100 shrink-0"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-800 truncate">
-                                      {product.name}
-                                    </p>
-                                    <p className="text-sm font-semibold text-primary">
-                                      Rs.{" "}
-                                      {Number(product.price).toLocaleString()}
-                                    </p>
-                                  </div>
+                                    className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-primary-50 transition-colors text-left"
+                                  >
+                                    <img
+                                      src={
+                                        product.primary_image ||
+                                        "/placeholder-product.png"
+                                      }
+                                      alt={product.name}
+                                      className="w-12 h-12 object-cover rounded-lg border border-gray-100 shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-gray-800 truncate">
+                                        {product.name}
+                                      </p>
+                                      <p className="text-sm font-semibold text-primary">
+                                        Rs.{" "}
+                                        {Number(product.price).toLocaleString()}
+                                      </p>
+                                    </div>
+                                  </button>
+                                ))}
+
+                                <button
+                                  onClick={() =>
+                                    isShowingCategoryFallback
+                                      ? handleSearchNavigate(
+                                          `${ROUTES.PRODUCTS}?category_id=${matchedCategory.id}`,
+                                        )
+                                      : handleSearchNavigate(
+                                          `${ROUTES.SEARCH}?q=${searchQuery}`,
+                                          searchQuery,
+                                        )
+                                  }
+                                  className="flex items-center justify-center gap-1 w-full text-xs font-semibold text-primary hover:underline mt-2 py-1"
+                                >
+                                  View All Results
+                                  <BsArrowRight className="w-3 h-3" />
                                 </button>
-                              ))}
+                              </div>
+                            )}
 
-                              <button
-                                onClick={() =>
-                                  handleSearchNavigate(
-                                    `${ROUTES.SEARCH}?q=${searchQuery}`,
-                                    searchQuery,
-                                  )
-                                }
-                                className="flex items-center justify-center gap-1 w-full text-xs font-semibold text-primary hover:underline mt-2 py-1"
-                              >
-                                View All Results
-                                <BsArrowRight className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
-
-                          {!searchLoading && searchResults.length === 0 && (
-                            <p className="text-sm text-gray-400 py-2">
-                              No products found for "{searchQuery}"
-                            </p>
-                          )}
+                          {!suggestionsLoading &&
+                            displayedSuggestions.length === 0 && (
+                              <p className="text-sm text-gray-400 py-2">
+                                No products found for "{searchQuery}"
+                              </p>
+                            )}
                         </div>
                       )}
 
@@ -516,6 +608,27 @@ const CustomerNavbar = () => {
                   aria-label="Notifications"
                 >
                   <AiOutlineBell className="w-5 h-5" />
+                  {/* Unread badge — only rendered once there's at least one
+                      unread notification. AnimatePresence + motion.span give
+                      it the same pop-in/pop-out animation as the cart and
+                      wishlist badges for a consistent feel across the navbar. */}
+                  <AnimatePresence>
+                    {unreadNotificationCount > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none shadow-sm"
+                      >
+                        {/* Cap the displayed number at "9+" so a large count
+                            never breaks the circular badge shape, same rule
+                            already used for the cart/wishlist badges. */}
+                        {unreadNotificationCount > 9
+                          ? "9+"
+                          : unreadNotificationCount}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </Link>
               )}
 
@@ -752,13 +865,13 @@ const CustomerNavbar = () => {
                   {/* Live suggestions inline for mobile search */}
                   {searchQuery.length >= 2 && (
                     <div className="mt-3 flex flex-col gap-1">
-                      {searchLoading && (
+                      {suggestionsLoading && (
                         <p className="text-xs text-gray-400 py-1">
                           Searching...
                         </p>
                       )}
-                      {!searchLoading &&
-                        searchResults.slice(0, 3).map((product) => (
+                      {!suggestionsLoading &&
+                        displayedSuggestions.slice(0, 3).map((product) => (
                           <button
                             key={product.id}
                             onClick={() => {
@@ -791,11 +904,12 @@ const CustomerNavbar = () => {
                             </div>
                           </button>
                         ))}
-                      {!searchLoading && searchResults.length === 0 && (
-                        <p className="text-xs text-gray-400 py-1">
-                          No products found for "{searchQuery}"
-                        </p>
-                      )}
+                      {!suggestionsLoading &&
+                        displayedSuggestions.length === 0 && (
+                          <p className="text-xs text-gray-400 py-1">
+                            No products found for "{searchQuery}"
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
@@ -872,10 +986,22 @@ const CustomerNavbar = () => {
                       <Link
                         to={ROUTES.ACCOUNT_NOTIFICATIONS}
                         onClick={() => setMobileDrawerOpen(false)}
-                        className="flex items-center gap-3 py-2.5 text-sm text-gray-700 hover:text-primary transition-colors"
+                        className="flex items-center justify-between gap-3 py-2.5 text-sm text-gray-700 hover:text-primary transition-colors"
                       >
-                        <AiOutlineBell className="w-4 h-4 text-gray-400" />
-                        Notifications
+                        <span className="flex items-center gap-3">
+                          <AiOutlineBell className="w-4 h-4 text-gray-400" />
+                          Notifications
+                        </span>
+                        {/* Same unread badge as the desktop bell icon, so
+                            mobile users get the same "something's waiting"
+                            signal inside the drawer's account list. */}
+                        {unreadNotificationCount > 0 && (
+                          <span className="min-w-4.5 h-4.5 px-1 bg-primary text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none shadow-sm">
+                            {unreadNotificationCount > 9
+                              ? "9+"
+                              : unreadNotificationCount}
+                          </span>
+                        )}
                       </Link>
                       <button
                         onClick={handleLogout}

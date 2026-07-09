@@ -1,19 +1,11 @@
-// Reusable ProductCard component
-// Used on the Home page, search results, wishlist, and related products
-// Built-in features: wishlist heart, add to cart, discount badge, low stock badge
-// Image has a graceful fallback — if a product's image URL is missing,
-// broken, or fails to load, it automatically swaps to a placeholder
-// instead of showing a broken-image icon with overlapping alt text
-// Fully responsive
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AiOutlineClose } from "react-icons/ai";
 import cn from "../../utils/cn";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import PriceDisplay from "./PriceDisplay";
-import RatingStars from "./RatingStars";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import useWishlist from "../../hooks/useWishlist";
@@ -30,6 +22,10 @@ const FALLBACK_IMAGE = "/placeholder-product.png";
 const ProductCard = ({
   product, // The full product data object
   className = "", // Any extra CSS classes passed in from the parent component
+  onRemove, // optional — see file header
+  onAddToCart: onAddToCartProp, // optional — see file header
+  isAddingToCart: isAddingToCartProp, // optional — see file header
+  footer = null, // optional — see file header
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -66,7 +62,9 @@ const ProductCard = ({
   };
 
   // ─────────────────────────────────────────
-  // ADD TO CART MUTATION — actually hits the backend now
+  // ADD TO CART MUTATION — internal, self-contained version.
+  // Only used when the parent does NOT pass its own onAddToCart/isAddingToCart
+  // (i.e. everywhere except the Wishlist page's "Add All to Cart" flow)
   // ─────────────────────────────────────────
   const cartMutation = useMutation({
     mutationFn: () => addToCart({ product_id: product.id, quantity: 1 }),
@@ -80,7 +78,10 @@ const ProductCard = ({
   });
 
   // ─────────────────────────────────────────
-  // WISHLIST TOGGLE MUTATION — actually hits the backend now
+  // WISHLIST TOGGLE MUTATION — internal, self-contained version.
+  // Only used when the parent does NOT pass its own onRemove
+  // (i.e. everywhere except the Wishlist page, which already knows the item
+  // is in the wishlist and controls removal itself)
   // ─────────────────────────────────────────
   const wishlistMutation = useMutation({
     mutationFn: () =>
@@ -100,7 +101,17 @@ const ProductCard = ({
     onError: () => showError("Failed to update wishlist"),
   });
 
+  // Whether this card is being rendered in "controlled" mode (Wishlist page)
+  const isControlledAddToCart = typeof onAddToCartProp === "function";
+  const isControlledRemove = typeof onRemove === "function";
+
+  // Resolves to whichever loading state actually applies to this card
+  const addingToCart = isControlledAddToCart
+    ? !!isAddingToCartProp
+    : cartMutation.isPending;
+
   // Function to toggle the product's wishlist status — add it or remove it
+  // (only wired up when the card is NOT in controlled-remove mode)
   const handleWishlistToggle = (e) => {
     e.stopPropagation(); // Prevent the click from also triggering card navigation
 
@@ -110,6 +121,12 @@ const ProductCard = ({
     }
 
     wishlistMutation.mutate();
+  };
+
+  // Remove button click — used only in controlled-remove mode (Wishlist page)
+  const handleRemoveClick = (e) => {
+    e.stopPropagation();
+    onRemove(product.id);
   };
 
   // Function to add the product to the cart
@@ -123,7 +140,11 @@ const ProductCard = ({
 
     if (!product?.in_stock) return;
 
-    cartMutation.mutate();
+    if (isControlledAddToCart) {
+      onAddToCartProp(product.id); // let the parent's own mutation handle it
+    } else {
+      cartMutation.mutate();
+    }
   };
 
   // If there's no product data, don't render anything
@@ -135,29 +156,48 @@ const ProductCard = ({
       ? FALLBACK_IMAGE
       : product.primary_image;
 
+  // ─────────────────────────────────────────
+  // STOCK STATUS PILL — replaces the old separate "Low Stock" / "Out of Stock"
+  // badges with a single, always-present overlay so every card looks identical
+  // ─────────────────────────────────────────
+  const stock = product.stock ?? 0;
+  const isOutOfStock = !product.in_stock || stock <= 0;
+  const isLowStock = !isOutOfStock && stock <= 5;
+
+  const stockStatus = isOutOfStock
+    ? { label: "Out of Stock", dot: "bg-gray-400" }
+    : isLowStock
+      ? { label: `Only ${stock} Left`, dot: "bg-warning" }
+      : { label: "In Stock", dot: "bg-success" };
+
+  const hasDiscount =
+    product.original_price > product.price && product.original_price > 0;
+
   return (
     <div
       onClick={handleProductClick}
       className={cn(
-        "group relative bg-white rounded-xl border border-gray-100 overflow-hidden cursor-pointer",
+        "group relative flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden cursor-pointer",
         "hover:shadow-md hover:border-gray-200 transition-all duration-200",
         className,
       )}
     >
-      {/* Container for the product image and overlay elements (badges, wishlist button) */}
-      <div className="relative overflow-hidden bg-gray-50 aspect-square">
+      {/* Container for the product image and overlay elements (badges, wishlist/remove button) */}
+      <div className="relative overflow-hidden bg-gray-50 aspect-3/2">
         <img
           src={imageSrc}
           alt={product.name}
           onError={() => setImageFailed(true)}
           className={cn(
             "w-full h-full object-cover transition-transform duration-300",
-            "group-hover:scale-105",
+            isOutOfStock ? "grayscale opacity-60" : "group-hover:scale-105",
           )}
         />
 
-        {/* Discount badge */}
-        {product.original_price > product.price && (
+        {/* Discount badge — top-left, only rendered when a real discount exists.
+            This is the ONLY place the discount % is shown (PriceDisplay below
+            has its own badge turned off via showDiscount to avoid duplication) */}
+        {hasDiscount && (
           <div className="absolute top-2 left-2">
             <Badge
               label={`-${Math.round(((product.original_price - product.price) / product.original_price) * 100)}%`}
@@ -168,71 +208,87 @@ const ProductCard = ({
           </div>
         )}
 
-        {/* Low stock badge */}
-        {product.in_stock && product.stock <= 5 && (
-          <div className="absolute top-2 right-10">
-            <Badge label="Low Stock" variant="warning" size="sm" rounded />
-          </div>
-        )}
+        {/* Dim overlay when out of stock */}
+        {isOutOfStock && <div className="absolute inset-0 bg-white/40" />}
 
-        {/* Out of stock overlay */}
-        {!product.in_stock && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-            <Badge label="Out of Stock" variant="gray" size="md" rounded />
-          </div>
-        )}
-
-        {/* Wishlist heart button */}
-        <button
-          onClick={handleWishlistToggle}
-          disabled={wishlistMutation.isPending}
-          className={cn(
-            "absolute top-2 right-2 w-8 h-8 rounded-full bg-white shadow-sm",
-            "flex items-center justify-center transition-all duration-200",
-            "hover:scale-110 active:scale-95 disabled:opacity-50",
-          )}
-        >
-          <svg
+        {/* Top-right action button — remove (X) in controlled mode, wishlist heart otherwise */}
+        {isControlledRemove ? (
+          <button
+            onClick={handleRemoveClick}
+            aria-label="Remove from wishlist"
             className={cn(
-              "w-4 h-4 transition-colors duration-200",
-              inWishlist ? "text-red-500 fill-current" : "text-gray-400",
+              "absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm shadow-sm border border-gray-100",
+              "flex items-center justify-center text-gray-400",
+              "hover:text-white hover:bg-danger hover:border-danger",
+              "transition-all duration-200 opacity-0 group-hover:opacity-100",
             )}
-            fill={inWishlist ? "currentColor" : "none"}
-            stroke="currentColor"
-            viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            <AiOutlineClose className="w-4 h-4" />
+          </button>
+        ) : (
+          <button
+            onClick={handleWishlistToggle}
+            disabled={wishlistMutation.isPending}
+            className={cn(
+              "absolute top-2 right-2 w-8 h-8 rounded-full bg-white shadow-sm",
+              "flex items-center justify-center transition-all duration-200",
+              "hover:scale-110 active:scale-95 disabled:opacity-50",
+            )}
+          >
+            <svg
+              className={cn(
+                "w-4 h-4 transition-colors duration-200",
+                inWishlist ? "text-red-500 fill-current" : "text-gray-400",
+              )}
+              fill={inWishlist ? "currentColor" : "none"}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+          </button>
+        )}
+
+        {/* Status pill — sits at the bottom of the image, same on every card */}
+        <div className="absolute bottom-2 left-2 right-2 flex">
+          <div className="flex items-center gap-1.5 max-w-full bg-gray-900/85 backdrop-blur-sm text-white text-[11px] font-medium pl-2 pr-2.5 py-1 rounded-full shadow-md">
+            <span
+              className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                stockStatus.dot,
+              )}
             />
-          </svg>
-        </button>
+            <span className="truncate">{stockStatus.label}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Product information section below the image */}
-      <div className="p-4 flex flex-col gap-2">
-        {product.category?.name && (
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-            {product.category.name}
-          </p>
-        )}
+      {/* Product information section below the image — kept tight/compact */}
+      <div className="p-3.5 flex flex-col gap-1">
+        {/* Category line — always reserved (even if empty) so every card in a
+            row ends up the same height without needing extra gap-fill */}
+        <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider truncate h-3.5">
+          {product.category?.name || ""}
+        </p>
 
-        <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 leading-snug">
+        {/* Single line title — truncates instead of wrapping to 2 lines,
+            keeps every card the same compact height */}
+        <h3 className="text-sm font-semibold text-gray-800 truncate leading-snug">
           {product.name}
         </h3>
 
-        <RatingStars
-          rating={product.rating || 0}
-          count={product.review_count || 0}
-          size="sm"
-        />
-
+        {/* showDiscount=false: the top-left badge on the image already shows
+            the discount %, so we don't repeat it here */}
         <PriceDisplay
           price={parseFloat(product.price)}
           originalPrice={parseFloat(product.original_price)}
           size="md"
+          showDiscount={false}
         />
 
         {/* Add to Cart button */}
@@ -240,17 +296,19 @@ const ProductCard = ({
           variant="primary"
           size="sm"
           fullWidth
-          isLoading={cartMutation.isPending}
-          disabled={!product.in_stock || cartMutation.isPending}
+          isLoading={addingToCart}
+          disabled={!product.in_stock || addingToCart}
           onClick={handleAddToCart}
           className="mt-1"
         >
           {product.in_stock ? "Add to Cart" : "Out of Stock"}
         </Button>
+
+        {/* Optional extra footer content (e.g. "Added on <date>" on the Wishlist page) */}
+        {footer}
       </div>
     </div>
   );
 };
 
 export default ProductCard;
-//

@@ -1,12 +1,3 @@
-// Admin Sidebar — main navigation for the admin panel
-// Has both Expanded (240px) and Collapsed (64px) states
-// Emerald active state, badge counts
-// Admin profile shown at the bottom
-// Becomes an overlay drawer on mobile
-// Fully responsive
-// Uses React Icons
-// Open/close is controlled via Redux uiSlice
-
 import { useState } from "react"; // Import React hook to manage local state
 import { Link, useLocation, useNavigate } from "react-router-dom"; // Import Link for navigation, useLocation to get current path, useNavigate to redirect
 import { useQuery } from "@tanstack/react-query"; // Import hook to fetch data from an API and cache it

@@ -1,10 +1,3 @@
-// Resolution Protocol — Right sidebar content
-// 3 steps — AI Triage, Human Review, Resolution
-// Trust badge
-// NOTE: no outer card here anymore — this renders INSIDE the unified shadowed card
-// on ComplaintSubmit.jsx, so it's just a plain content section, fully responsive
-
-// Import three icons from the react-icons Bootstrap icon set: a robot icon, a person icon, and a check-circle icon
 import {
   BsRobot,
   BsPerson,
