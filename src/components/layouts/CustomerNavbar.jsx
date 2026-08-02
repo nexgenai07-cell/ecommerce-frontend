@@ -13,6 +13,7 @@ import {
   AiOutlineMenu,
   AiOutlineLogout,
   AiOutlineSetting,
+  AiOutlineBarChart,
 } from "react-icons/ai";
 import { IoChevronDownOutline } from "react-icons/io5";
 import { BsArrowRight } from "react-icons/bs";
@@ -31,6 +32,7 @@ import { getNotifications } from "../../api/notifications.api"; // Used to compu
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
 import useWishlist from "../../hooks/useWishlist";
+
 import { showSuccess } from "../ui/Toast";
 import debounce from "../../utils/debounce";
 import Container from "./Container";
@@ -472,7 +474,7 @@ const CustomerNavbar = () => {
                                     <img
                                       src={
                                         product.primary_image ||
-                                        "/placeholder-product.png"
+                                        "/placeholder-product.svg"
                                       }
                                       alt={product.name}
                                       className="w-12 h-12 object-cover rounded-lg border border-gray-100 shrink-0"
@@ -707,6 +709,30 @@ const CustomerNavbar = () => {
 
                         {/* Menu items */}
                         <div className="py-2">
+                          {/* ===== ADMIN-ONLY LINK ===== */}
+                          {/* Shown ONLY when the logged-in account's role is
+                              "admin" — a regular customer never sees this
+                              link at all, since user?.role will be
+                              "customer" for them and this block simply does
+                              not render. This is the ONLY way an admin
+                              reaches the admin panel after logging in —
+                              login itself always lands everyone on the
+                              customer portal first (see Login.jsx). */}
+                          {user?.role === "admin" && (
+                            <Link
+                              to={ROUTES.ADMIN_DASHBOARD}
+                              // ROUTES.ADMIN_DASHBOARD — "/admin/dashboard", the
+                              // main admin overview page
+                              onClick={() => setUserDropdownOpen(false)}
+                              // close the dropdown as soon as the admin clicks through
+                              className="flex items-center gap-3 mx-2 mb-1 px-3 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-primary-50 transition-colors group"
+                            >
+                              <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white transition-colors">
+                                <AiOutlineBarChart className="w-4 h-4" />
+                              </span>
+                              Go to Admin Portal
+                            </Link>
+                          )}
                           {accountMenuItems.map((item) => (
                             <Link
                               key={item.label}
@@ -889,7 +915,7 @@ const CustomerNavbar = () => {
                             <img
                               src={
                                 product.primary_image ||
-                                "/placeholder-product.png"
+                                "/placeholder-product.svg"
                               }
                               alt={product.name}
                               className="w-10 h-10 object-cover rounded-lg border border-gray-100 shrink-0"
@@ -1003,6 +1029,20 @@ const CustomerNavbar = () => {
                           </span>
                         )}
                       </Link>
+                      {/* ===== ADMIN-ONLY LINK (mobile) ===== */}
+                      {/* Same rule as the desktop dropdown above: only
+                          renders when user?.role is "admin", so a regular
+                          customer's mobile drawer never shows this at all. */}
+                      {user?.role === "admin" && (
+                        <Link
+                          to={ROUTES.ADMIN_DASHBOARD}
+                          onClick={() => setMobileDrawerOpen(false)}
+                          className="flex items-center gap-3 py-2.5 text-sm font-semibold text-primary hover:text-primary-dark transition-colors mt-1"
+                        >
+                          <AiOutlineBarChart className="w-4 h-4" />
+                          Go to Admin Portal
+                        </Link>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="flex items-center gap-3 py-2.5 text-sm text-danger hover:text-red-600 transition-colors mt-2"

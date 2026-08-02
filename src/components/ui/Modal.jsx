@@ -1,9 +1,3 @@
-// Reusable Modal component — popup dialog rendered above the page content
-// Sizes: sm, md, lg, xl
-// Closes when clicking outside the modal box
-// Will be used for delete confirmations, success messages, and form popups
-// Fully responsive
-
 import { useEffect } from "react";
 // useEffect — handles side effects: body scroll lock and ESC key listener
 
@@ -97,6 +91,15 @@ const Modal = ({
           // rounded-xl: generously rounded corners for a modern dialog appearance
           // shadow-xl: strong drop shadow to lift the modal visually off the backdrop
 
+          "max-h-[90vh] flex flex-col overflow-hidden",
+          // max-h-[90vh]: the modal box itself can never grow taller than 90% of the
+          //   viewport, no matter how much content is passed in as children
+          // flex flex-col: stacks header and body vertically, and lets the body
+          //   (flex-1 + overflow-y-auto below) claim all the leftover height
+          // overflow-hidden: clips anything that would spill past the rounded
+          //   corners — the actual scrolling happens inside the body div below,
+          //   not on this outer box
+
           "animate-in fade-in slide-in-from-bottom-4 duration-200",
           // animate-in: triggers the entry animation when the modal mounts
           // fade-in: modal fades from transparent to fully visible
@@ -115,10 +118,13 @@ const Modal = ({
       >
         {/* Modal header — only rendered when title or close button is needed */}
         {(title || showClose) && (
-          <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
             {/* flex + items-center + justify-between: places title on the left, X button on the right */}
             {/* p-5: consistent padding inside the header */}
             {/* border-b border-gray-100: subtle bottom border separates header from body content */}
+            {/* shrink-0: keeps the header at its natural height even when the body
+                below is scrolling — without this, flex would try to shrink the
+                header first when space runs out */}
 
             {/* Modal title — only rendered when title prop is a non-empty string */}
             {title && (
@@ -165,9 +171,16 @@ const Modal = ({
         )}
 
         {/* Modal body — renders whatever JSX is passed as children from the parent */}
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto">
           {children}
           {/* p-5: consistent padding around the body content matching the header padding */}
+          {/* overflow-y-auto: THIS is what actually fixes the "modal not fully
+              visible" bug — when the children (e.g. a long detail view) are
+              taller than the space left after the header, this div scrolls
+              internally instead of pushing the modal box past the viewport
+              edge. Combined with max-h-[90vh] + flex flex-col on the outer
+              box above, the header always stays pinned in view and only the
+              body content scrolls. */}
         </div>
       </div>
     </div>

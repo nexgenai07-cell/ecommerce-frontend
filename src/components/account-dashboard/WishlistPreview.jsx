@@ -75,7 +75,7 @@ const WishlistPreview = ({ wishlistItems }) => {
               {/* Product thumbnail wrapper — overflow-hidden clips the hover zoom cleanly within the rounded box */}
               <div className="w-12 h-12 rounded-xl border border-gray-100 overflow-hidden shrink-0">
                 <img
-                  src={item.product.primary_image || "/placeholder-product.png"} // falls back to placeholder if image is missing
+                  src={item.product.primary_image || "/placeholder-product.svg"} // falls back to placeholder if image is missing
                   alt={item.product.name} // descriptive alt text for accessibility and broken image state
                   className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" // subtle zoom on hover
                 />

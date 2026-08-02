@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineClose } from "react-icons/ai";
@@ -11,13 +11,14 @@ import Button from "../ui/Button";
 import useWishlist from "../../hooks/useWishlist";
 import useCart from "../../hooks/useCart";
 import useAuth from "../../hooks/useAuth";
+import useFlyToIcon from "../../hooks/useFlyToIcon";
 import { showSuccess, showError } from "../ui/Toast";
 import { addToCart } from "../../api/cart.api";
 import { addToWishlist, removeFromWishlist } from "../../api/wishlist.api";
 
 // Local placeholder image shown whenever a product has no image,
 // or its image URL fails to load (broken link, expired signed URL, etc.)
-const FALLBACK_IMAGE = "/placeholder-product.png";
+const FALLBACK_IMAGE = "/placeholder-product.svg";
 
 const ProductCard = ({
   product, // The full product data object
@@ -26,6 +27,10 @@ const ProductCard = ({
   onAddToCart: onAddToCartProp, // optional — see file header
   isAddingToCart: isAddingToCartProp, // optional — see file header
   footer = null, // optional — see file header
+  registerImageRef, // optional — called with (productId, imgNode) whenever
+  // this card's image element mounts/unmounts. Used only by the Wishlist
+  // page, so its "Add All to Cart" button can trigger a flight for every
+  // card at once — most callers don't pass this at all.
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -34,6 +39,22 @@ const ProductCard = ({
 
   // Get cart actions — handleAddItem syncs Redux for instant UI feedback
   const { handleAddItem } = useCart();
+
+  // Fly-to-icon animation trigger functions — see hooks/useFlyToIcon.js.
+  // flyToWishlist/flyToCart make the real product image fly from this
+  // card into the centered bag/cart graphic. flyBackToWishlistCard
+  // reverses it when a product is un-hearted right here on a listing
+  // page (the card stays visible, so the item flies back down into it).
+  const {
+    flyToWishlist,
+    flyBackToWishlistCard,
+    dismissFromWishlist,
+    flyToCart,
+  } = useFlyToIcon();
+
+  // Ref to the actual <img> element rendered below — this is the flight's
+  // starting point (its exact on-screen position + the real image itself).
+  const imageRef = useRef(null);
 
   // Get wishlist state + actions.
   // "items" is needed here because removing from the wishlist requires the
@@ -47,6 +68,14 @@ const ProductCard = ({
 
   // Local state to track whether the image failed to load
   const [imageFailed, setImageFailed] = useState(false);
+
+  // Decide which image source to actually render — computed early (rather
+  // than further down) so the mutation callbacks below can also use it as
+  // the image that flies to the wishlist/cart icon.
+  const imageSrc =
+    !product?.primary_image || imageFailed
+      ? FALLBACK_IMAGE
+      : product.primary_image;
 
   // Check whether this product is currently in the user's wishlist
   const inWishlist = isProductInWishlist(product?.id);
@@ -120,12 +149,27 @@ const ProductCard = ({
       return;
     }
 
+    // Fires immediately, before the network call — this card stays on
+    // screen either way (we're on a listing page, not the Wishlist page
+    // itself), so the item either flies up into the bag (adding) or
+    // flies back down into this exact card (removing).
+    if (inWishlist) {
+      flyBackToWishlistCard(imageRef.current, imageSrc);
+    } else {
+      flyToWishlist(imageRef.current, imageSrc);
+    }
+
     wishlistMutation.mutate();
   };
 
-  // Remove button click — used only in controlled-remove mode (Wishlist page)
+  // Remove button click — used only in controlled-remove mode (Wishlist page).
+  // This row is leaving the list for good (there's no card left to fly
+  // back into), so the item pops straight out of the bag and rises away,
+  // fading out off-screen, rather than flying from anywhere or returning
+  // anywhere.
   const handleRemoveClick = (e) => {
     e.stopPropagation();
+    dismissFromWishlist(imageSrc);
     onRemove(product.id);
   };
 
@@ -140,6 +184,11 @@ const ProductCard = ({
 
     if (!product?.in_stock) return;
 
+    // Fly the image immediately, regardless of which mode this card is
+    // in — the animation is purely visual feedback and doesn't need to
+    // wait for the network request to resolve.
+    flyToCart(imageRef.current, imageSrc);
+
     if (isControlledAddToCart) {
       onAddToCartProp(product.id); // let the parent's own mutation handle it
     } else {
@@ -149,12 +198,6 @@ const ProductCard = ({
 
   // If there's no product data, don't render anything
   if (!product) return null;
-
-  // Decide which image source to actually render
-  const imageSrc =
-    !product.primary_image || imageFailed
-      ? FALLBACK_IMAGE
-      : product.primary_image;
 
   // ─────────────────────────────────────────
   // STOCK STATUS PILL — replaces the old separate "Low Stock" / "Out of Stock"
@@ -185,6 +228,10 @@ const ProductCard = ({
       {/* Container for the product image and overlay elements (badges, wishlist/remove button) */}
       <div className="relative overflow-hidden bg-gray-50 aspect-3/2">
         <img
+          ref={(node) => {
+            imageRef.current = node;
+            registerImageRef?.(product.id, node);
+          }}
           src={imageSrc}
           alt={product.name}
           onError={() => setImageFailed(true)}

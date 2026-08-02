@@ -12,6 +12,7 @@ import {
   AiOutlineClose,
   AiOutlineReload,
   AiOutlineMail,
+  AiOutlineExclamationCircle,
 } from "react-icons/ai";
 import { FcGoogle } from "react-icons/fc";
 import AuthLayout from "../../components/layouts/AuthLayout";
@@ -88,6 +89,24 @@ const Register = () => {
   const [verificationSent, setVerificationSent] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
 
+  // =============================================
+  // EMAIL-ALREADY-REGISTERED CARD STATE ★ NEW
+  // Shown instead of a plain toast when the backend rejects
+  // registration because this email already has an account — whether
+  // that account is active OR deactivated (is_delete: true). Both
+  // cases show the EXACT SAME generic wording and the exact same two
+  // buttons (Log In / Recover Account) — this is a deliberate security
+  // choice: the register form must never confirm or deny whether a
+  // given email specifically belongs to a DEACTIVATED account, since
+  // that would let anyone probe arbitrary emails (no password
+  // required here) to learn who has deleted their account. The
+  // Login page is the only place that's allowed to reveal
+  // "deactivated" specifically, and only AFTER a correct password has
+  // already been verified — see Login.jsx's account_deactivated block.
+  // =============================================
+  const [emailTaken, setEmailTaken] = useState(false);
+  const [takenEmail, setTakenEmail] = useState("");
+
   const passwordStrength = getPasswordStrength(passwordValue);
 
   const {
@@ -147,7 +166,25 @@ const Register = () => {
       setVerificationSent(true);
     },
 
-    onError: (error) => {
+    onError: (error, variables) => {
+      // DRF's standard validation-error shape for a unique-field clash
+      // is { email: ["This field must be unique.", ...] } — this is
+      // the SAME field the codebase already reads from in the message
+      // fallback below, so checking for its presence here is a
+      // reliable, existing signal that this specific error is about
+      // the email already being taken (active OR deactivated account
+      // — the response never distinguishes which, by design).
+      const emailErrors = error?.response?.data?.email;
+
+      if (Array.isArray(emailErrors) && emailErrors.length > 0) {
+        setTakenEmail(variables.email);
+        setEmailTaken(true);
+        return;
+      }
+
+      // Every other kind of registration failure (validation errors on
+      // other fields, network issues, server errors, etc.) keeps the
+      // existing toast behavior, unchanged.
       const message =
         error?.response?.data?.message ||
         error?.response?.data?.email?.[0] ||
@@ -186,6 +223,14 @@ const Register = () => {
       password: data.password,
       confirm_password: data.confirm_password,
     });
+  };
+
+  // Resets the emailTaken card back to the normal form, in case the
+  // person typed the wrong email by mistake and wants to correct it
+  // themselves instead of using either of the two offered buttons.
+  const handleTryDifferentEmail = () => {
+    setEmailTaken(false);
+    setTakenEmail("");
   };
 
   const strengthConfig = {
@@ -252,6 +297,49 @@ const Register = () => {
               Go to Login
             </Button>
           </Link>
+        </div>
+      ) : emailTaken ? (
+        // ★ NEW — EMAIL-ALREADY-REGISTERED CARD
+        // Deliberately generic: this exact same card, with this exact
+        // same wording, shows up whether takenEmail belongs to a
+        // perfectly normal active account OR a deactivated one. See
+        // the emailTaken state comment above for why that distinction
+        // is never surfaced here.
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center">
+            <AiOutlineExclamationCircle className="w-8 h-8 text-warning" />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">
+              This Email Is Already Registered
+            </h1>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              <span className="font-medium text-gray-700">{takenEmail}</span>{" "}
+              already has an account on our platform.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 w-full">
+            <Link to={ROUTES.LOGIN} state={{ registeredEmail: takenEmail }}>
+              <Button variant="primary" fullWidth>
+                Log In
+              </Button>
+            </Link>
+
+            <Link to={ROUTES.REACTIVATE_ACCOUNT} state={{ email: takenEmail }}>
+              <Button variant="outline" fullWidth>
+                Recover / Reactivate Account
+              </Button>
+            </Link>
+          </div>
+
+          <button
+            onClick={handleTryDifferentEmail}
+            className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+          >
+            ← Try a different email
+          </button>
         </div>
       ) : (
         // FORM STATE

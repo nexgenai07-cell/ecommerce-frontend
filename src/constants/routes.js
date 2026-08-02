@@ -1,9 +1,3 @@
-// This file defines ALL routes for the entire project in one central place.
-// Pages/components should NEVER use hardcoded route strings (like "/login")
-// directly — they should always import and use these constants instead.
-// This way, if a route's path ever needs to change, it only needs to be
-// updated here, and it will automatically reflect everywhere it's used.
-
 export const ROUTES = {
   // ----------------------------
   // AUTH ROUTES
@@ -12,9 +6,16 @@ export const ROUTES = {
   REGISTER: "/register",
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password/:uid/:token",
-  // API 18 docs explicitly say: "Create a /verify-email/:token page" —
-  // path param, same convention as RESET_PASSWORD above (not a query string).
   VERIFY_EMAIL: "/verify-email/:token",
+  // REACTIVATE_ACCOUNT — a single page that serves BOTH steps of the
+  // reactivation flow, matching the exact URL shape from the backend
+  // spec ("/reactivate-account?token=xxxx"):
+  //   - no ?token in the URL  -> shows the "enter your email" REQUEST
+  //     form (reachable from Login's account_deactivated block screen)
+  //   - ?token=xxxx present   -> auto-calls the CONFIRM endpoint on
+  //     mount, exactly like the email verification link flow
+  // See pages/auth/ReactivateAccount.jsx for the full implementation.
+  REACTIVATE_ACCOUNT: "/reactivate-account",
 
   // ----------------------------
   // CUSTOMER ROUTES
@@ -26,6 +27,23 @@ export const ROUTES = {
   CHECKOUT: "/checkout",
   WISHLIST: "/wishlist",
   SEARCH: "/search",
+
+  // ----------------------------
+  // AI CHAT ASSISTANT ROUTES
+  // ----------------------------
+  // CHAT — the full-page expanded view of the customer shopping
+  // assistant (STATE 04 in the approved chat UI designs). This is a
+  // TOP-LEVEL route deliberately kept OUTSIDE CustomerLayout in
+  // App.jsx — it renders its own dedicated full-screen layout
+  // (navbar/footer hidden entirely) instead of the normal site chrome,
+  // matching a focused, distraction-free "chat takeover" experience.
+  CHAT: "/chat",
+
+  // ADMIN_CHAT — the equivalent full-page expanded view for the admin
+  // store-ops assistant. Also a TOP-LEVEL route, kept OUTSIDE
+  // AdminLayout for the same reason (no AdminSidebar/TopHeader chrome
+  // here — the chat page has its own dedicated dark sidebar instead).
+  ADMIN_CHAT: "/admin/chat",
 
   // ----------------------------
   // CUSTOMER ACCOUNT ROUTES
@@ -44,7 +62,6 @@ export const ROUTES = {
   // ----------------------------
   // ADMIN ROUTES
   // ----------------------------
-  ADMIN_LOGIN: "/admin/login",
   ADMIN_DASHBOARD: "/admin/dashboard",
 
   // Product management
@@ -79,6 +96,7 @@ export const ROUTES = {
   ADMIN_SOCIAL_CREATE_POST: "/admin/social/posts/create",
   ADMIN_SOCIAL_CALENDAR: "/admin/social/calendar",
   ADMIN_SOCIAL_ACCOUNTS: "/admin/social/accounts",
+  ADMIN_SOCIAL_POST_ANALYTICS: "/admin/social/posts/:id/analytics",
 
   // WhatsApp integration management
   ADMIN_WHATSAPP_LOGS: "/admin/whatsapp/logs",

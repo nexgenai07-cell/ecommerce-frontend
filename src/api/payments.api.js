@@ -8,9 +8,9 @@
 import axiosInstance from "../lib/axiosInstance";
 
 // ----------------------------
-// API 69 - Create Stripe Payment Intent
+// API - Create Stripe Payment Intent
 // ----------------------------
-// Checkout (API 52) ke turant baad call hoti hai. Order banne ke baad
+// Checkout () ke turant baad call hoti hai. Order banne ke baad
 // jo order_number milta hai, wahi is API ko bhejte hain.
 // Backend Stripe par ek PaymentIntent bana kar wapas bhejta hai:
 // - client_secret        -> Stripe Elements ko is se hi payment form render/confirm karna hai
@@ -25,7 +25,7 @@ export const createPaymentIntent = (data) => {
 };
 
 // ----------------------------
-// Note: API 70 (Stripe Webhook) frontend se kabhi call nahi hoti.
+// Note: (Stripe Webhook) frontend se kabhi call nahi hoti.
 // Wo sirf Stripe server khud call karta hai backend ko — isliye
 // yahan is file mein uska koi function nahi hai.
 // ----------------------------

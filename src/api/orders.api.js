@@ -15,7 +15,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 52 - Convert the cart into an actual order (Checkout)
+// API  - Convert the cart into an actual order (Checkout)
 // ----------------------------
 // Called when the customer completes the checkout process.
 // This takes everything in their current cart and turns it into
@@ -35,7 +35,7 @@ export const checkout = (data) => {
 };
 
 // ----------------------------
-// API 43 - Get the logged-in customer's own orders
+// API - Get the logged-in customer's own orders
 // ----------------------------
 // Fetches the full list of orders placed by the currently logged-in
 // customer. Used on the "My Orders" page in the customer account section.
@@ -44,18 +44,30 @@ export const getMyOrders = () => {
 };
 
 // ----------------------------
-// API 44 - Get full details of a specific order
+// API - Get full details of a specific order (CUSTOMER-OWNED ONLY)
 // ----------------------------
 // Fetches everything about one specific order, identified by its
 // order number — including the items ordered, payment details,
-// and shipping information. Used on the order detail page.
+// and shipping information. Used on the CUSTOMER's own order detail
+// page ("/account/orders/:id").
+//
+// IMPORTANT: this endpoint only returns an order if it belongs to
+// the currently logged-in user — the backend returns a 404 for any
+// order that exists but isn't owned by the requester, even if that
+// requester is an admin. This was confirmed via real testing (an
+// admin got "No Order matches the given query" for a real, existing
+// order that wasn't theirs) and reported to the backend team.
+//
+// DO NOT reuse this function for the admin order detail page — use
+// getAdminOrderDetail() below instead, which calls the new
+// admin-only endpoint the backend added specifically to fix this.
 export const getOrderDetail = (orderNumber) => {
   return axiosInstance.get(`/api/v1/orders/${orderNumber}/`);
   // Template literal inserts the "orderNumber" directly into the URL path
 };
 
 // ----------------------------
-// API 45 - Cancel an order
+// API - Cancel an order
 // ----------------------------
 // Allows the customer to cancel an order, identified by its order
 // number. The comment notes this should only be ALLOWED on the
@@ -69,7 +81,7 @@ export const cancelOrder = (orderNumber) => {
 };
 
 // ----------------------------
-// API 46 - Track an order's status history
+// API - Track an order's status history
 // ----------------------------
 // Fetches the tracking timeline/history for a specific order
 // (e.g. "Order Placed" -> "Confirmed" -> "Shipped" -> "Delivered"),
@@ -79,7 +91,7 @@ export const trackOrder = (orderNumber) => {
 };
 
 // ----------------------------
-// API 47 - Get all orders from all customers (Admin only)
+// API  - Get all orders from all customers (Admin only)
 // ----------------------------
 // Fetches the complete list of orders across the ENTIRE store
 // (not just one customer's orders). Used in the admin panel's
@@ -89,13 +101,16 @@ export const getAdminOrders = () => {
 };
 
 // ----------------------------
-// API 48 - Filter admin orders (Admin only)
+// API  - Filter admin orders (Admin only)
 // ----------------------------
 // Allows admins to narrow down the orders list using various filters.
 // The "params" object can include:
 // - status: filter by order status (e.g. pending, shipped, delivered)
 // - start_date / end_date: filter orders within a date range
 // - search: search by customer name, order number, etc.
+// - customer_id: NEW — added by the backend team specifically so we
+//   can show one customer's own order history (see getCustomerOrders
+//   below). Returns only orders placed by that exact customer.
 // - page: which page of results to fetch (for pagination)
 export const filterAdminOrders = (params) => {
   return axiosInstance.get("/api/v1/admin/orders/filter/", { params });
@@ -104,7 +119,43 @@ export const filterAdminOrders = (params) => {
 };
 
 // ----------------------------
-// API 49 - Update an order's status (Admin only)
+// — Get every order placed by ONE specific customer (Admin only)
+// ----------------------------
+// Added after the backend team implemented the `customer_id` filter
+// param on API 48 (per our request — see Backend-Request doc). This
+// is used on the admin Customers page, inside the customer detail
+// drawer, to show that exact customer's order history.
+//
+// `params` can additionally include status / search / page — all of
+// which combine correctly with customer_id on the backend, e.g.:
+//   getCustomerOrders(20, { status: "delivered", page: 2 })
+export const getCustomerOrders = (customerId, params = {}) => {
+  return filterAdminOrders({ ...params, customer_id: customerId });
+  // Reuses filterAdminOrders so both functions always stay in sync —
+  // this is just filterAdminOrders with customer_id always included
+};
+
+// ----------------------------
+// — Get full details of ANY order (Admin only)
+// ----------------------------
+// Added after a real bug was found and reported to the backend team:
+// the customer-facing getOrderDetail() above only ever returns an
+// order that belongs to the requesting user, which meant an admin
+// got a 404 "Order not found" for real orders that simply weren't
+// theirs. The backend team added this new dedicated admin endpoint
+// to fix it — it returns full order details for ANY order in the
+// store, regardless of who placed it, as long as the requester has
+// the admin role. Matches the same "/admin/..." prefix convention
+// already used by getAdminOrders() and filterAdminOrders() above.
+//
+// Used ONLY on the admin order detail page ("/admin/orders/:id") —
+// the customer-facing page keeps using getOrderDetail() unchanged.
+export const getAdminOrderDetail = (orderNumber) => {
+  return axiosInstance.get(`/api/v1/admin/orders/${orderNumber}/`);
+};
+
+// ----------------------------
+// API - Update an order's status (Admin only)
 // ----------------------------
 // Allows admins to move an order forward in its lifecycle
 // (e.g. from "confirmed" to "shipped") and optionally attach a
@@ -117,7 +168,7 @@ export const updateOrderStatus = (orderNumber, data) => {
 };
 
 // ----------------------------
-// API 50 - Request a return for a delivered order
+// API - Request a return for a delivered order
 // ----------------------------
 // Allows the customer to request a return for an order that has
 // already been delivered. The "data" payload is expected to include:

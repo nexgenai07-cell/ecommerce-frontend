@@ -3,81 +3,130 @@
 // ============================================================
 // This file contains ALL API calls related to the AI Chat module.
 // It supports BOTH anonymous (not logged in) and logged-in users,
-// managing their chat sessions, message history, and a real-time
-// WebSocket connection for live chatting with the AI.
+// and BOTH assistants (customer shopping assistant + admin store-ops
+// assistant), managing chat sessions, message history, chat-history
+// list/soft-delete, admin action confirm/cancel, message feedback,
+// file uploads, and the real-time WebSocket connection.
 
 import axiosInstance from "../lib/axiosInstance";
-// Importing the pre-configured Axios instance, which automatically
-// attaches the base URL, auth token (if logged in), and handles
-// 401 errors globally.
 
 // ----------------------------
-// API 63 - Start a new chat session
+// API - Start a new customer chat session
 // ----------------------------
-// Called the FIRST TIME the chat widget is opened by a user
-// (whether they're logged in or anonymous). The backend creates
-// a new chat session and returns a unique "session_key" in the
-// response, which should then be saved into localStorage on the
-// frontend — this key is what identifies THIS specific chat
-// conversation across future requests.
 export const startChatSession = () => {
   return axiosInstance.post("/api/v1/chat/session/start/");
-  // No "data" sent — this endpoint just creates a fresh, empty session
 };
 
 // ----------------------------
-// API 64 - Get the chat history for an existing session
+// Start a new ADMIN chat session
 // ----------------------------
-// Called when the chat widget is opened AGAIN (e.g. user navigates
-// away and comes back, or refreshes the page). Since the
-// "session_key" was already saved in localStorage from a previous
-// visit, this fetches all the PREVIOUS messages tied to that session,
-// so the conversation can be restored/displayed instead of starting
-// from scratch.
+export const startAdminChatSession = () => {
+  return axiosInstance.post("/api/v1/chat/admin/session/start/");
+};
+
+// ----------------------------
+// API- Get the chat history for an existing session
+// ----------------------------
 export const getChatHistory = (sessionKey) => {
   return axiosInstance.get(`/api/v1/chat/session/${sessionKey}/history/`);
-  // Template literal inserts the "sessionKey" directly into the URL path
 };
 
 // ----------------------------
-// API 65 - Clear the chat history for a session
+// API - Clear the messages inside a chat session
 // ----------------------------
-// Called when the user clicks a "Clear Chat" button inside the
-// chat widget. This deletes all the MESSAGES belonging to this
-// session, but importantly, the SESSION ITSELF stays active
-// (i.e. the session_key remains valid) — so the user can continue
-// chatting fresh without needing to start an entirely new session.
 export const clearChatSession = (sessionKey) => {
   return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/clear/`);
 };
 
 // ----------------------------
-// WebSocket Connection - Real-time chat
+// List past chat sessions — CUSTOMER
 // ----------------------------
-// IMPORTANT: This is NOT a normal HTTP API call like the ones above
-// (it doesn't use axiosInstance at all). Instead, it opens a
-// persistent WebSocket connection, which allows TWO-WAY real-time
-// communication between the frontend and backend — needed so AI
-// responses can stream/arrive instantly without the user having to
-// repeatedly poll an API endpoint for new messages.
-//
-// The "sessionKey" used here MUST be the same one received earlier
-// from the startChatSession() API call (API 63), so the backend
-// knows which conversation this WebSocket connection belongs to.
-export const createChatWebSocket = (sessionKey) => {
-  // Building the WebSocket URL using the session key.
-  // "ws://" is the WebSocket protocol equivalent of "http://" —
-  // used here for LOCAL DEVELOPMENT only (talking to localhost:8000).
-  const wsUrl = `ws://localhost:8000/ws/chat/${sessionKey}/`;
-  // NOTE: In PRODUCTION, this should be changed to "wss://" instead
-  // of "ws://" — "wss://" is the SECURE version of WebSocket
-  // (equivalent to how "https://" is the secure version of "http://"),
-  // and should also point to the actual production domain instead
-  // of "localhost:8000".
+export const listChatSessions = (limit = 20, offset = 0) => {
+  return axiosInstance.get("/api/v1/chat/sessions/", {
+    params: { limit, offset },
+  });
+};
 
-  // Creating and returning an actual native browser WebSocket object,
-  // which the calling component can then use to listen for messages
-  // (via .onmessage), send messages (via .send()), and handle
-  // connection events (via .onopen, .onclose, .onerror).
+// ----------------------------
+// List past chat sessions — ADMIN
+// ----------------------------
+export const listAdminChatSessions = (limit = 20, offset = 0) => {
+  return axiosInstance.get("/api/v1/chat/admin/sessions/", {
+    params: { limit, offset },
+  });
+};
+
+// ----------------------------
+// Soft-delete a chat session
+// ----------------------------
+export const deleteChatSession = (sessionKey) => {
+  return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/`);
+};
+
+// ----------------------------
+// Confirm a pending admin action
+// ----------------------------
+export const confirmAdminAction = (actionId) => {
+  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/confirm/`);
+};
+
+// ----------------------------
+// Cancel a pending admin action
+// ----------------------------
+export const cancelAdminAction = (actionId) => {
+  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/cancel/`);
+};
+
+// ----------------------------
+// Submit thumbs up/down feedback on an AI message
+// ----------------------------
+export const sendMessageFeedback = (messageId, rating) => {
+  return axiosInstance.post(`/api/v1/chat/message/${messageId}/feedback/`, {
+    rating,
+  });
+};
+
+// ----------------------------
+// Remove feedback from an AI message
+// ----------------------------
+export const removeMessageFeedback = (messageId) => {
+  return axiosInstance.delete(`/api/v1/chat/message/${messageId}/feedback/`);
+};
+
+// ----------------------------
+// Upload a file/image attachment for the chat
+// ----------------------------
+export const uploadChatFile = (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return axiosInstance.post("/api/v1/chat/upload/", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
+// ----------------------------
+// Helper — build the correct ws:// or wss:// base URL
+// ----------------------------
+const getWebSocketBaseUrl = () => {
+  const restBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  return restBaseUrl.replace(/^http/, "ws");
+};
+
+// ----------------------------
+// WebSocket Connection - Real-time customer chat
+// ----------------------------
+export const createChatWebSocket = (sessionKey) => {
+  const wsUrl = `${getWebSocketBaseUrl()}/ws/chat/${sessionKey}/`;
+  return new WebSocket(wsUrl);
+};
+
+// ----------------------------
+// WebSocket Connection - Real-time ADMIN chat
+// ----------------------------
+// FIXED: path corrected from "/ws/admin/chat/" to "/ws/admin-chat/"
+// (hyphen, not slash) — confirmed correct by the backend team.
+export const createAdminChatWebSocket = (sessionKey) => {
+  const wsUrl = `${getWebSocketBaseUrl()}/ws/admin-chat/${sessionKey}/`;
   return new WebSocket(wsUrl);
 };

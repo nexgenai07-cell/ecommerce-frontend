@@ -12,7 +12,7 @@ import extractListData from "../../utils/extractListData";
 import Container from "../layouts/Container";
 import cn from "../../utils/cn";
 
-const FALLBACK_IMAGE = "/placeholder-product.png";
+const FALLBACK_IMAGE = "/placeholder-product.svg";
 const AUTOPLAY_MS = 6000;
 
 // =============================================

@@ -21,6 +21,7 @@ import authReducer from "./slices/authSlice"; // Handles authentication state (u
 import cartReducer from "./slices/cartSlice"; // Handles shopping cart state (items, quantities, totals, etc.)
 import wishlistReducer from "./slices/wishlistSlice"; // Handles wishlist state (saved/favorited products)
 import uiReducer from "./slices/uiSlice"; // Handles general UI state (e.g. modals, sidebars, loaders, theme, etc.)
+import chatReducer from "./slices/chatSlice"; // Handles the AI chat assistant state (widget open/closed, messages, session, connection status, etc.)
 
 // Creating the actual Redux store using Redux Toolkit's configureStore().
 // configureStore() automatically sets up good defaults like:
@@ -35,10 +36,12 @@ export const store = configureStore({
   // state.cart      -> managed by cartReducer
   // state.wishlist  -> managed by wishlistReducer
   // state.ui        -> managed by uiReducer
+  // state.chat      -> managed by chatReducer
   reducer: {
     auth: authReducer,
     cart: cartReducer,
     wishlist: wishlistReducer,
     ui: uiReducer,
+    chat: chatReducer,
   },
 });

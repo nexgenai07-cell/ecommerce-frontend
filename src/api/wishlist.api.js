@@ -17,7 +17,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 39 - Get the full wishlist data
+// API  - Get the full wishlist data
 // ----------------------------
 // Fetches the complete list of products the logged-in customer has
 // saved to their wishlist. Typically called when the wishlist page
@@ -33,7 +33,7 @@ export const getWishlist = () => {
 };
 
 // ----------------------------
-// API 40 - Add a product to the wishlist
+// API  - Add a product to the wishlist
 // ----------------------------
 // Used when the customer clicks an EMPTY heart icon on a product
 // card or product detail page, indicating they want to save that
@@ -45,7 +45,7 @@ export const addToWishlist = (data) => {
 };
 
 // ----------------------------
-// API 41 - Remove a product from the wishlist
+// API  - Remove a product from the wishlist
 // ----------------------------
 // Used when the customer clicks a FILLED heart icon (meaning the
 // product is already saved), indicating they want to remove it from

@@ -1,8 +1,3 @@
-// Reusable StatsCard component
-// Displays KPI numbers on the admin dashboard
-// Contains an icon, main value, label, and optional trend badge
-// Fully responsive
-
 import cn from "../../utils/cn";
 // cn utility — merges Tailwind class strings and handles conditional classes cleanly
 
@@ -15,6 +10,11 @@ const StatsCard = ({
   iconBg = "bg-primary-50", // Background color class for the icon container — defaults to light emerald
   iconColor = "text-primary", // Text/icon color class for the icon — defaults to brand emerald
   className = "", // Extra Tailwind classes for one-off customizations from outside
+  compact = false, // Opt-in smaller variant — tighter padding, smaller icon box and
+  // value text, stronger resting elevation. Defaults to false so every
+  // existing caller (Dashboard KPI cards) renders exactly as before;
+  // only pages that explicitly pass compact={true} (e.g. the Product
+  // page's summary row) get the smaller, more "floating chip" look.
 }) => {
   // Determines trend direction by checking the first character of the trend string
   const isPositive = trend?.startsWith("+");
@@ -27,18 +27,36 @@ const StatsCard = ({
   return (
     <div
       className={cn(
-        // Base classes — applied to every stats card instance
-        "bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4",
-        // bg-white: solid white card background
-        // rounded-xl: generously rounded corners for a modern card appearance
-        // border border-gray-100: subtle border to define the card edge without heaviness
-        // p-5: consistent internal padding on all sides
-        // flex flex-col: stacks the top row, value, and trend badge vertically
-        // gap-4: consistent spacing between each section of the card
+        // "group" — lets the icon box react to the CARD being hovered
+        // (via group-hover: below), instead of needing its own hover listener
+        "group",
 
-        "hover:shadow-md transition-shadow duration-200",
-        // hover:shadow-md: subtle lift effect on hover to signal interactivity
-        // transition-shadow duration-200: smooth shadow animation on hover
+        // Base classes — applied to every stats card instance
+        "bg-white rounded-xl border border-gray-100 flex flex-col",
+        compact ? "p-3.5 gap-2" : "p-5 gap-4",
+        // compact=false (default, Dashboard): p-5 padding, gap-4 between sections
+        // compact=true (Product page summary row): tighter p-3.5 padding,
+        // gap-2 between sections — visibly smaller card footprint, both
+        // in height and in how much horizontal space it needs to breathe
+
+        // ELEVATION — the card has a soft shadow baked into its resting
+        // state (instead of only appearing on hover), so it visually "lifts"
+        // off the gray page background at all times, not just on interaction.
+        // Compact cards get a slightly stronger resting + hover shadow so
+        // they read as clearly "elevated" even at their smaller size.
+        compact
+          ? "shadow-[0_4px_14px_-4px_rgba(16,24,40,0.14)]"
+          : "shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)]",
+
+        // HOVER — subtle lift on every card; compact cards get a small
+        // upward nudge too since they're meant to feel like tappable
+        // summary chips rather than static dashboard tiles.
+        compact
+          ? "hover:shadow-[0_10px_24px_-6px_rgba(16,24,40,0.22)] hover:-translate-y-0.5"
+          : "hover:shadow-[0_4px_14px_-4px_rgba(16,24,40,0.10)]",
+        "transition-all duration-300",
+        // transition-all duration-300: smooth, slow shadow/transform animation
+        // so the hover change never feels abrupt
 
         className,
         // Merges any extra classes passed from the parent
@@ -49,9 +67,14 @@ const StatsCard = ({
         {/* justify-between: pushes title to the far left and icon to the far right */}
 
         {/* Card title — descriptive label for the KPI metric */}
-        <p className="text-sm font-medium text-gray-500">
+        <p
+          className={cn(
+            "font-medium text-gray-500",
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
           {title}
-          {/* text-sm: small label text — subordinate to the main value */}
+          {/* compact: text-xs, default: text-sm — smaller label to match the smaller card */}
           {/* font-medium: slightly bold for legibility */}
           {/* text-gray-500: muted gray — clearly secondary to the bold value below */}
         </p>
@@ -60,18 +83,26 @@ const StatsCard = ({
         {icon && (
           <div
             className={cn(
-              "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-              // w-10 h-10: 40px square container — large enough to be visually clear
-              // rounded-lg: rounded corners on the icon box match the card style
-              // flex + items-center + justify-center: centers the icon inside the box
-              // shrink-0: prevents the icon box from compressing in flex layout
+              "rounded-xl flex items-center justify-center shrink-0",
+              compact ? "w-9 h-9" : "w-12 h-12",
+              // compact: 36px icon box, default: 48px — the biggest single
+              // contributor to the card's overall height/footprint
+
+              // Subtle inner ring + soft shadow gives the icon box a bit of
+              // depth/polish instead of sitting flat against the card
+              "ring-1 ring-black/5 shadow-sm",
+
+              // Icon box grows very slightly when the CARD (not just the icon)
+              // is hovered — a tiny, tasteful bit of interactivity
+              "transition-transform duration-300 group-hover:scale-105",
+
               iconBg,
               // Applies the background color passed via iconBg prop — defaults to bg-primary-50
             )}
           >
-            <span className={cn("text-xl", iconColor)}>
+            <span className={cn(compact ? "text-base" : "text-2xl", iconColor)}>
               {icon}
-              {/* text-xl: renders emoji or SVG icons at a readable size inside the box */}
+              {/* compact: text-base icon, default: text-2xl */}
               {/* iconColor: applies the icon color passed via prop — defaults to text-primary */}
             </span>
           </div>
@@ -79,9 +110,15 @@ const StatsCard = ({
       </div>
 
       {/* Main KPI value — the most prominent element on the card */}
-      <p className="text-2xl font-bold text-gray-900">
+      <p
+        className={cn(
+          "font-bold text-gray-900",
+          compact ? "text-xl" : "text-2xl",
+        )}
+      >
         {value}
-        {/* text-2xl: large number that immediately draws the eye */}
+        {/* compact: text-xl, default: text-2xl — still bold and prominent,
+            just scaled to match the smaller card */}
         {/* font-bold: heaviest weight — establishes clear visual hierarchy */}
         {/* text-gray-900: near-black for maximum contrast */}
       </p>

@@ -15,6 +15,7 @@ const Badge = ({
   status = "", // Order/return/complaint status string — color is resolved automatically via getStatusColor
   size = "md", // Controls badge dimensions — "sm" for compact, "md" for default
   rounded = false, // When true, badge gets a full pill shape; when false, slightly rounded corners
+  icon = null, // Optional small icon element rendered to the left of the label (e.g. a checkmark or cross)
   className = "", // Extra Tailwind classes for one-off customizations from outside
 }) => {
   // If a status string is passed, resolve its color automatically via the utility
@@ -42,12 +43,15 @@ const Badge = ({
     // Gray tones — used as the default fallback for unknown or closed states
   };
 
-  // Each size maps to its own horizontal/vertical padding and font size
+  // Each size maps to its own horizontal/vertical padding and font size.
+  // The icon's own size is controlled by whatever className the caller
+  // passes on the icon element itself (e.g. "w-3.5 h-3.5"), so it's not
+  // duplicated here — this just controls the gap between icon and text.
   const sizeClasses = {
-    sm: "px-2 py-0.5 text-xs",
+    sm: "px-2 py-0.5 text-xs gap-1",
     // Small: tighter padding — used in dense tables or compact UI areas
 
-    md: "px-2.5 py-1 text-xs",
+    md: "px-2.5 py-1 text-xs gap-1.5",
     // Medium (default): slightly more padding — used in most standard badge placements
   };
 
@@ -56,11 +60,11 @@ const Badge = ({
       className={cn(
         // Base classes — applied to every badge instance
         "inline-flex items-center font-medium",
-        // inline-flex + items-center: vertically centers text (and future icons) inside the badge
+        // inline-flex + items-center: vertically centers text and icon inside the badge
         // font-medium: slightly bold text for better legibility at small sizes
 
         sizeClasses[size],
-        // Injects the correct padding and font size for the chosen size
+        // Injects the correct padding, font size, and icon-to-text gap for the chosen size
 
         rounded ? "rounded-full" : "rounded-md",
         // rounded-full: full pill shape — softer, tag-like appearance
@@ -75,6 +79,14 @@ const Badge = ({
         // Merges any extra classes passed from the parent component
       )}
     >
+      {/* Icon — only rendered when the icon prop is provided. Inherits
+          the badge's own text color automatically (no separate color
+          class needed), since SVG icons from react-icons default to
+          currentColor unless overridden. */}
+      {icon && (
+        <span className="inline-flex items-center shrink-0">{icon}</span>
+      )}
+
       {label}
       {/* Renders the badge text — e.g. "Delivered", "Pending", "Cancelled" */}
     </span>

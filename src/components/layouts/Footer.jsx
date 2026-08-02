@@ -179,7 +179,7 @@ const Footer = () => {
           ============================================= */}
       <div className="relative  border-white/10">
         <Container>
-          <div className="pt-0 pb-0 md:py-16">
+          <div className="pt-0 pb-0 md:pt-16 md:pb-8">
             {/* ===== DESKTOP VERSION — hidden on mobile, visible from "md" breakpoint up ===== */}
             <div className="hidden md:grid grid-cols-12 gap-10 lg:gap-14">
               {/* ---- Column 1: Brand info (logo, description, social icons) ---- */}
@@ -400,43 +400,6 @@ const Footer = () => {
                 </button>
               </AccordionSection>
             </div>
-          </div>
-        </Container>
-      </div>
-
-      {/* =============================================
-          LAYER 2 — TRUST BADGES
-          Card-style grid of icon + label pairs (Secure Checkout, Free Delivery, etc.)
-          2 columns on mobile, 4 columns on desktop.
-          ============================================= */}
-      <div className="relative  border-white/10">
-        <Container>
-          <div className="py-0 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
-            {TRUST_BADGES.map((badge) => (
-              <div
-                key={badge.label} // label is unique, so it's safe to use as the React key
-                className="
-                  group flex items-center gap-3 rounded-xl px-4 py-3.5
-                  bg-white/3 
-                  hover:bg-white/6 hover:border-primary/30
-                  transition-all duration-200
-                "
-              >
-                {/* Icon shown in the brand's primary color, inside a soft rounded chip */}
-                <span
-                  className="
-                    shrink-0 w-9 h-9 rounded-lg bg-primary/10 border border-primary/20
-                    flex items-center justify-center text-primary
-                    group-hover:scale-105 transition-transform duration-200
-                  "
-                >
-                  {badge.icon}
-                </span>
-                <p className="text-xs sm:text-sm font-medium text-gray-300 leading-snug">
-                  {badge.label}
-                </p>
-              </div>
-            ))}
           </div>
         </Container>
       </div>

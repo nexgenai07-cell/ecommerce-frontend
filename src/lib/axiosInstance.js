@@ -12,7 +12,7 @@ import axios from "axios"; // axios library — used to create a configurable HT
 // headers — default Content-Type for all requests; can be overridden per-request if needed
 const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000,
+  timeout: 160000,
   headers: {
     "Content-Type": "application/json",
   },

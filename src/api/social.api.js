@@ -11,7 +11,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 78 - Get the list of all social media posts
+// API - Get the list of all social media posts
 // ----------------------------
 // Fetches social media posts, used on the admin's social posts
 // management page. The "params" object can include:
@@ -24,7 +24,7 @@ export const getSocialPosts = (params) => {
 };
 
 // ----------------------------
-// API 78 - Create a new social media post
+// API  - Create a new social media post
 // ----------------------------
 // Allows an admin to create a new social media post, typically
 // generated around a specific product. The "data" payload is
@@ -41,7 +41,7 @@ export const createSocialPost = (data) => {
 };
 
 // ----------------------------
-// API 79 - Get full details of a specific post
+// API - Get full details of a specific post
 // ----------------------------
 // Fetches everything about one specific social media post,
 // identified by its ID — used on a post detail/preview page,
@@ -52,7 +52,7 @@ export const getSocialPostById = (id) => {
 };
 
 // ----------------------------
-// API 79 - Permanently delete a post
+// API - Permanently delete a post
 // ----------------------------
 // Removes a social media post entirely from the system. Unlike
 // some other delete operations in this project, the comment here
@@ -62,7 +62,7 @@ export const deleteSocialPost = (id) => {
 };
 
 // ----------------------------
-// API 80 - Approve a post and set its schedule
+// API - Approve a post and set its schedule
 // ----------------------------
 // Allows an admin to approve a pending post, moving it toward
 // being published. The "data" payload is expected to include:
@@ -73,7 +73,7 @@ export const approvePost = (id, data) => {
 };
 
 // ----------------------------
-// API 81 - Reject a post
+// API - Reject a post
 // ----------------------------
 // Allows an admin to reject a pending post instead of approving it.
 // The "data" payload is expected to include:
@@ -84,7 +84,7 @@ export const rejectPost = (id, data) => {
 };
 
 // ----------------------------
-// API 82 - Change a post's schedule
+// API - Change a post's schedule
 // ----------------------------
 // Allows an admin to RESCHEDULE an already-approved post to a
 // different date/time. The "data" payload is expected to include:
@@ -94,7 +94,7 @@ export const schedulePost = (id, data) => {
 };
 
 // ----------------------------
-// API 83 - Get posts for the calendar view
+// API - Get posts for the calendar view
 // ----------------------------
 // Fetches posts already grouped/organized by date, specifically
 // formatted for displaying in a calendar-style UI (e.g. a monthly
@@ -106,7 +106,7 @@ export const getPostsCalendar = (params) => {
 };
 
 // ----------------------------
-// API 84 - Connect a social media account
+// API - Connect a social media account
 // ----------------------------
 // Called AFTER an OAuth authorization flow completes (e.g. the admin
 // logs into Facebook/Instagram and grants permission). The "data"
@@ -122,7 +122,7 @@ export const connectSocialAccount = (data) => {
 };
 
 // ----------------------------
-// API 85 - Get the list of connected social media accounts
+// API - Get the list of connected social media accounts
 // ----------------------------
 // Fetches all the social media accounts currently linked to the
 // store, so admins can see which platforms are connected and
@@ -132,7 +132,7 @@ export const getSocialAccounts = () => {
 };
 
 // ----------------------------
-// API 86 - Get engagement analytics for a published post
+// API - Get engagement analytics for a published post
 // ----------------------------
 // Fetches performance metrics for a specific post that has ALREADY
 // been published — including likes, comments, shares, and overall

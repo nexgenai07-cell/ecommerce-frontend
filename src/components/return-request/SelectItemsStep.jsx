@@ -94,7 +94,7 @@ const SelectItemsStep = ({
                   {/* Product thumbnail image, falling back to a placeholder image path if no primary_image is set */}
                   <img
                     src={
-                      item.product?.primary_image || "/placeholder-product.png"
+                      item.product?.primary_image || "/placeholder-product.svg"
                     }
                     alt={item.product_name}
                     className="w-full h-full object-cover"

@@ -385,9 +385,12 @@ const DataTable = ({
                     >
                       {
                         col.render
-                          ? col.render(row[col.key], row)
-                          : // Custom render function provided — called with (cellValue, fullRowObject)
-                            // Used for badges, avatars, action buttons, or any custom cell content
+                          ? col.render(row)
+                          : // Custom render function provided — called with the full row object.
+                            // Every admin page's column config (ProductList, OrderManagement,
+                            // DiscountManagement, CustomerManagement, ComplaintsManagement,
+                            // ReturnsManagement) writes `render: (row) => ...` expecting the
+                            // whole row, so this must match that contract.
                             (row[col.key] ?? "-")
                         // No render function — displays the raw value or a dash if null/undefined
                       }

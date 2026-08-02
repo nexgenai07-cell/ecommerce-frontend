@@ -105,7 +105,7 @@ const CheckoutOrderSummary = ({
             {/* Small square thumbnail container with rounded corners, border, and hidden overflow to clip the image neatly */}
             <div className="w-12 h-12 rounded-lg border border-gray-100 overflow-hidden shrink-0 bg-gray-50">
               <img
-                src={item.product.primary_image || "/placeholder-product.png"}
+                src={item.product.primary_image || "/placeholder-product.svg"}
                 // Uses the product's primary image if available, otherwise falls back to a local placeholder image
                 alt={item.product.name} // Accessibility text describing the image using the product's name
                 className="w-full h-full object-cover"

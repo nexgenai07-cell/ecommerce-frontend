@@ -32,7 +32,7 @@ import { AiOutlineHeart, AiFillHeart } from "react-icons/ai";
 
 // Local placeholder image — shown when a product has no image or the image
 // URL fails to load. Same fallback path ProductCard uses, for consistency.
-const FALLBACK_IMAGE = "/placeholder-product.png";
+const FALLBACK_IMAGE = "/placeholder-product.svg";
 
 const ProductListItem = ({ product }) => {
   // Used to redirect unauthenticated users to the login page

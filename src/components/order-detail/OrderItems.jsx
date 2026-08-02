@@ -45,7 +45,7 @@ const OrderItems = ({ order }) => {
               <img
                 src={
                   item.product?.primary_image || // use the product's main image if it exists
-                  "/placeholder-product.png" // generic fallback if image is missing
+                  "/placeholder-product.svg" // generic fallback if image is missing
                 }
                 alt={item.product_name} // descriptive alt for screen readers and broken image state
                 className="w-full h-full object-cover" // fill the box and crop rather than stretch or letterbox

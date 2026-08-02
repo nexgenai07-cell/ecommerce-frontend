@@ -73,9 +73,22 @@ const initialState = {
   isAuthenticated: !!localStorage.getItem("token"),
 
   // Stores the role of the logged-in user (e.g. "customer" or "admin").
-  // Initially null because we don't know the role until login/profile
-  // data is loaded.
-  role: null,
+  //
+  // BUG FIX: this used to be hardcoded to `null` here, even though
+  // `user` right above is correctly hydrated from localStorage (and
+  // that stored user object already contains a "role" field inside
+  // it). Because this top-level `role` stayed null until the NEXT
+  // login, every page refresh reset it back to null for an already
+  // logged-in admin. AdminProtectedRoute checks this exact `role`
+  // field (via useAuth()), so on refresh it always saw role !== "admin"
+  // and redirected an admin straight back to the customer homepage —
+  // even though `user.role` itself was still correctly "admin".
+  //
+  // Now we derive it from the exact same getStoredUser() call used for
+  // `user` above, so both fields are always in sync — on first load,
+  // after a refresh, and after login — instead of only `user` being
+  // hydrated and `role` silently lagging behind as null.
+  role: getStoredUser()?.role || null,
 };
 
 // ----------------------------
@@ -145,6 +158,13 @@ const authSlice = createSlice({
       // so a partial update (e.g. just { name }) doesn't wipe out other
       // fields like email or avatar that weren't part of this update.
       state.user = { ...state.user, ...action.payload };
+
+      // Keep the top-level `role` field in sync with `state.user.role`
+      // here too — same reasoning as the initialState fix above. This
+      // update is very unlikely to ever change role in practice, but
+      // guarding it here means the two can never silently drift apart
+      // again the way they did before this bug fix.
+      state.role = state.user.role;
 
       // Re-persist the merged object so a refresh right after an edit
       // still shows the freshly updated info instead of stale data.

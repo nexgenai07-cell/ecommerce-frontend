@@ -20,18 +20,27 @@ import { addToWishlist, removeFromWishlist } from "../../api/wishlist.api";
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
 import useWishlist from "../../hooks/useWishlist";
+import useFlyToIcon from "../../hooks/useFlyToIcon";
 
 import { showSuccess, showError } from "../ui/Toast";
 import PriceDisplay from "../shared/PriceDisplay";
 import QuantitySelector from "../shared/QuantitySelector";
 import Badge from "../ui/Badge";
 
-const ProductInfo = ({ product }) => {
+const ProductInfo = ({ product, imageRef }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { isAuthenticated } = useAuth();
   const { handleAddItem } = useCart();
+
+  // flyToCart/flyToWishlist fly the main product photo into the centered
+  // cart/bag graphic. flyBackToWishlistCard reverses the wishlist flight
+  // when un-hearting here — the photo is still on this very page, so it
+  // flies back down into it, exactly like un-hearting a card on a
+  // listing page.
+  const { flyToCart, flyBackFromCart, flyToWishlist, flyBackToWishlistCard } =
+    useFlyToIcon();
 
   const {
     items: wishlistItems,
@@ -41,6 +50,22 @@ const ProductInfo = ({ product }) => {
   } = useWishlist();
 
   const [quantity, setQuantity] = useState(1);
+
+  // The animation needs a real image URL to fly. Some products have an
+  // empty/missing `primary_image` field even though they DO have images
+  // in their gallery (images[]) — falling back to the first gallery image
+  // means the animation still has something to fly, instead of silently
+  // skipping itself whenever primary_image happens to be blank.
+  const flyImageUrl =
+    product?.primary_image ||
+    product?.images?.[0]?.image_url ||
+    "/placeholder-product.png";
+
+  // Reads whatever image is ACTUALLY on screen right now — if the
+  // customer switched to a different gallery thumbnail before clicking,
+  // this is what makes the flying photo match that exact image instead
+  // of always defaulting back to the product's primary photo.
+  const getCurrentDisplayedImage = () => imageRef?.current?.src || flyImageUrl;
 
   const inWishlist = isProductInWishlist(product?.id);
   const wishlistEntry = wishlistItems.find(
@@ -85,6 +110,9 @@ const ProductInfo = ({ product }) => {
       navigate(ROUTES.LOGIN);
       return;
     }
+    // Fires immediately — the animation is purely visual feedback and
+    // doesn't need to wait for the network request to resolve.
+    flyToCart(imageRef?.current, getCurrentDisplayedImage());
     addToCartMutation.mutate();
   };
 
@@ -93,7 +121,31 @@ const ProductInfo = ({ product }) => {
       navigate(ROUTES.LOGIN);
       return;
     }
+    // Fires immediately, before the network call — the photo is still on
+    // this very page either way, so this either flies up into the bag
+    // (adding) or flies back down into the page (removing).
+    if (inWishlist) {
+      flyBackToWishlistCard(imageRef?.current, getCurrentDisplayedImage());
+    } else {
+      flyToWishlist(imageRef?.current, getCurrentDisplayedImage());
+    }
     wishlistMutation.mutate();
+  };
+
+  // Fired whenever the quantity stepper's + or - is clicked. Plays the
+  // same fly-into-cart feedback used everywhere else on increase. On
+  // decrease, the item flies back OUT of the cart graphic and returns
+  // to this exact photo — since the photo is still right here on
+  // screen, it makes more sense to land back on it than to dismiss
+  // off-screen (which is reserved for rows that are actually leaving
+  // the page for good, like the Cart page's own list).
+  const handleQuantityChange = (newQty) => {
+    if (newQty > quantity) {
+      flyToCart(imageRef?.current, getCurrentDisplayedImage());
+    } else if (newQty < quantity) {
+      flyBackFromCart(imageRef?.current, getCurrentDisplayedImage());
+    }
+    setQuantity(newQty);
   };
 
   if (!product) return null;
@@ -154,7 +206,7 @@ const ProductInfo = ({ product }) => {
           <p className="text-sm font-semibold text-gray-700">Quantity</p>
           <QuantitySelector
             value={quantity}
-            onChange={setQuantity}
+            onChange={handleQuantityChange}
             min={1}
             max={product.stock || 1}
             disabled={!product.in_stock}

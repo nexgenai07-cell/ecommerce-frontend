@@ -8,6 +8,7 @@ import {
   AiOutlineEye,
   AiOutlineEyeInvisible,
   AiOutlineArrowRight,
+  AiOutlineUndo,
 } from "react-icons/ai";
 import { FcGoogle } from "react-icons/fc";
 import AuthLayout from "../../components/layouts/AuthLayout";
@@ -40,7 +41,23 @@ const Login = () => {
   const from = location.state?.from?.pathname || ROUTES.HOME;
   const registeredEmail = location.state?.registeredEmail;
 
-  const { login, isAuthenticated, role } = useAuth();
+  // ----------------------------------------------------------------
+  // SAFE REDIRECT TARGET — always land on the CUSTOMER portal
+  // ----------------------------------------------------------------
+  // "from" above is whatever page originally redirected the person here
+  // (e.g. AdminProtectedRoute sends an unauthenticated visitor who typed
+  // an admin URL to /login and remembers that admin URL in state.from).
+  // Per the new single-login-page rule, EVERY successful login — admin
+  // or customer — must land on the customer-facing site first. An admin
+  // only reaches the admin panel afterwards by clicking "Go to Admin
+  // Portal" from the navbar avatar menu, never automatically. So if the
+  // remembered "from" path starts with "/admin", we deliberately throw
+  // it away and send the person to the customer homepage instead; any
+  // other "from" (e.g. /checkout) is still honoured normally, since
+  // that is a normal customer-side deep link with no admin implications.
+  const safeFrom = from.startsWith("/admin") ? ROUTES.HOME : from;
+
+  const { login, isAuthenticated } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -63,6 +80,20 @@ const Login = () => {
   // are two independent gates the backend can return.
   // =============================================
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+
+  // =============================================
+  // ACCOUNT DEACTIVATED BLOCK STATE ★ NEW
+  // When API 2 (login) responds with { account_deactivated: true, email },
+  // the account was soft-deleted (is_delete: true / is_active: false) via
+  // API 11 (Delete My Account). We switch this form into a block-screen
+  // offering to reactivate the account instead — same pattern/shape as
+  // unverifiedEmail above, kept as its own separate state since this is
+  // a third, independent gate the backend can return. This check happens
+  // AFTER email_not_verified and BEFORE require_2fa, matching the
+  // priority order confirmed in the backend spec (see loginMutation
+  // below).
+  // =============================================
+  const [deactivatedEmail, setDeactivatedEmail] = useState(null);
 
   const {
     register,
@@ -91,14 +122,16 @@ const Login = () => {
   }, [setValue, registeredEmail]);
 
   useEffect(() => {
+    // Regardless of role, a person who is already logged in has no
+    // business sitting on the login page — send them onward. Both
+    // customer AND admin accounts go to safeFrom (customer portal by
+    // default), never straight to the admin dashboard. An admin can
+    // always reach the admin panel afterwards via the navbar's
+    // "Go to Admin Portal" button.
     if (isAuthenticated) {
-      if (role === "admin") {
-        navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
-      } else {
-        navigate(from, { replace: true });
-      }
+      navigate(safeFrom, { replace: true });
     }
-  }, [isAuthenticated, role, navigate, from]);
+  }, [isAuthenticated, navigate, safeFrom]);
 
   // Shared success handler — used both by a normal (no-2FA) login AND by the
   // 2FA verify step (API 10), since both ultimately return { user, tokens }.
@@ -112,11 +145,13 @@ const Login = () => {
     login({ user, tokens });
     showSuccess(`Welcome back, ${user.name}!`);
 
-    if (user.role === "admin") {
-      navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
-    } else {
-      navigate(from, { replace: true });
-    }
+    // Single-login-page rule: EVERY successful login lands on the
+    // customer portal (safeFrom), whether this account is "customer"
+    // or "admin". We deliberately do NOT branch on user.role here and
+    // send admins to ROUTES.ADMIN_DASHBOARD — an admin only reaches the
+    // admin panel by clicking "Go to Admin Portal" in the navbar avatar
+    // menu after landing here, never automatically on login.
+    navigate(safeFrom, { replace: true });
   };
 
   // =============================================
@@ -132,6 +167,16 @@ const Login = () => {
       // identity, and email isn't confirmed yet at this point.
       if (response.data?.email_not_verified) {
         setUnverifiedEmail(response.data.email);
+        return;
+      }
+
+      // ★ NEW — checked SECOND, after email_not_verified and before
+      // require_2fa, exactly matching the priority order in the
+      // backend spec: an unverified account is caught first, then a
+      // deactivated one, then finally 2FA on an account that's both
+      // verified and active.
+      if (response.data?.account_deactivated) {
+        setDeactivatedEmail(response.data.email);
         return;
       }
 
@@ -197,6 +242,12 @@ const Login = () => {
     setUnverifiedEmail(null);
   };
 
+  // ★ NEW — resets the account-deactivated block screen back to the
+  // normal login form, same pattern as handleBackFromVerify above
+  const handleBackFromDeactivated = () => {
+    setDeactivatedEmail(null);
+  };
+
   const onSubmit = (data) => {
     loginMutation.mutate({
       email: data.email,
@@ -257,6 +308,65 @@ const Login = () => {
               onClick={handleBackFromVerify}
               disabled={resendVerificationMutation.isPending}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50"
+            >
+              ← Back to login
+            </button>
+          </div>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  // =============================================
+  // STEP — Account deactivated (soft-deleted) block ★ NEW
+  // Shown instead of the normal form when API 2 returns
+  // account_deactivated: true. Checked in the same order the backend
+  // returns it in — after the unverifiedEmail block above, before the
+  // 2FA step below.
+  // =============================================
+  if (deactivatedEmail) {
+    return (
+      <AuthLayout variant="login">
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+              <AiOutlineUndo className="w-7 h-7 text-primary" />
+            </div>
+
+            <div className="text-center flex flex-col gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">
+                This Account Was Deactivated
+              </h1>
+              <p className="text-sm text-gray-500">
+                The account for{" "}
+                <span className="font-medium text-gray-700">
+                  {deactivatedEmail}
+                </span>{" "}
+                has been deleted. Good news — you can bring it back yourself, no
+                admin needed. Your orders, cart, and wishlist are all still
+                safely preserved.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            {/* Passes the email along via router state so the
+                reactivation request form doesn't make the person type
+                it out a second time — see ReactivateAccount.jsx */}
+            <Link
+              to={ROUTES.REACTIVATE_ACCOUNT}
+              state={{ email: deactivatedEmail }}
+              className="w-full"
+            >
+              <Button type="button" variant="primary" fullWidth>
+                Reactivate My Account
+              </Button>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleBackFromDeactivated}
+              className="text-sm text-gray-500 hover:text-gray-700 font-medium"
             >
               ← Back to login
             </button>

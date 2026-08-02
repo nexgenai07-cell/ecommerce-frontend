@@ -1,12 +1,3 @@
-// New Complaint Form
-// Complaint Type, Related Order, Subject, Detailed Message
-// Attach Files — drag & drop
-// Priority Level — Normal / Urgent
-// Cancel + Submit buttons
-// Real API — submitComplaint
-// NOTE: no outer card here anymore — this renders INSIDE the unified shadowed card
-// on ComplaintSubmit.jsx, so it's just a plain content section, fully responsive
-
 // Import React's useState hook for managing local component state, and useRef for referencing the hidden file input element
 import { useState, useRef } from "react";
 // Import the useForm hook from react-hook-form to handle form state, validation, and submission

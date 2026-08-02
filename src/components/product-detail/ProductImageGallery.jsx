@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AiOutlineLeft, AiOutlineRight, AiOutlineZoomIn } from "react-icons/ai";
 
-const FALLBACK_IMAGE = "/placeholder-product.png";
+const FALLBACK_IMAGE = "/placeholder-product.svg";
 
 const ProductImageGallery = ({ images = [], productName = "" }) => {
   const [activeIndex, setActiveIndex] = useState(0);

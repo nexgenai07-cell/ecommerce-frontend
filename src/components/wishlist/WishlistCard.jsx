@@ -8,6 +8,9 @@ const WishlistCard = ({
   onRemove, // function — called with item.id when the customer clicks the remove (X) button
   onAddToCart, // function — called with product.id when the customer clicks Add to Cart
   isAddingToCart, // boolean — true while the shared add-to-cart mutation is in flight
+  registerImageRef, // function — (productId, imgNode) => void, forwarded straight
+  // through to ProductCard so the Wishlist page can collect every card's
+  // image element for the "Add All to Cart" simultaneous flight animation
 }) => {
   const product = item.product;
 
@@ -30,6 +33,7 @@ const WishlistCard = ({
         onRemove={() => onRemove(item.id)}
         onAddToCart={onAddToCart}
         isAddingToCart={isAddingToCart}
+        registerImageRef={registerImageRef}
         footer={
           item.created_at && (
             <p className="flex items-center justify-center gap-1 text-[11px] text-gray-400 pt-0.5">

@@ -14,19 +14,14 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 51 - Get the list of return requests
-// ----------------------------
-// Fetches return requests, but the actual data returned DEPENDS on
-// WHO is calling this — a customer will only get THEIR OWN return
-// requests, while an admin will get ALL return requests across the
-// entire store. This role-based filtering is handled on the backend
-// based on the authenticated user's token/role.
-export const getReturns = () => {
-  return axiosInstance.get("/api/v1/returns/");
+// API - Get the list of return requests
+
+export const getReturns = (params) => {
+  return axiosInstance.get("/api/v1/returns/", { params });
 };
 
 // ----------------------------
-// API 52 - Get full details of a specific return request
+// API  - Get full details of a specific return request
 // ----------------------------
 // Fetches everything about one specific return request, identified
 // by its ID — likely including the related order, reason for return,
@@ -39,7 +34,7 @@ export const getReturnDetail = (id) => {
 };
 
 // ----------------------------
-// API 53 - Approve or reject a return request (Admin only)
+// API  - Approve or reject a return request (Admin only)
 // ----------------------------
 // Allows admins to make a decision on a pending return request.
 // The "data" payload is expected to include:

@@ -39,8 +39,12 @@ import useAuth from "../../hooks/useAuth";
 // Custom hook exposing isAuthenticated — used to guard this page against
 // guests and to enable/disable the cart data query.
 
-import { showSuccess, showError } from "../../components/ui/Toast";
-// Helper functions that display green (success) or red (error) toast popups.
+import useFlyToIcon from "../../hooks/useFlyToIcon";
+// dismissAllFromCart — plays the "every item pops out of the cart at once"
+// animation when the whole cart is cleared.
+
+import { showSuccess } from "../../components/ui/Toast";
+// Helper function that displays a green success toast popup.
 
 import { ROUTES } from "../../constants/routes";
 // Shared route path constants — e.g. ROUTES.LOGIN, ROUTES.CART, ROUTES.PRODUCTS.
@@ -94,10 +98,12 @@ const Cart = () => {
   const { isAuthenticated } = useAuth();
 
   // handleSyncCart writes the freshly-fetched API cart data into Redux.
-  // clearCartRedux (renamed from clearCart to avoid clashing with the API
-  // function of the same name) empties the Redux cart slice after a
-  // successful "clear cart" API call.
-  const { handleSyncCart, clearCart: clearCartRedux } = useCart();
+  // handleClearCart empties the Redux cart slice after a successful
+  // "clear cart" API call.
+  const { handleSyncCart, handleClearCart } = useCart();
+
+  // Fly-to-icon trigger for the "Clear Cart" animation.
+  const { dismissAllFromCart } = useFlyToIcon();
 
   // Boolean state controlling whether the "Clear Cart?" confirmation modal
   // is currently open on screen.
@@ -181,12 +187,31 @@ const Cart = () => {
     // Directly references the clearCart API function as the mutation function.
     mutationFn: clearCart,
 
+    // Runs IMMEDIATELY when mutate() is called, before waiting for the
+    // network response. The backend has been observed to sometimes take
+    // a while (or return an inconsistent response) even though the items
+    // are genuinely deleted server-side — waiting for a "clean" success
+    // response before updating anything meant the page could keep
+    // showing the old items (and a false "failed" toast) until the
+    // person manually refreshed. Clearing everything on screen right
+    // away avoids that entirely; onSuccess/onError below just reconcile
+    // with whatever the server actually ends up confirming.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data) return old;
+        return { ...old, data: { ...old.data, items: [] } };
+      });
+      handleClearCart();
+
+      return { previousCart };
+    },
+
     // Runs when the clear-cart request succeeds.
     onSuccess: () => {
-      // Empties the Redux cart slice so the navbar badge drops to 0 instantly.
-      clearCartRedux();
-      // Marks the cart query as stale so it refetches and the page now shows
-      // the empty-cart state.
+      // Refetches for good measure, confirming the cart really is empty.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
       // Shows a green success toast confirming the action.
       showSuccess("Cart cleared successfully");
@@ -194,9 +219,14 @@ const Cart = () => {
       setShowClearModal(false);
     },
 
-    // Runs when the clear-cart request fails.
+    // Runs when the clear-cart request reports an error. Still refetches
+    // the real cart state from the server instead of rolling back to the
+    // stale "previousCart" snapshot — if the deletion actually succeeded
+    // server-side despite the error response, this picks that up
+    // immediately instead of requiring a manual page refresh.
     onError: () => {
-      showError("Failed to clear cart. Please try again.");
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      setShowClearModal(false);
     },
   });
 
@@ -209,8 +239,6 @@ const Cart = () => {
   if (cartLoading) {
     return (
       <Container className="py-6 sm:py-8 md:px-12">
-        {/* Skeleton header — a gray pulsing square plus two gray pulsing bars,
-            matching the shape of the real gradient icon + title + subtitle. */}
         <div className="flex items-center gap-4 mb-8">
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gray-100 animate-pulse shrink-0" />
           <div className="flex flex-col gap-2">
@@ -219,10 +247,7 @@ const Cart = () => {
           </div>
         </div>
 
-        {/* Same 3-column grid shape as the real page: 2 columns of fake items
-            on the left, 1 column of a fake summary card on the right. */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          {/* Left skeleton — 3 fake cart item rows, generated with .map() */}
           <div className="lg:col-span-2 flex flex-col gap-4">
             {[1, 2, 3].map((i) => (
               <div
@@ -230,14 +255,10 @@ const Cart = () => {
                 className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 animate-pulse"
               >
                 <div className="flex gap-4">
-                  {/* Fake square standing in for the product image */}
                   <div className="w-24 h-24 bg-gray-100 rounded-xl shrink-0" />
                   <div className="flex-1 flex flex-col gap-2">
-                    {/* Fake bar standing in for the product name */}
                     <div className="h-4 bg-gray-100 rounded w-3/4" />
-                    {/* Fake bar standing in for the category label */}
                     <div className="h-3 bg-gray-100 rounded w-1/2" />
-                    {/* Fake bar standing in for the quantity selector */}
                     <div className="h-8 bg-gray-100 rounded w-24 mt-2" />
                   </div>
                 </div>
@@ -245,11 +266,8 @@ const Cart = () => {
             ))}
           </div>
 
-          {/* Right skeleton — one fake order-summary card */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit animate-pulse">
-            {/* Fake bar standing in for the "Order Summary" heading */}
             <div className="h-5 bg-gray-100 rounded w-1/2 mb-4" />
-            {/* Fake price-breakdown rows, generated with .map() */}
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex justify-between mb-3">
                 <div className="h-4 bg-gray-100 rounded w-1/3" />
@@ -266,63 +284,38 @@ const Cart = () => {
   // MAIN RENDER (once loading has finished)
   // ----------------------------------------------------------------------------
   return (
-    // Outer wrapper for the whole page.
-    // relative + overflow-hidden → lets us place a decorative glow behind the
-    //   header without it spilling outside the page or causing scrollbars.
-    // min-h-screen → the page always fills at least the full viewport height,
-    //   even if the cart only has one item.
-    // bg-gray-50 → a soft off-white background that makes the white cards pop.
     <div className="relative overflow-hidden min-h-screen bg-gray-50 md:px-20">
-      {/* Purely decorative ambient glow: a soft, blurred emerald circle
-          positioned behind the header. pointer-events-none means it can
-          never be clicked/interacted with. -z-10 keeps it strictly behind
-          all real page content. This matches the same visual treatment
-          already used on the Wishlist page for a consistent brand feel. */}
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-xl h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Container centers the page content and applies consistent side padding */}
       <Container className="py-6 sm:py-8">
-        {/* flex-col + gap-8 stacks every major section vertically with even spacing */}
         <div className="flex flex-col gap-8">
           {/* ─── Breadcrumb ─── */}
-          {/* Simple "Home › Cart" trail so the user always knows where they are */}
           <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-            {/* Clickable link back to the homepage */}
             <Link
               to={ROUTES.HOME}
               className="hover:text-gray-600 transition-colors"
             >
               Home
             </Link>
-            {/* Separator character between breadcrumb items */}
             <span className="text-gray-300">›</span>
-            {/* Current page — not a link, shown in a slightly darker/bolder tone */}
             <span className="text-gray-600 font-medium">Cart</span>
           </nav>
 
           {/* ─── Page Heading ─── */}
-          {/* Rounded gradient icon square next to a stacked title/subtitle block.
-              This mirrors the header style already used on the Wishlist page,
-              so both pages feel like part of the same design system. */}
           <div className="flex items-center gap-4">
-            {/* Icon box: emerald gradient background, soft colored glow shadow */}
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-md shadow-primary/30 shrink-0">
               <AiOutlineShoppingCart className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             </div>
-            {/* Title + subtitle text block */}
             <div>
-              {/* Page title */}
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                 My Cart
               </h1>
-              {/* Subtitle — changes wording depending on whether the cart has items */}
               <p className="text-sm text-gray-400 mt-0.5">
                 {cartItems.length > 0 ? (
                   <>
                     You have{" "}
                     <span className="font-semibold text-primary-dark">
                       {cartItems.length}{" "}
-                      {/* Shows "item" for exactly 1, "items" for anything else */}
                       {cartItems.length === 1 ? "item" : "items"}
                     </span>{" "}
                     waiting to check out
@@ -335,10 +328,6 @@ const Cart = () => {
           </div>
 
           {/* ─── Empty Cart State ─── */}
-          {/* Only rendered once loading has finished AND the cart is empty.
-              Wrapped in a white, rounded, shadowed card so it feels like a
-              proper "raised" element instead of floating on the bare page
-              background — matching the same treatment on the Wishlist page. */}
           {!cartLoading && cartItems.length === 0 && (
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
               <EmptyState
@@ -350,27 +339,16 @@ const Cart = () => {
           )}
 
           {/* ─── Main Cart Layout ─── */}
-          {/* Only rendered when there's at least one item in the cart.
-              3-column grid on large screens: item list takes 2 columns,
-              order summary takes the 3rd column. On mobile it stacks into
-              a single column with items appearing above the summary. */}
           {cartItems.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-              {/* ── Left: Cart Items List ── */}
               <div className="lg:col-span-2 flex flex-col gap-4">
-                {/* AnimatePresence with mode="popLayout" lets removed items
-                    play their exit animation while the remaining items
-                    smoothly slide up to fill the gap. Wrapped in a scroll
-                    box so a long cart doesn't grow the whole page. */}
-                <div className="flex flex-col gap-4 max-h-[520px] overflow-y-auto scrollbar-hide pr-1">
+                <div className="flex flex-col gap-4 max-h-130 overflow-y-auto scrollbar-hide pr-1">
                   <AnimatePresence mode="popLayout">
                     {cartItems.map((item) => (
                       <CartItem
                         key={item.id}
                         item={item}
                         onRemove={() => {
-                          // After a single item is successfully removed,
-                          // refresh the cart query so totals/discounts update.
                           queryClient.invalidateQueries({
                             queryKey: QUERY_KEYS.CART,
                           });
@@ -380,10 +358,7 @@ const Cart = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* Row below the item list: "Continue Shopping" link on the
-                    left, "Clear Cart" button on the right */}
                 <div className="flex items-center justify-between pt-1">
-                  {/* Takes the user back to the full products listing page */}
                   <Link
                     to={ROUTES.PRODUCTS}
                     className="flex items-center gap-1.5 text-sm text-primary font-semibold hover:text-primary-dark transition-colors"
@@ -392,11 +367,8 @@ const Cart = () => {
                     Continue Shopping
                   </Link>
 
-                  {/* "Clear Cart" button — only shown when there are 2+ items,
-                      since a single item can just be deleted individually */}
                   {cartItems.length > 1 && (
                     <button
-                      // Opens the confirmation modal instead of clearing immediately
                       onClick={() => setShowClearModal(true)}
                       className="flex items-center gap-1.5 text-sm text-danger font-semibold hover:text-red-700 transition-colors"
                     >
@@ -407,9 +379,6 @@ const Cart = () => {
                 </div>
               </div>
 
-              {/* ── Right: Order Summary ── */}
-              {/* lg:col-span-1 keeps this in the 3rd column on large screens.
-                  The sticky positioning itself is handled inside CartSummary. */}
               <div className="lg:col-span-1">
                 <CartSummary cart={cart} />
               </div>
@@ -417,25 +386,17 @@ const Cart = () => {
           )}
 
           {/* ─── You Might Also Like ─── */}
-          {/* Only shown when the cart actually has items — hidden entirely
-              on the empty-cart state so there's nothing to recommend from. */}
           {cartItems.length > 0 && (
             <section className="flex flex-col gap-6 pt-2 border-t border-gray-100">
-              {/* Section header: title on the left, decorative icon badge on the right */}
               <div className="flex items-center justify-between pt-4">
                 <h2 className="text-xl font-bold text-gray-900">
                   You Might Also Like
                 </h2>
-                {/* Gradient circular badge using the same brand gradient as
-                    the page header above, for a consistent visual language */}
                 <div className="w-10 h-10 rounded-full bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-md shadow-primary/20">
                   <AiOutlineShoppingCart className="w-5 h-5 text-white" />
                 </div>
               </div>
 
-              {/* Reusable product grid: 2 columns on mobile, 4 columns on
-                  medium screens and up, showing the recommended products
-                  fetched earlier (with its own built-in loading skeleton) */}
               <ProductGrid
                 products={recommendedProducts}
                 isLoading={recommendedLoading}
@@ -448,26 +409,27 @@ const Cart = () => {
       </Container>
 
       {/* ─── Clear Cart Confirmation Modal ─── */}
-      {/* Rendered outside the main page layout so it can overlay the entire
-          screen with a backdrop, regardless of scroll position. */}
       <ConfirmModal
         isOpen={showClearModal}
         onClose={() => setShowClearModal(false)}
-        onConfirm={() => clearCartMutation.mutate()}
+        onConfirm={() => {
+          // Fires immediately, before the network call — every item's
+          // photo pops out of the cart graphic and fans out at once.
+          const imageUrls = cartItems.map(
+            (item) => item.product.primary_image || "/placeholder-product.png",
+          );
+          dismissAllFromCart(imageUrls);
+          clearCartMutation.mutate();
+        }}
         title="Clear Cart?"
         message="This will remove all items from your cart. This action cannot be undone."
         confirmLabel="Clear Cart"
         cancelLabel="Keep Items"
-        // "danger" variant styles the confirm button in red to signal that
-        // this action is destructive and cannot be undone.
         variant="danger"
-        // While true, disables the confirm button and shows a spinner,
-        // preventing the user from submitting the request twice.
         isLoading={clearCartMutation.isPending}
       />
     </div>
   );
 };
 
-// Exported as default so React Router can render this component for the "/cart" route.
 export default Cart;

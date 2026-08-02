@@ -16,7 +16,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 67 - Track a customer's behavior/action
+// API - Track a customer's behavior/action
 // ----------------------------
 // Silently records what a customer is doing on the site, WITHOUT
 // the customer being aware of it — this runs in the background
@@ -36,7 +36,7 @@ export const trackBehavior = (data) => {
 };
 
 // ----------------------------
-// API 68 - Get customer behavior records (Admin only)
+// API  - Get customer behavior records (Admin only)
 // ----------------------------
 // Fetches the raw list of tracked behavior records collected via
 // trackBehavior() above. The "params" object can include:
@@ -49,7 +49,7 @@ export const getBehaviorRecords = (params) => {
 };
 
 // ----------------------------
-// API 69 - Get key dashboard summary numbers (Admin only)
+// API - Get key dashboard summary numbers (Admin only)
 // ----------------------------
 // Fetches the high-level business metrics shown on the main admin
 // dashboard — things like total revenue, total orders, total
@@ -60,7 +60,7 @@ export const getDashboardSummary = () => {
 };
 
 // ----------------------------
-// API 70 - Get the sales report (Admin only)
+// API - Get the sales report (Admin only)
 // ----------------------------
 // Fetches sales data broken down over time. The "params" object
 // can include:
@@ -72,7 +72,7 @@ export const getSalesReport = (params) => {
 };
 
 // ----------------------------
-// API 71 - Get the revenue report (Admin only)
+// API  - Get the revenue report (Admin only)
 // ----------------------------
 // Fetches revenue data (money earned), separate from raw sales counts.
 // The "params" object follows the same pattern:
@@ -83,7 +83,7 @@ export const getRevenueReport = (params) => {
 };
 
 // ----------------------------
-// API 72 - Get a breakdown of orders by status (Admin only)
+// API  - Get a breakdown of orders by status (Admin only)
 // ----------------------------
 // Fetches a breakdown of orders grouped by their current status
 // (e.g. how many are pending, confirmed, shipped, delivered,
@@ -94,7 +94,7 @@ export const getOrdersAnalytics = (params) => {
 };
 
 // ----------------------------
-// API 73 - Get the best-selling products list (Admin only)
+// API  - Get the best-selling products list (Admin only)
 // ----------------------------
 // Fetches which products have sold the most within a given period.
 // The "params" object can include:
@@ -107,7 +107,7 @@ export const getBestSellers = (params) => {
 };
 
 // ----------------------------
-// API 74 - Get the low-performing products list (Admin only)
+// API  - Get the low-performing products list (Admin only)
 // ----------------------------
 // Fetches which products are selling POORLY — useful for admins to
 // identify items that may need a discount, better marketing, or
@@ -120,7 +120,7 @@ export const getLowPerformingProducts = (params) => {
 };
 
 // ----------------------------
-// API 75 - Get customer growth data over time (Admin only)
+// API  - Get customer growth data over time (Admin only)
 // ----------------------------
 // Fetches how the number of NEW customers has grown over a given
 // time period — useful for tracking how marketing/sales efforts
@@ -132,7 +132,7 @@ export const getCustomerGrowth = (params) => {
 };
 
 // ----------------------------
-// API 76 - Get low-stock inventory alerts (Admin only)
+// API  - Get low-stock inventory alerts (Admin only)
 // ----------------------------
 // Fetches a list of products that are currently running low on
 // stock, so admins can be alerted and restock them before they
@@ -143,7 +143,7 @@ export const getInventoryAlerts = () => {
 };
 
 // ----------------------------
-// API 77 - Export a report as a downloadable CSV file (Admin only)
+// API  - Export a report as a downloadable CSV file (Admin only)
 // ----------------------------
 // Allows admins to download analytics data as an actual CSV file
 // (instead of just viewing it in the browser). The "params" object

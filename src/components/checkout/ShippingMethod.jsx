@@ -1,8 +1,3 @@
-// Shipping Method Selection
-// Standard Delivery (Free) + Express Shipping ($9.99)
-// Radio card style — active emerald border
-// Fully responsive
-
 // Importing checkmark icon from react-icons (Ai = Ant Design icon set) — used to show a "free" badge tick
 import { AiOutlineCheck } from "react-icons/ai";
 // Importing truck icon from react-icons (Bs = Bootstrap icon set) — represents shipping/delivery visually

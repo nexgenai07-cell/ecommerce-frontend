@@ -11,7 +11,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 92 - Manually send a WhatsApp message to a customer (Admin only)
+// API - Manually send a WhatsApp message to a customer (Admin only)
 // ----------------------------
 // Allows an admin to send a one-off WhatsApp message directly to a
 // customer — bypassing the automated bot flow. Useful for personal
@@ -24,7 +24,7 @@ export const sendWhatsAppMessage = (data) => {
 };
 
 // ----------------------------
-// API 93 - Get the list of all WhatsApp bot conversations (Admin only)
+// API - Get the list of all WhatsApp bot conversations (Admin only)
 // ----------------------------
 // Fetches the full log of messages exchanged between the WhatsApp
 // bot and customers — both incoming (from customers) and outgoing
@@ -37,7 +37,7 @@ export const getWhatsAppLogs = (params) => {
 };
 
 // ----------------------------
-// API 94 - Get currently active WhatsApp bot sessions (Admin only)
+// API - Get currently active WhatsApp bot sessions (Admin only)
 // ----------------------------
 // Fetches a list of WhatsApp bot sessions that are CURRENTLY ACTIVE
 // (i.e. users who are mid-conversation with the bot right now).

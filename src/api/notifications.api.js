@@ -15,7 +15,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 59 - Get all notifications for the logged-in user
+// API - Get all notifications for the logged-in user
 // ----------------------------
 // Fetches the full list of notifications belonging to whichever
 // user is currently logged in. Used in TWO places:
@@ -26,7 +26,7 @@ export const getNotifications = () => {
 };
 
 // ----------------------------
-// API 60 - Get full details of a specific notification
+// API  - Get full details of a specific notification
 // ----------------------------
 // Fetches everything about one specific notification, identified
 // by its ID — likely including the full message, type, timestamp,
@@ -38,7 +38,7 @@ export const getNotificationDetail = (id) => {
 };
 
 // ----------------------------
-// API 61 - Mark a notification as read
+// API  - Mark a notification as read
 // ----------------------------
 // Updates a specific notification's status to "read". This is
 // typically called AUTOMATICALLY in the background the moment a
@@ -51,7 +51,7 @@ export const markNotificationRead = (id) => {
 };
 
 // ----------------------------
-// API 62 - Send a notification to a user or broadcast to everyone (Admin only)
+// API  - Send a notification to a user or broadcast to everyone (Admin only)
 // ----------------------------
 // Allows admins to manually send a notification. The "data" payload
 // is expected to include:

@@ -13,92 +13,85 @@ import axiosInstance from "../lib/axiosInstance";
 // Importing the pre-configured Axios instance, which automatically
 // attaches the base URL, auth token, and handles 401 errors globally.
 
+import extractListData from "../utils/extractListData";
+// extractListData — normalizes a product-list response into a plain
+// array regardless of whether the backend returned a flat array or a
+// DRF-paginated object ({ count, next, previous, results }). Needed
+// below by fetchAllProducts, which has to read `.results` and `.next`
+// off of every page it follows.
+
 // ----------------------------
-// API 16 - Get a paginated list of all products
+// API  - Get a paginated list of all products
 // ----------------------------
-// Fetches the full product catalog (typically used on the main
-// products/shop listing page). Accepts an optional "params" object
-// (e.g. { ordering, page, category_id }) which is forwarded as
-// query parameters — this was previously missing, which silently
-// broke every caller that tried to pass filters/sorting/pagination
-// (TrendingSection, RelatedProducts, Cart's "you may also like").
 export const getProducts = (params) => {
   return axiosInstance.get("/api/v1/products/", { params });
 };
 
 // ----------------------------
-// API 17 - Search and filter products
+// API - Search and filter products
 // ----------------------------
-// Used for the search/filter functionality on the products page.
-// The "params" object can include various filter options such as:
-// - q: search keyword/query string
-// - category_id: filter by a specific category
-// - min_price / max_price: filter by price range
-// - in_stock: filter to only show products currently in stock
-// - ordering: sort order (e.g. price ascending/descending, newest first)
-// - page: which page of results to fetch (for pagination)
 export const searchProducts = (params) => {
   return axiosInstance.get("/api/v1/products/search/", { params });
-  // Passing "params" as the second argument tells Axios to automatically
-  // convert this object into URL query parameters
-  // (e.g. ?q=shoes&category_id=3&min_price=500)
 };
 
 // ----------------------------
-// API 18 - Get full details of a single product
+// API  - Get full details of a single product
 // ----------------------------
-// Fetches everything about one specific product, identified by its ID —
-// including its full image gallery, description, pricing, stock info, etc.
-// Used on the product detail page.
 export const getProductById = (id) => {
   return axiosInstance.get(`/api/v1/products/${id}/`);
-  // Template literal inserts the "id" directly into the URL path
 };
 
 // ----------------------------
-// API 19 - Create a new product (Admin only)
+// API - Create a new product (Admin only)
 // ----------------------------
-// Used by admins to add a new product to the catalog.
-// The "data" being sent is expected to be FormData (not plain JSON),
-// since it may include image files along with text fields like
-// name, price, description, etc.
 export const createProduct = (data) => {
   return axiosInstance.post("/api/v1/products/", data, {
-    headers: { "Content-Type": "multipart/form-data" },
-    // Overriding the default "application/json" content type
-    // (set globally in axiosInstance) specifically for THIS request,
-    // since file uploads require "multipart/form-data" instead.
+    headers: { "Content-Type": undefined },
   });
 };
 
 // ----------------------------
-// API 20 - Update an existing product (Admin only)
+// API - Update an existing product (Admin only)
 // ----------------------------
-// Used by admins to edit/update details of a product that already
-// exists, identified by its ID. Sends the updated fields as "data".
+// NOTE: "stock" is intentionally NOT sent through this endpoint anymore.
+// Stock changes (add/remove/correction) now go through the dedicated
+// adjustStock() function below, which is atomic and race-condition-safe
+// on the backend. This endpoint stays for name/price/category/etc. only.
 export const updateProduct = (id, data) => {
   return axiosInstance.put(`/api/v1/products/${id}/`, data);
 };
 
 // ----------------------------
-// API 21 - Delete a product (Admin only)
+// API - Delete a product (Admin only)
 // ----------------------------
-// Removes a product from the catalog (soft delete on the backend).
+// SOFT delete on the backend — sets an internal is_delete flag on
+// this product's row instead of removing it (the row itself, and any
+// past order line-item referencing it, is fully preserved). That flag
+// is never exposed in any response, and every list/search/detail
+// endpoint above filters it out automatically from this point on.
+//
+// IMPORTANT: this is a COMPLETELY SEPARATE flag from is_active above.
+// is_active is the admin's own Publish/Draft toggle (set from the
+// product form) and stays fully under their control, untouched by
+// this call. is_delete is only ever set by this endpoint, is never
+// shown in the UI, and has no restore path — once a product is
+// deleted here, it's gone from the storefront and admin catalog for
+// good (though its historical order references keep working).
 export const deleteProduct = (id) => {
   return axiosInstance.delete(`/api/v1/products/${id}/`);
 };
 
 // ----------------------------
-// API 22 - Upload an image for a product (Admin only)
+// API - Upload an image for a product
 // ----------------------------
 export const uploadProductImage = (id, data) => {
   return axiosInstance.post(`/api/v1/products/${id}/images/`, data, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": undefined },
   });
 };
 
 // ----------------------------
-// API 23 - Delete a specific product image (Admin only)
+// API  - Delete a specific product image (Admin only)
 // ----------------------------
 export const deleteProductImage = (productId, imageId) => {
   return axiosInstance.delete(
@@ -107,7 +100,7 @@ export const deleteProductImage = (productId, imageId) => {
 };
 
 // ----------------------------
-// API 24 - Set an image as the primary image (Admin only)
+// API - Set an image as the primary image (Admin only)
 // ----------------------------
 export const setPrimaryImage = (productId, imageId) => {
   return axiosInstance.put(
@@ -116,8 +109,82 @@ export const setPrimaryImage = (productId, imageId) => {
 };
 
 // ----------------------------
-// API 25 - Get a list of low-stock products (Admin only)
+// API - Get a list of low-stock products (Admin only)
 // ----------------------------
 export const getLowStockProducts = () => {
   return axiosInstance.get("/api/v1/products/low-stock/");
+};
+
+// ----------------------------
+// Adjust product stock (Admin only)
+// ----------------------------
+// Sends only the CHANGE (delta), never the absolute new total. The
+// backend applies this atomically (stock = stock + delta at the DB
+// level) so it can never be silently overwritten by a simultaneous
+// customer checkout reducing the same product's stock. Also logs the
+// change (reason/note) into the backend's stock history/audit trail.
+//
+// data shape: { delta: number, reason: string, note?: string }
+//   delta  -> positive to add stock, negative to remove stock
+//   reason -> "restock" | "damaged" | "correction" | "return" | "other"
+//   note   -> optional free-text explanation
+//
+// Response shape: { id, stock, previous_stock, delta_applied }
+export const adjustProductStock = (id, data) => {
+  return axiosInstance.post(`/api/v1/products/${id}/stock/adjust/`, data);
+};
+
+// ----------------------------
+// Fetch EVERY product across ALL pages (used by Inventory Alerts)
+// ----------------------------
+// WHY THIS EXISTS:
+// The Inventory Alerts page used to fetch products ONE SERVER PAGE at
+// a time (getProducts({ page: currentPage })) and then filter that
+// single page client-side by status tab (Out of Stock / Low Stock /
+// Healthy). That broke pagination — e.g. "Out of Stock" would only
+// ever be filtered from whatever 12 products happened to be on the
+// CURRENT page, instead of the real, complete set of out-of-stock
+// products across the entire catalog. Page 1 showed a different,
+// incomplete slice than page 2, and the tab counts never matched the
+// real totals.
+//
+// fetch the COMPLETE product catalog once (following the
+// `next` pagination link until it's null, so this works correctly no
+// matter how many products exist or what page size the backend
+// uses), then do ALL filtering (search, category, status tab) and
+// pagination entirely on the frontend, against the real, complete
+// list — exactly the same pattern already used for the admin
+// Customers page (see fetchAllCustomers in customers.api.js).
+//
+// USAGE:
+//   const allProducts = await fetchAllProducts();
+//   // allProducts is a plain array — every product in the catalog,
+//   // not just the first page.
+export const fetchAllProducts = async () => {
+  const allResults = [];
+  // Accumulates every product object from every page into one array
+
+  // Fetch the first page using the normal getProducts() call above
+  let response = await getProducts({ page: 1 });
+  allResults.push(...extractListData(response));
+  // Spreads this page's results into the accumulator array
+
+  // response.data.next is the FULL absolute URL for the next page,
+  // exactly as returned by DRF's standard pagination.
+  let nextUrl = response?.data?.next;
+
+  while (nextUrl) {
+    // axiosInstance.get() accepts a full absolute URL here — Axios
+    // uses it as-is instead of prefixing baseURL, and the auth
+    // interceptor still attaches the Bearer token automatically
+    // since the interceptor doesn't check the URL, only the config.
+    response = await axiosInstance.get(nextUrl);
+    allResults.push(...extractListData(response));
+    nextUrl = response?.data?.next;
+    // Keeps looping until the backend eventually returns next: null
+  }
+
+  return allResults;
+  // Returns a plain flat array — the calling component does not need
+  // to know or care how many pages it took to gather this
 };

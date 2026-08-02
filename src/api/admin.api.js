@@ -11,7 +11,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 9 - Get the admin's own store profile information
+// API  - Get the admin's own store profile information
 // ----------------------------
 // Fetches the current store's profile details — things like the
 // store's name, logo, contact phone number, and address. Used to
@@ -21,7 +21,7 @@ export const getMyStore = () => {
 };
 
 // ----------------------------
-// API 10 - Update the admin's store information
+// API  - Update the admin's store information
 // ----------------------------
 // Allows the admin to update their store's profile details. The
 // "data" payload is expected to include:
@@ -43,18 +43,12 @@ export const updateMyStore = (data) => {
 };
 
 // ----------------------------
-// API 66 - Get the platform's audit logs (Admin only)
-// ----------------------------
-// Fetches a log of important actions that have happened across the
-// platform — useful for tracking accountability and reviewing system
-// history (e.g. who updated an order status, who approved a return,
-// who changed store settings, etc.)
-//
-// IMPORTANT: This endpoint is READ-ONLY. There's no corresponding
-// "create", "update", or "delete" function for audit logs, since
-// these records should remain permanent and untampered with — they
-// exist specifically to provide an unchangeable history of actions
-// taken on the platform.
-export const getAuditLogs = () => {
-  return axiosInstance.get("/api/v1/admin/audit-logs/");
+// API  - Get the platform's audit logs (Admin only)
+// FIXED — same bug pattern found and fixed in returns.api.js,
+// complaints.api.js, and discounts.api.js: this took no arguments
+// before, making filtering impossible. API 55's docs don't document
+// any query params either, but that hasn't reliably meant "backend
+// rejects extra params" anywhere else in this project.
+export const getAuditLogs = (params) => {
+  return axiosInstance.get("/api/v1/admin/audit-logs/", { params });
 };

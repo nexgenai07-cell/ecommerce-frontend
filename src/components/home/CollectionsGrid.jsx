@@ -1,17 +1,18 @@
 import { Link } from "react-router-dom"; // Client-side navigation link (no full page reload)
-import { useQuery, useQueries } from "@tanstack/react-query"; // useQuery = single API call, useQueries = multiple parallel API calls
+import { useQuery } from "@tanstack/react-query"; // Data fetching + caching for the categories list
 import { AiOutlineArrowRight } from "react-icons/ai"; // Small arrow icon used inside each collection tile's "Explore" link
 
 import { ROUTES } from "../../constants/routes"; // Central list of app route paths
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Central list of react-query cache keys
 import { getCategories } from "../../api/categories.api"; // API call to fetch all product categories
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the categories endpoint)
-import { searchProducts } from "../../api/products.api"; // API call used to grab one representative product per category
 import Container from "../layouts/Container"; // Wrapper that centers content and applies consistent side padding
 
 // =============================================
 // FALLBACK GRADIENTS
-// Used ONLY when a category has no products yet (so no image exists).
+// Used whenever a category has no image_url set yet in the backend
+// (image_url is null / empty), so the tile still looks intentional
+// instead of showing a broken image or empty box.
 // =============================================
 const FALLBACK_GRADIENTS = [
   "bg-gradient-to-br from-gray-800 to-gray-950", // Fallback background for tile index 0
@@ -32,11 +33,11 @@ const CollectionTile = ({ category, imageUrl, index, featured, className }) => (
     to={`${ROUTES.PRODUCTS}?category_id=${category.id}`}
     className={`relative rounded-xl overflow-hidden group cursor-pointer ${
       !imageUrl
-        ? FALLBACK_GRADIENTS[index] || FALLBACK_GRADIENTS[0] // Use a gradient background if no product image is available
+        ? FALLBACK_GRADIENTS[index] || FALLBACK_GRADIENTS[0] // Use a gradient background if this category has no image_url
         : "bg-gray-900" // Otherwise use a dark base color behind the photo
     } ${className}`}
   >
-    {/* Real product photo as the tile background, when available */}
+    {/* The category's own photo as the tile background, when available */}
     {imageUrl && (
       <img
         src={imageUrl}
@@ -78,8 +79,10 @@ const CollectionTile = ({ category, imageUrl, index, featured, className }) => (
 const CollectionsGrid = () => {
   // =============================================
   // CATEGORIES API CALL
+  // Each category object already carries its own image_url — no need
+  // for any extra per-category product lookups just to get a photo.
   // =============================================
-  const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
+  const { data: categoriesData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES, // Cache key for this request
     queryFn: getCategories, // Function that performs the API call
     staleTime: 1000 * 60 * 10, // Data considered fresh for 10 minutes
@@ -91,37 +94,6 @@ const CollectionsGrid = () => {
   // backend/docs contract mismatch. extractListData() safely handles
   // either shape.
   const categories = extractListData(categoriesData).slice(0, 5); // Normalized + capped to 5 categories
-
-  // =============================================
-  // PER-CATEGORY REPRESENTATIVE PRODUCT IMAGE
-  // Fires one lightweight query per category (only once categories
-  // have loaded) to grab that category's single most recent product,
-  // just to use its primary_image as the tile's background photo.
-  // =============================================
-  const productImageQueries = useQueries({
-    queries: categories.map((category) => ({
-      queryKey: [...QUERY_KEYS.PRODUCTS, "collection-thumbnail", category.id], // Unique cache key per category
-      queryFn: () =>
-        searchProducts({
-          category_id: category.id, // Only fetch products belonging to this category
-          ordering: "-created_at", // Get the most recently added product first
-          page: 1,
-        }),
-      enabled: categories.length > 0, // Don't fire until categories have actually loaded
-      staleTime: 1000 * 60 * 10, // Data considered fresh for 10 minutes
-    })),
-  });
-
-  // Build a simple lookup: { [categoryId]: imageUrl | null }
-  const categoryImageMap = {};
-  categories.forEach((category, index) => {
-    const firstProduct = productImageQueries[index]?.data?.data?.results?.[0]; // First product returned for this category
-    categoryImageMap[category.id] = firstProduct?.primary_image || null; // Store its image, or null if none exists
-  });
-
-  // True while categories OR any per-category product image query is still loading
-  const isLoading =
-    categoriesLoading || productImageQueries.some((q) => q.isLoading);
 
   // Split into: 1 featured + up to 2 side-stack + remaining for the bottom row
   const featuredCategory = categories[0]; // Largest, most prominent tile
@@ -177,7 +149,7 @@ const CollectionsGrid = () => {
                 {featuredCategory && (
                   <CollectionTile
                     category={featuredCategory}
-                    imageUrl={categoryImageMap[featuredCategory.id]}
+                    imageUrl={featuredCategory.image_url}
                     index={0}
                     featured // Marks this tile as the large, prominent one
                     className="h-45 sm:h-75 flex-2"
@@ -191,7 +163,7 @@ const CollectionsGrid = () => {
                       <CollectionTile
                         key={category.id}
                         category={category}
-                        imageUrl={categoryImageMap[category.id]}
+                        imageUrl={category.image_url}
                         index={i + 1}
                         className="h-21.25 sm:h-25.5 flex-1"
                       />
@@ -216,7 +188,7 @@ const CollectionsGrid = () => {
                     <CollectionTile
                       key={category.id}
                       category={category}
-                      imageUrl={categoryImageMap[category.id]}
+                      imageUrl={category.image_url}
                       index={i + 3}
                       className="h-25 sm:h-43"
                     />

@@ -1,72 +1,61 @@
 import { Outlet, useLocation } from "react-router-dom";
-// Outlet renders whichever child page/route is currently active
-// useLocation tells us the current URL path
 import { Suspense } from "react";
-// Suspense shows a fallback UI while lazy-loaded components are still loading
 import CustomerNavbar from "./CustomerNavbar";
-// Top navigation bar shown on all customer pages
 import Footer from "./Footer";
-// Bottom footer shown on most customer pages
 import Container from "./Container";
-// A wrapper that centers and pads content with consistent max-width
 import { Skeleton } from "../ui/Skeleton";
-// Grey placeholder blocks shown while page content is loading
+import ChatWidget from "../chat-assistant/ChatWidget";
+// The AI shopping assistant floating widget — mounted here (as a
+// sibling of <Outlet />, not inside it) so it's present on every
+// customer page. UPDATED: no longer takes a "role" prop — the
+// assistant role is now determined automatically inside ChatProvider
+// (mounted once at the app root in App.jsx) based on who is actually
+// logged in, so this component doesn't need to hardcode it per layout.
+import ScrollToTopButton from "../shared/ScrollToTopButton";
+// Floating "back to top" button — mounted here (as a sibling of
+// <Outlet />) so it's present on every customer page. It stacks
+// directly above ChatIcon in the bottom-right corner and only
+// becomes visible once the user has scrolled down the page.
 
-// List of route prefixes where we do NOT want to show the footer.
-// - "/checkout" — has its own minimal, distraction-free layout
-// - "/account"  — account pages already have their own sidebar/content
-//                 layout (CustomerAccountLayout) and don't need the long
-//                 marketing footer at the bottom; keeps those screens
-//                 focused and consistent across Orders, Profile, Wishlist,
-//                 Returns, Complaints, Notifications, etc.
 const NO_FOOTER_ROUTES = ["/checkout", "/account"];
 
 const CustomerLayout = () => {
-  // Get the current URL location so we can check which page the user is on
   const location = useLocation();
 
-  // Check if the current page matches any of the no-footer route prefixes.
-  // startsWith handles all sub-routes too — e.g. "/checkout/payment" and
-  // "/account/orders/42/tracking" are both correctly matched and excluded.
   const hideFooter = NO_FOOTER_ROUTES.some((route) =>
     location.pathname.startsWith(route),
   );
 
   return (
-    // Outer wrapper — fills full screen height and stacks children vertically
-    // bg-white keeps background clean and white across all pages
     <div className="min-h-screen flex flex-col bg-white">
-      {/* Navbar — always visible at the top on every customer page */}
       <CustomerNavbar />
 
-      {/* Main content area — flex-1 makes it grow and fill remaining vertical space */}
-      {/* w-full ensures it stretches across the full width of the screen */}
       <main className="flex-1 w-full">
-        {/* Suspense catches lazy-loaded pages and shows a skeleton loader while they load */}
         <Suspense
           fallback={
-            // This skeleton UI shows up while the actual page is being fetched/loaded
             <Container className="py-8">
               <div className="flex flex-col gap-4">
-                {/* Short skeleton mimics a page title or heading placeholder */}
                 <Skeleton className="w-48 h-8" />
-                {/* Tall skeleton mimics a main content block like a product grid or form */}
                 <Skeleton className="w-full h-64" />
               </div>
             </Container>
           }
         >
-          {/* Outlet renders the actual child route component here — e.g. Home, ProductPage, etc. */}
           <Outlet />
         </Suspense>
       </main>
 
-      {/* Footer is shown on all customer pages EXCEPT checkout and account pages */}
-      {/* Checkout stays clean/distraction-free; account pages already have their own layout */}
       {!hideFooter && <Footer />}
+
+      {/* AI shopping assistant — floating icon on every customer page,
+          works for both guests and logged-in customers. */}
+      <ChatWidget />
+
+      {/* Floating "back to top" button — appears on scroll, stacks
+          directly above the ChatWidget icon. */}
+      <ScrollToTopButton />
     </div>
   );
 };
 
-// Export so React Router can use this as the layout wrapper in route config
 export default CustomerLayout;

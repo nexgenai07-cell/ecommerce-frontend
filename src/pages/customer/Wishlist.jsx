@@ -1,10 +1,4 @@
-// Composes all wishlist sub-components: header, product grid, empty state, AI banner
-// Fetches real wishlist data from the API using React Query
-// Handles remove from wishlist and add to cart mutations with toasts and cache invalidation
-// "Add All to Cart" iterates over in-stock items sequentially using mutateAsync
-// Framer Motion AnimatePresence animates cards out when removed
-// Fully responsive
-
+import { useRef } from "react"; // Holds the map of every card's image element, keyed by product id
 import { useNavigate } from "react-router-dom"; // useNavigate lets the empty state action button navigate to the products page
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // useQuery fetches wishlist data; useMutation handles remove and add-to-cart; useQueryClient invalidates stale cache
 import { AnimatePresence } from "framer-motion"; // AnimatePresence enables exit animations when wishlist cards are removed
@@ -14,6 +8,7 @@ import { getWishlist, removeFromWishlist } from "../../api/wishlist.api"; // API
 import { addToCart } from "../../api/cart.api"; // API function — adds a product to the cart with a given quantity
 import useAuth from "../../hooks/useAuth"; // Custom hook that exposes isAuthenticated — wishlist query is skipped for guests
 import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAddItem to sync the local cart UI state immediately
+import useFlyToIcon from "../../hooks/useFlyToIcon"; // flyToCart — fires the "fly into the cart" animation for a given image element + photo
 import { showSuccess, showError } from "../../components/ui/Toast"; // Toast notification helpers for mutation feedback
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
 import WishlistHeader from "../../components/wishlist/WishlistHeader"; // Page heading + item count pill + Share and Add All to Cart buttons
@@ -27,6 +22,16 @@ const Wishlist = () => {
   const queryClient = useQueryClient(); // used to invalidate wishlist and cart caches after mutations
   const { isAuthenticated } = useAuth(); // wishlist API should only fire for logged-in users
   const { handleAddItem } = useCart(); // syncs local cart state immediately after a successful add-to-cart mutation
+  const { flyToCart } = useFlyToIcon(); // triggers the "fly into the cart" animation
+
+  // Holds every currently-rendered card's <img> DOM node, keyed by product
+  // id — populated by each WishlistCard/ProductCard via registerImageRef
+  // below. This is what lets "Add All to Cart" fire a flight for every
+  // card AT ONCE, instead of only being able to animate one image at a time.
+  const imageRefsMap = useRef({});
+  const registerImageRef = (productId, node) => {
+    imageRefsMap.current[productId] = node;
+  };
 
   // =============================================
   // WISHLIST API
@@ -105,6 +110,16 @@ const Wishlist = () => {
       return;
     }
 
+    // Fire every card's flight AT ONCE, right away — this is purely
+    // visual feedback, so it doesn't need to wait for the network calls
+    // below to actually complete one at a time.
+    inStock.forEach((item) => {
+      flyToCart(
+        imageRefsMap.current[item.product.id],
+        item.product.primary_image || "/placeholder-product.svg",
+      );
+    });
+
     // Sequential await — ensures each cart add completes before the next fires
     // Prevents race conditions on the server and keeps cart state consistent
     for (const item of inStock) {
@@ -182,6 +197,7 @@ const Wishlist = () => {
                       addToCartMutation.mutate(productId)
                     } // fires add-to-cart mutation with the product id
                     isAddingToCart={addToCartMutation.isPending} // disables all Add to Cart buttons while any mutation is in flight
+                    registerImageRef={registerImageRef} // collects this card's image node for "Add All to Cart"
                   />
                 ))}
               </div>

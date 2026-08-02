@@ -97,7 +97,7 @@ const OrderCard = ({ order, index = 0 }) => {
               <img
                 src={
                   item.product?.primary_image || // use the product's main image if available
-                  "/placeholder-product.png" // fall back to a generic placeholder if image is missing
+                  "/placeholder-product.svg" // fall back to a generic placeholder if image is missing
                 }
                 alt={item.product_name || item.product?.name} // descriptive alt text for accessibility
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" // fill the box, crop rather than stretch, subtle zoom on hover

@@ -17,7 +17,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API 32 - Get the full cart data
+// API- Get the full cart data
 // ----------------------------
 // Fetches everything about the logged-in user's cart: the list of
 // items, subtotal (before discount), discount amount, final total,
@@ -27,7 +27,7 @@ export const getCart = () => {
 };
 
 // ----------------------------
-// API 33 - Add a product to the cart (or increase its quantity)
+// API  - Add a product to the cart (or increase its quantity)
 // ----------------------------
 // Used when the customer clicks "Add to Cart" on a product card or
 // product detail page. The "data" payload is expected to contain:
@@ -40,7 +40,7 @@ export const addToCart = (data) => {
 };
 
 // ----------------------------
-// API 34 - Update the quantity of a specific cart item
+// API - Update the quantity of a specific cart item
 // ----------------------------
 // Used when the customer changes an item's quantity on the cart page
 // (e.g. using + / - buttons or a quantity input).
@@ -53,7 +53,7 @@ export const updateCartItem = (itemId, data) => {
 };
 
 // ----------------------------
-// API 35 - Remove a single item from the cart
+// API  - Remove a single item from the cart
 // ----------------------------
 // Used when the customer clicks the trash/delete icon next to a
 // specific cart item, explicitly removing it from the cart —
@@ -63,7 +63,7 @@ export const removeCartItem = (itemId) => {
 };
 
 // ----------------------------
-// API 36 - Clear the entire cart at once
+// API  - Clear the entire cart at once
 // ----------------------------
 // Removes ALL items from the cart in a single request. Typically
 // called either after a successful checkout (since items are now
@@ -74,7 +74,7 @@ export const clearCart = () => {
 };
 
 // ----------------------------
-// API 37 - Apply a coupon/discount code to the cart
+// API  - Apply a coupon/discount code to the cart
 // ----------------------------
 // Used when the customer enters a coupon code at checkout/cart page
 // and clicks "Apply". The "data" payload is expected to contain:
@@ -86,7 +86,7 @@ export const applyCoupon = (data) => {
 };
 
 // ----------------------------
-// API 38 - Remove the currently applied coupon
+// API - Remove the currently applied coupon
 // ----------------------------
 // Used when the customer wants to remove a coupon they previously
 // applied (e.g. clicking an "X" next to the applied coupon badge).

@@ -1,9 +1,3 @@
-// Reusable Select component — custom styled dropdown
-// Handles label, error, and hint all in one
-// Shows emerald border on focus
-// Will be used in category filters, status filters, payment method selectors, etc.
-// Fully responsive
-
 import cn from "../../utils/cn";
 // cn utility — merges Tailwind class strings and handles conditional classes cleanly
 
@@ -92,10 +86,16 @@ const Select = ({
           {...props}
           // Spreads remaining props — value, onChange, name, defaultValue, etc.
         >
-          {/* Placeholder option — shown by default, disabled so user must pick a real option */}
-          <option value="" disabled>
+          {/* Placeholder option — shown by default. Intentionally NOT disabled:
+              this option also represents "no filter" / "All ..." for every
+              filter dropdown in the app (Category, Status, etc). If it were
+              disabled, the browser would let it display once but would block
+              the user from ever clicking back to it after picking a real
+              option — which is exactly the bug where "All Categories" could
+              never be re-selected once a specific category was chosen. */}
+          <option value="">
             {placeholder}
-            {/* Renders the placeholder text as a non-selectable first option */}
+            {/* Renders the placeholder text as a normal, selectable first option */}
           </option>
 
           {/* Renders one <option> per item in the options array passed from outside */}

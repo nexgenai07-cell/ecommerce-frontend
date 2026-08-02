@@ -1,8 +1,3 @@
-// Active Complaint Banner
-// Warning banner agar user ka koi open complaint hai
-// View Status button
-// Fully responsive
-
 // Import the warning/alert icon component from the react-icons library (Ant Design icon set)
 import { AiOutlineWarning } from "react-icons/ai";
 // Import the Link component from react-router-dom to enable client-side navigation without a full page reload

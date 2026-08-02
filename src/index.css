@@ -3,6 +3,7 @@
 /* This line loads all of Tailwind's utilities */
 /* ================================= */
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ================================= */
 /* Design tokens are in a separate file */
@@ -130,4 +131,300 @@
 }
 .scrollbar-thin::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
+}
+
+/* ================================================================ */
+/* HOME PAGE COMPONENT STYLES                                        */
+/* Everything below used to live inside inline <style>{`...`}</style> */
+/* tags (or inline style={{...}} attributes with fixed/static values) */
+/* directly inside the Home page JSX files. That is the wrong place   */
+/* for CSS in this project — only Tailwind utility classes and truly  */
+/* per-render DYNAMIC values (computed from state/props, e.g. a       */
+/* count-up animation's font-size) are allowed inline in JSX. Static  */
+/* CSS — keyframes, classes, media queries — always belongs here.     */
+/* ================================================================ */
+
+/* ---------------------------------------------------------------- */
+/* WhyZyron.jsx — the stacked-photo-deck card on the left needs a    */
+/* CSS "perspective" so its 3D rotate/scale/opacity transitions      */
+/* (applied per-photo via framer-motion) actually look 3D instead of */
+/* flat. Was previously: style={{ perspective: "1000px" }} inline.   */
+/* ---------------------------------------------------------------- */
+.why-zyron-perspective {
+  perspective: 1000px; /* Gives the child photo layers a 3D space to rotate/scale within */
+}
+
+/* ---------------------------------------------------------------- */
+/* FlashSaleSection.jsx (SandTimer) — the tiny falling sand grain     */
+/* that streams through the hourglass neck while the countdown runs. */
+/* Was previously an inline <style> tag re-declared on every re-render */
+/* (since SandTimer re-renders every second from the countdown tick), */
+/* plus a separate inline style={{ top, height }} on the <span>.      */
+/* Both are now merged into this single static class.                */
+/* ---------------------------------------------------------------- */
+@keyframes sandStreamFall {
+  0% {
+    transform: translateY(-100%); /* Grain starts just above the neck, fully invisible */
+    opacity: 0;
+  }
+  45% {
+    opacity: 1; /* Grain is fully visible while passing through the neck */
+  }
+  100% {
+    transform: translateY(220%); /* Grain finishes well below the neck, faded back out */
+    opacity: 0;
+  }
+}
+.sand-stream-drop {
+  top: 43.5%; /* Vertically aligned exactly over the hourglass neck in the SVG */
+  height: 6%; /* Short streak so it reads as a falling grain, not a solid line */
+  animation: sandStreamFall 0.5s linear infinite; /* Continuous falling loop while the countdown is active */
+}
+
+/* ---------------------------------------------------------------- */
+/* FlashSaleSection.jsx (SandTimer) — the two SVG <rect> sand levels  */
+/* (top bulb draining, bottom bulb filling) animate smoothly instead  */
+/* of jumping every second. Was previously an inline                  */
+/* style={{ transition: "y 0.9s linear, height 0.9s linear" }}        */
+/* repeated on both <rect> elements.                                  */
+/* ---------------------------------------------------------------- */
+.sand-fill-rect {
+  transition:
+    y 0.9s linear,
+    height 0.9s linear; /* Smoothly animates the sand level's y-position and height together as the countdown percent changes */
+}
+
+/* ---------------------------------------------------------------- */
+/* StatsBar.jsx — "Animated 3D Layered Number" cards (uiverse.io      */
+/* "Animated 3D Layered 6" by Thomas-Cabrit, recolored to the         */
+/* project's emerald brand palette). Three stacked, depth-offset text */
+/* layers wobble continuously in 3D to create a holographic effect.   */
+/* Was previously a full inline <style> tag at the bottom of the      */
+/* StatsBar component, re-declared on every mount.                    */
+/* ---------------------------------------------------------------- */
+
+/* Perspective wrapper — equivalent to the original .card-6. Gives the wobbling element below a 3D space to rotate in. */
+.stats-holo-perspective {
+  width: 100%; /* Fills the stat card's available width */
+  display: flex; /* Used purely to center the holo box inside this wrapper */
+  align-items: center; /* Vertically centers the holo box */
+  justify-content: center; /* Horizontally centers the holo box */
+  perspective: 900px; /* Same depth-of-field value as the original uiverse.io card */
+  margin: 6px 0; /* Reduced from the original standalone 34px 0, since this now sits tightly inside a compact stat card instead of alone on a page */
+}
+
+/* Equivalent to the original .card-6__holo — the element that physically wobbles via rotateX/rotateY, and hosts the three stacked depth layers. Resized from the original fixed 140px square (built for one giant digit) into a shorter, wider box that comfortably fits multi-character stat text. */
+.stats-holo-6 {
+  position: relative; /* Anchors the absolutely-positioned depth layers inside it */
+  width: 100%; /* Fills the perspective wrapper */
+  max-width: 168px; /* Keeps it from stretching too wide on bigger screens */
+  height: 58px; /* Shorter box since our text is wider-than-tall, unlike the original square digit */
+  border-radius: 22px; /* Close to the original 26px, scaled slightly down to match the smaller box */
+  transform-style: preserve-3d; /* Required so the child layers' translateZ values actually create depth instead of flattening */
+  display: flex; /* Used to center the layers */
+  align-items: center; /* Vertically centers the layers */
+  justify-content: center; /* Horizontally centers the layers */
+  pointer-events: none; /* Purely decorative, must never intercept clicks/hovers meant for the card */
+  animation: stats-holo-wobble 6.2s ease-in-out infinite; /* Identical timing to the original card's continuous wobble */
+}
+
+/* Identical wobble keyframes to the original — same rotateX/rotateY degrees and timing, unchanged */
+@keyframes stats-holo-wobble {
+  0% {
+    transform: rotateX(16deg) rotateY(-18deg); /* Starting tilt */
+  }
+  50% {
+    transform: rotateX(18deg) rotateY(18deg); /* Opposite tilt at the midpoint of the loop */
+  }
+  100% {
+    transform: rotateX(16deg) rotateY(-18deg); /* Returns to the starting tilt, so the loop repeats seamlessly */
+  }
+}
+
+/* Base styling shared by all three depth layers — equivalent to the original .card-6__layer, recolored to emerald and with explicit centering added (top/left/translate) so it reliably overlaps correctly for ANY text length, not just one digit. */
+.stats-holo-layer {
+  position: absolute; /* Stacks all three layers on top of each other inside .stats-holo-6 */
+  top: 50%; /* Explicit vertical centering point (added vs. the original, which assumed one fixed digit) */
+  left: 50%; /* Explicit horizontal centering point (added vs. the original) */
+  font-weight: 900; /* Same extra-bold weight as the original */
+  letter-spacing: -1px; /* Much less negative than the original's -6px, since that value was tuned for one giant 108px digit — for full words/strings a small negative spacing avoids awkward gaps without causing characters to collide */
+  line-height: 1; /* Prevents extra vertical space above/below the text from affecting centering */
+  white-space: nowrap; /* Keeps the whole stat text on a single line, never wraps mid-string */
+  -webkit-text-stroke: 1px rgba(16, 185, 129, 0.7); /* Emerald outline stroke on the text — same width/opacity pattern as the original, recolored */
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.18) 0%,
+    rgba(16, 185, 129, 0.92) 35%,
+    rgba(52, 211, 153, 0.7) 60%,
+    rgba(16, 185, 129, 0.22) 100%
+  ); /* Same 4-stop holographic gradient shape as the original, recolored from blue to emerald/emerald-light */
+  -webkit-background-clip: text; /* Clips the gradient to the visible text shape (Safari/Chrome) */
+  background-clip: text; /* Standard property version of the line above */
+  color: transparent; /* Hides the fallback solid fill so only the gradient shows through the text */
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.55)); /* Identical dark drop-shadow to the original, gives the "floating" 3D depth cue */
+  opacity: 0.95; /* Slight transparency so the layers blend together */
+  transform-style: preserve-3d; /* Lets each layer's own translateZ (below) actually offset it in 3D space */
+}
+
+/* Back layer — furthest depth, most transparent/blurred (identical values to the original, only color changed above) */
+.stats-holo-layer--back {
+  opacity: 0.18; /* Most transparent of the three layers */
+  filter: blur(1px); /* Soft blur to sell the "furthest away" depth */
+  transform: translate(-50%, -50%) translateZ(-70px); /* translate(-50%,-50%) centers it; translateZ(-70px) is the original's exact depth value */
+  -webkit-text-stroke: 1px rgba(52, 211, 153, 0.45); /* Emerald-light stroke, mirrors the original's lighter/thinner-looking back stroke */
+}
+
+/* Mid layer — halfway depth (identical values to the original, only color changed) */
+.stats-holo-layer--mid {
+  opacity: 0.42; /* Halfway opacity between the back and front layers */
+  filter: blur(0.4px); /* Very slight blur — less than the back layer, more than the front */
+  transform: translate(-50%, -50%) translateZ(-34px); /* Same centering fix + original -34px depth value */
+  -webkit-text-stroke: 1px rgba(16, 185, 129, 0.55); /* Medium-strength emerald stroke */
+}
+
+/* Front layer — closest to viewer, fully sharp (identical values to the original, only color changed) */
+.stats-holo-layer--front {
+  opacity: 0.98; /* Nearly fully opaque — this is the main readable layer */
+  transform: translate(-50%, -50%) translateZ(0px); /* Same centering fix + original translateZ(0) */
+  -webkit-text-stroke: 1px rgba(5, 150, 105, 0.78); /* Emerald-dark stroke for the front layer, mirrors the original's strongest/most saturated stroke */
+}
+
+/* Soft radial glow behind the whole holo number — identical structure to the original .card-6__holo::before, recolored to emerald */
+.stats-holo-6::before {
+  content: ""; /* Required for a ::before pseudo-element to render */
+  position: absolute; /* Sits behind the number, filling the parent box */
+  inset: 0; /* Shorthand for top/right/bottom/left: 0 — fills the parent exactly */
+  border-radius: 22px; /* Matches the parent box's rounded corners */
+  background: radial-gradient(
+    circle at 40% 35%,
+    rgba(16, 185, 129, 0.14),
+    rgba(0, 0, 0, 0) 62%
+  ); /* Soft emerald glow fading to nothing */
+  filter: blur(8px); /* Blurs the glow so it reads as ambient light, not a hard shape */
+  opacity: 0.9; /* Slight transparency so it blends into the card background */
+  transform: translateZ(-80px); /* Identical depth value to the original, pushes it visually behind the number */
+}
+
+/* Thin glossy border + faint highlight sweep — identical structure to the original .card-6__holo::after, colors kept theme-neutral (white highlight) with an emerald-tinted border to match the brand */
+.stats-holo-6::after {
+  content: ""; /* Required for an ::after pseudo-element to render */
+  position: absolute; /* Sits on top of the number as a border/highlight overlay */
+  inset: 0; /* Fills the parent box exactly */
+  border-radius: 22px; /* Matches the parent box's rounded corners */
+  border: 1px solid rgba(16, 185, 129, 0.16); /* Faint emerald-tinted border */
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.01) 45%,
+    rgba(0, 0, 0, 0)
+  ); /* Faint diagonal white highlight sweep, like glass reflecting light */
+  opacity: 0.55; /* Keeps the highlight subtle */
+  transform: translateZ(-45px); /* Identical depth value to the original */
+}
+
+/* Responsive shrink for small phones — same intent as the original's max-width:600px block, sized down to fit our smaller card layout */
+@media (max-width: 600px) {
+  .stats-holo-6 {
+    width: 100%; /* Still fills its parent on small phones */
+    max-width: 132px; /* Smaller cap than the desktop 168px, so it fits narrow stat cards */
+    height: 48px; /* Shorter box to match the smaller width */
+    border-radius: 18px; /* Slightly smaller radius to match the smaller box */
+  }
+}
+
+/* Respect users who've asked their OS to reduce motion — turns off the continuous wobble for accessibility, identical to the original card's behaviour */
+@media (prefers-reduced-motion: reduce) {
+  .stats-holo-6 {
+    animation: none !important; /* Fully disables the wobble animation for motion-sensitive users */
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Testimonials.jsx — the moving/animated gradient border shown only */
+/* on the ACTIVE testimonial card in the carousel. Was previously an  */
+/* inline <style> tag re-declared on every render of the Testimonials */
+/* section.                                                            */
+/* ---------------------------------------------------------------- */
+
+/* Keyframes shift the gradient's background-position back and forth, which — combined with an oversized background-size below — creates the illusion of the gradient colors flowing/moving around the border. */
+@keyframes gradientBorderMove {
+  0% {
+    background-position: 0% 50%; /* Gradient starts at its leftmost visible position */
+  }
+  50% {
+    background-position: 100% 50%; /* Gradient slides to its rightmost visible position */
+  }
+  100% {
+    background-position: 0% 50%; /* Gradient slides back to the start, so the loop repeats seamlessly */
+  }
+}
+/* Utility class applied only to the ACTIVE card's border wrapper. Duration is 6s with "linear" easing so the color flow feels calm, slow, and perfectly smooth instead of fast/jerky. */
+.animate-gradient-border {
+  background-size: 300% 300%; /* Oversized gradient so the movement is actually visible instead of static */
+  animation: gradientBorderMove 6s linear infinite; /* Slow 6-second loop, linear = constant, smooth speed */
+}
+/* ---------------------------------------------------------------- */
+/* FlyToIconProvider.jsx — the flying product-image clone used by the */
+/* "fly to wishlist" / "fly to cart" animation. Only the per-click     */
+/* DYNAMIC values (how far to move, what scale, what opacity) are set  */
+/* inline from JS via CSS custom properties (--fly-x, --fly-y, etc).   */
+/* Every static value — size, rounding, shadow, border, stacking order */
+/* — lives here, same as every other component in this file.          */
+/* ---------------------------------------------------------------- */
+.fly-to-icon-clone {
+  position: fixed; /* Stays fixed on screen even if the page scrolls mid-flight */
+  width: 56px;
+  height: 56px;
+  object-fit: cover; /* Crops the real product photo neatly into the 56x56 box */
+  border-radius: var(--radius-lg); /* Matches the rounded corners used on product cards */
+  box-shadow: var(--shadow-md); /* Matches the project's card shadow */
+  border: 2px solid var(--color-surface); /* White ring, makes it read as a floating thumbnail */
+  z-index: 600; /* One layer above z-toast (500), so it always sits above the bag/cart overlay */
+  pointer-events: none; /* Purely decorative — must never block clicks on anything underneath */
+  /* --fly-x / --fly-y / --fly-scale / --fly-opacity are the ONLY things
+     JS ever sets on this element (via style.setProperty) — everything
+     else about its appearance is defined right here. */
+  transform: translate(-50%, -50%) translate(var(--fly-x, 0px), var(--fly-y, 0px))
+    scale(var(--fly-scale, 1));
+  opacity: var(--fly-opacity, 1);
+}
+
+/* First leg of the flight — arcing up toward the point above the bag/cart icon */
+.fly-to-icon-clone--rise {
+  transition: transform 0.48s ease-out;
+}
+
+/* Second leg — dropping down into the bag/cart opening */
+.fly-to-icon-clone--drop {
+  transition:
+    transform 0.5s ease-in,
+    opacity 0.2s ease;
+}
+
+/* Return flight (wishlist removal, card still visible) — flying back
+   down to the product card. Slightly longer than the rise/drop legs so
+   the whole gesture reads as more deliberate. */
+.fly-to-icon-clone--return {
+  transition:
+    transform 0.55s ease-in,
+    opacity 0.4s ease 0.15s;
+}
+
+/* Dismiss flight (removal from the Wishlist/Cart page itself, where the
+   row is gone for good) — keeps rising well past the bag/cart and fades
+   out entirely, instead of returning anywhere. Opacity fades across
+   nearly the whole move so it visibly dissolves while still travelling,
+   rather than popping out abruptly at the very end. */
+.fly-to-icon-clone--dismiss {
+  transition:
+    transform 0.9s ease-in,
+    opacity 0.75s ease-in;
+}
+
+/* No transition at all — used for the instant "vanish" moment right as the
+   item passes behind the bag/cart's rim, and for the instant "appear"
+   moment when it re-emerges. Any transition here would let the item be
+   briefly visible mid-flight where it should be fully hidden instead. */
+.fly-to-icon-clone--instant {
+  transition: none;
 }
