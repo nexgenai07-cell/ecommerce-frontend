@@ -1,13 +1,3 @@
-// ============================================================================
-// The main product listing / shop page: header, sidebar filters, toolbar
-// (sort + grid/list toggle + active filter tags), the product grid or list,
-// and pagination. Also renders the mobile filter drawer.
-//
-// Nothing about data-fetching, filtering, sorting, or pagination logic was
-// changed — only spacing/visual polish, so the page reads as clean and
-// professional without the filters panel making the page taller than needed.
-// ============================================================================
-
 // React state + lifecycle hooks
 import { useState, useEffect } from "react";
 // Reads the ?category_id= query param (used when arriving from a category link)
@@ -220,21 +210,58 @@ const Products = () => {
                     // List view — one ProductListItem row per product
                     <div className="flex flex-col gap-3">
                       {isLoading ? (
-                        // Loading skeleton rows, matching the ProductListItem shape
+                        // Loading skeleton rows — rebuilt to match the REAL
+                        // ProductListItem.jsx structure element-for-element
+                        // (it previously only mocked 3 of its 7 real pieces:
+                        // no stock-status row, no wishlist button, wrong
+                        // image size, and no mobile stacking. Ratings are
+                        // intentionally NOT mocked — ProductListItem.jsx
+                        // doesn't render them, matching ProductCard.jsx)
                         Array.from({ length: 6 }).map((_, i) => (
                           <div
                             key={i}
-                            className="flex gap-4 p-4 bg-white rounded-2xl border border-gray-100 animate-pulse"
+                            className="flex flex-col sm:flex-row gap-4 sm:gap-5 p-4 sm:p-5 bg-white rounded-2xl border border-gray-100 animate-pulse"
+                            // flex-col sm:flex-row: stacks image-on-top on
+                            // mobile, side-by-side on desktop — exactly like
+                            // the real <Link> row does via the same classes
                           >
-                            <div className="w-28 h-28 bg-gray-100 rounded-xl shrink-0" />
-                            <div className="flex-1 flex flex-col gap-2 py-1">
+                            {/* Image — real item is "w-full h-44" on mobile
+                                and "sm:w-32 sm:h-32" on desktop, not a fixed
+                                square at every breakpoint */}
+                            <div className="w-full h-44 sm:w-32 sm:h-32 rounded-xl bg-gray-100 shrink-0" />
+
+                            {/* Middle column — category, 2-line title (the
+                                real title uses line-clamp-2, so TWO lines is
+                                correct here, unlike the single-line grid card),
+                                and stock-status row. NOTE: no rating row —
+                                ProductListItem.jsx no longer shows ratings
+                                (removed for consistency with ProductCard.jsx
+                                and ProductDetail.jsx, which never had one) */}
+                            <div className="flex-1 min-w-0 flex flex-col gap-2 py-1">
                               <div className="h-3 bg-gray-100 rounded w-16" />
+                              {/* Category label placeholder */}
                               <div className="h-4 bg-gray-100 rounded w-3/4" />
-                              <div className="h-3 bg-gray-100 rounded w-24" />
+                              <div className="h-4 bg-gray-100 rounded w-1/2" />
+                              {/* Two bars: real title can wrap to 2 lines */}
+                              <div className="h-3.5 bg-gray-100 rounded w-28" />
+                              {/* Stock-status dot + label placeholder */}
                             </div>
-                            <div className="flex flex-col items-end gap-3 shrink-0">
-                              <div className="h-6 bg-gray-100 rounded w-20" />
-                              <div className="h-8 bg-gray-100 rounded w-28" />
+
+                            {/* Right column — price block + the two real
+                                action buttons (wishlist heart circle AND
+                                Add to Cart), matching the real row's
+                                horizontal-on-mobile / vertical-on-desktop swap */}
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                              <div className="h-7 bg-gray-100 rounded w-24" />
+                              {/* Price block placeholder (PriceDisplay size="lg") */}
+                              <div className="flex items-center gap-2">
+                                <div className="w-9 h-9 bg-gray-100 rounded-xl" />
+                                {/* Wishlist heart button placeholder — the
+                                    old skeleton omitted this entirely */}
+                                <div className="h-8 bg-gray-100 rounded-md w-28" />
+                                {/* Add to Cart button placeholder — sm size,
+                                    rounded-md to match the real Button */}
+                              </div>
                             </div>
                           </div>
                         ))

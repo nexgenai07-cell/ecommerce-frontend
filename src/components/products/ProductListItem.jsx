@@ -22,7 +22,6 @@ import useWishlist from "../../hooks/useWishlist";
 import { showSuccess, showError } from "../ui/Toast";
 
 // -------- Reusable shared components (now actually reused here) --------
-import RatingStars from "../shared/RatingStars"; // Star rating + review count
 import PriceDisplay from "../shared/PriceDisplay"; // Price + strikethrough + discount badge
 import Badge from "../ui/Badge"; // Small status pill (used for "Out of Stock")
 import Button from "../ui/Button"; // Standard button (used for "Add to Cart")
@@ -142,7 +141,7 @@ const ProductListItem = ({ product }) => {
         )}
       </div>
 
-      {/* ===== Middle column — name, category, rating, stock status ===== */}
+      {/* ===== Middle column — name, category, stock status ===== */}
       <div className="flex-1 min-w-0 flex flex-col gap-1.5 justify-center">
         {/* Category label — only shown when the product has one */}
         {product.category?.name && (
@@ -155,14 +154,6 @@ const ProductListItem = ({ product }) => {
         <p className="text-base font-bold text-gray-900 line-clamp-2 leading-snug group-hover:text-primary transition-colors">
           {product.name}
         </p>
-
-        {/* Star rating + review count — now the shared RatingStars component,
-            same one used on ProductCard and the Product Detail page */}
-        <RatingStars
-          rating={product.rating || 0}
-          count={product.review_count || 0}
-          size="sm"
-        />
 
         {/* Stock status dot + label */}
         <div className="flex items-center gap-1.5">

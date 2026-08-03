@@ -1,8 +1,3 @@
-// Reusable Skeleton component — shows animated placeholder boxes while real data is loading
-// Gray pulsing boxes visually occupy the space where content will appear
-// Variants: SkeletonCard, SkeletonTable, SkeletonDashboard, SkeletonDetail
-// Fully responsive
-
 import cn from "../../utils/cn";
 // cn utility — merges Tailwind class strings and handles conditional classes cleanly
 
@@ -25,47 +20,73 @@ const Skeleton = ({ className = "" }) => {
 };
 
 // --- SKELETON CARD ---
-// Mimics the layout of a product card while its real data is being fetched
+// Mimics the EXACT layout of the real ProductCard (src/components/shared/ProductCard.jsx)
+// while its real data is being fetched — every block below maps 1:1 to a real element
+// in that file so the page never "jumps" in size/shape once the real cards mount in.
 const SkeletonCard = () => {
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      {/* Matches the exact shape of a real product card — white bg, rounded corners, clipped content */}
+      {/* Outer wrapper — same bg-white / rounded-xl / border / overflow-hidden as the
+          real ProductCard's root <div>, so the card's outer shell is pixel-identical */}
 
-      {/* Product image area — wide rectangular block at the top of the card */}
-      <Skeleton className="w-full h-48 rounded-none" />
-      {/* w-full: stretches across the full card width */}
-      {/* h-48: 192px matches a standard product image height */}
-      {/* rounded-none: overrides base rounded-md — image fills edge to edge with no rounding */}
+      {/* Image area — real card uses a relative aspect-3/2 box (not a fixed height),
+          so the skeleton must use the same aspect ratio or it'll be the wrong height
+          on wider/narrower grid columns */}
+      <div className="relative overflow-hidden bg-gray-50 aspect-3/2">
+        {/* relative + overflow-hidden + bg-gray-50 + aspect-3/2: matches the real
+            image container exactly, so absolutely-positioned placeholders below
+            line up the same way the real badge/heart/pill do */}
 
-      <div className="p-4 flex flex-col gap-3">
-        {/* p-4: matches the padding of a real product card body */}
-        {/* flex-col + gap-3: stacks placeholder rows with consistent spacing */}
+        <Skeleton className="absolute inset-0 rounded-none" />
+        {/* absolute inset-0: fills the entire aspect-3/2 box (real card's <img> does
+            the same via w-full h-full object-cover) */}
+        {/* rounded-none: the image itself has no rounding — the outer wrapper's
+            overflow-hidden is what clips the corners, same as the real card */}
 
-        {/* Category tag placeholder — short narrow bar */}
-        <Skeleton className="w-16 h-4" />
-        {/* w-16 (64px): mimics a short category label like "Tops" or "Sale" */}
+        {/* Top-right circle — placeholder for the wishlist heart button, which sits
+            at "absolute top-2 right-2 w-8 h-8 rounded-full" on the real card */}
+        <Skeleton className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80" />
+        {/* bg-white/80: lighter than the default gray-200 so it reads as a button
+            sitting ON TOP of the image skeleton, not as part of the image itself */}
 
-        {/* Product name placeholder — two lines to simulate a multi-line title */}
-        <Skeleton className="w-full h-5" />
-        <Skeleton className="w-3/4 h-5" />
-        {/* Full width first line + shorter second line mimics natural text wrapping */}
+        {/* Bottom-left pill — placeholder for the stock-status pill, which sits at
+            "absolute bottom-2 left-2 ... rounded-full" on the real card */}
+        <Skeleton className="absolute bottom-2 left-2 w-24 h-6 rounded-full bg-white/80" />
+        {/* w-24 h-6: roughly the width/height of the real "In Stock" / "Only N Left"
+            pill; bg-white/80 again reads as an overlay element, not the image */}
+      </div>
 
-        {/* Star rating placeholder — medium-width bar */}
-        <Skeleton className="w-24 h-4" />
-        {/* w-24 (96px): mimics 5 star icons and a review count */}
+      <div className="p-3.5 flex flex-col gap-1">
+        {/* p-3.5 + flex-col + gap-1: matches the real card's info section EXACTLY —
+            the old p-4/gap-3 version was noticeably taller/roomier than a real card */}
 
-        {/* Price row placeholder — price and original price side by side */}
-        <div className="flex items-center gap-2">
-          <Skeleton className="w-20 h-6" />
-          {/* w-20 (80px) h-6: larger block for the current price */}
-          <Skeleton className="w-14 h-4" />
-          {/* w-14 (56px) h-4: smaller block for the strikethrough original price */}
+        {/* Category line placeholder — real card reserves "h-3.5" here even when
+            empty, and renders a single uppercase line, never two lines */}
+        <Skeleton className="w-16 h-3.5" />
+        {/* w-16 (64px): mimics a short category label like "Skincare" or "Tops" */}
+
+        {/* Product name placeholder — real card is a SINGLE truncated line
+            (text-sm, "truncate"), never a 2-line wrap, so the skeleton must
+            only show one bar or it implies more vertical space than real */}
+        <Skeleton className="w-4/5 h-5" />
+        {/* w-4/5 h-5: one line, slightly short of full width — mimics a typical
+            truncated product title without looking like a perfectly full bar */}
+
+        {/* Price row placeholder — real card's PriceDisplay renders sale price +
+            (optionally) strikethrough original price on ONE row, no rating row
+            exists anywhere on the real card, so it is intentionally omitted here */}
+        <div className="flex items-center gap-2 mt-0.5">
+          <Skeleton className="w-16 h-6" />
+          {/* w-16 h-6: mimics the bold "md" size sale price (text-base font-semibold) */}
+          <Skeleton className="w-12 h-4" />
+          {/* w-12 h-4: mimics the smaller strikethrough original price (text-sm) */}
         </div>
 
-        {/* Add to cart button placeholder — full width rounded bar */}
-        <Skeleton className="w-full h-9 rounded-lg" />
-        {/* h-9 (36px): matches the height of a standard md size Button */}
-        {/* rounded-lg: matches the Button component's rounded-lg border radius */}
+        {/* Add to cart button placeholder — real Button uses size="sm", which
+            renders "px-3 py-1.5 ... rounded-md", NOT the md/lg "rounded-lg" shape */}
+        <Skeleton className="w-full h-8 rounded-md mt-1" />
+        {/* h-8 (32px): matches the real sm Button's rendered height */}
+        {/* rounded-md: matches the sm Button's actual border radius (not rounded-lg) */}
       </div>
     </div>
   );
