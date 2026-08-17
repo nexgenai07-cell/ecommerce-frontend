@@ -62,6 +62,8 @@ const processQueue = (error, token = null) => {
 // RESPONSE INTERCEPTOR
 // Runs after every response comes back from the server
 // On a 401 Unauthorized, attempts a silent token refresh; if that fails, logs the user out
+// Anonymous requests (no token ever present, e.g. guest chatbot usage) are left alone —
+// they are rejected normally without forcing a redirect to /login
 // =============================================
 axiosInstance.interceptors.response.use(
   (response) => response, // successful responses pass straight through untouched
@@ -72,6 +74,13 @@ axiosInstance.interceptors.response.use(
     // If the error isn't a 401, or this exact request has already been retried once,
     // there's nothing more we can do — reject immediately to avoid infinite retry loops
     if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // If the user was never logged in to begin with (no access token present),
+    // this 401 belongs to an anonymous request — reject it without redirecting to /login
+    const hasExistingToken = localStorage.getItem("token");
+    if (!hasExistingToken) {
       return Promise.reject(error);
     }
 
