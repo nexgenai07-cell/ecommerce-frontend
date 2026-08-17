@@ -129,6 +129,13 @@ const ChatProvider = ({ children }) => {
   // init effect below) because the init effect now calls this function
   // directly as part of its own "on page load / refresh" trigger.
   const handleLoadHistoryList = async () => {
+    // Guests never have saved history on the backend at all — skip the
+    // API call entirely instead of letting it fail and show an error
+    if (isGuest) {
+      handleSetHistorySessions([]);
+      return;
+    }
+
     handleSetHistoryLoading(true);
     try {
       const response = await sessionsListMutation.mutateAsync();
