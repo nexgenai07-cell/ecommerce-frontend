@@ -1,11 +1,12 @@
 // ============================================================
 // CumulativeGrowthChart — CUSTOMER GROWTH SUB-COMPONENT
 // ============================================================
-// Fully real — API 75 returns real "new_customers" per period, and
-// the cumulative (running-total) line is a genuine derived
-// calculation on top of that real series, not a separate field.
-// The Month/Quarter/Year toggle maps directly to API 75's documented
-// `period` param.
+// Fully real — API 97 (GET /api/v1/analytics/customers/growth/)
+// returns real "new_customers" per period, and the cumulative
+// (running-total) line is a genuine derived calculation on top of
+// that real series, not a separate field.
+// The Month/Quarter/Year toggle maps directly to API 97's documented
+// `period` param: monthly | quarter | year.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -27,18 +28,39 @@ import formatDate from "../../utils/formatDate";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
 
+// formatPeriodLabel — API 97's `period` field changes SHAPE depending
+// on the `period` query param sent:
+//   daily/weekly/monthly -> "2024-01"      (a real date-like string)
+//   quarter               -> "2026-Q1"      (year + quarter, NOT a date)
+//   year                  -> "2025"         (bare year, NOT a full date)
+// Passing "2026-Q1" or "2025" straight into formatDate() produces
+// "Invalid Date" / an unpredictable result, since Date() can't parse
+// a quarter string and a bare year isn't a reliable cross-browser
+// Date input either. So: quarter/year strings are shown as-is
+// (already human-readable), everything else still goes through the
+// normal formatDate().
+const formatPeriodLabel = (period) => {
+  if (!period) return "";
+  if (/^\d{4}-Q[1-4]$/.test(period)) {
+    // "2026-Q1" -> "Q1 2026"
+    const [year, q] = period.split("-");
+    return `${q} ${year}`;
+  }
+  if (/^\d{4}$/.test(period)) {
+    // Bare calendar year, e.g. "2025" — nothing to reformat
+    return period;
+  }
+  return formatDate(period);
+};
+
 const PERIOD_OPTIONS = [
   { value: "monthly", label: "Month" },
-  { value: "weekly", label: "Quarter" },
-  // FLAG: "Quarter" isn't one of API 75's 3 documented period values
-  // (daily/weekly/monthly) — mapped here to "weekly" as the closest
-  // real grouping available, since a true quarterly aggregation isn't
-  // something the backend supports directly. Confirm with the backend
-  // team if true quarterly grouping is needed.
-  { value: "yearly", label: "Year" },
-  // FLAG: same issue — "yearly" isn't documented either. Sent as an
-  // optimistic attempt; if the backend rejects or ignores it, this
-  // will silently fall back to whatever its default grouping is.
+  { value: "quarter", label: "Quarter" },
+  // API 97 documents 5 period values: daily | weekly | monthly |
+  // quarter | year. "quarter" groups into fixed calendar quarters
+  // (Q1 = Jan-Mar, etc.), independent of start_date.
+  { value: "year", label: "Year" },
+  // "year" groups into full calendar years.
 ];
 
 const CumulativeGrowthChart = ({ startDate, endDate }) => {
@@ -59,7 +81,7 @@ const CumulativeGrowthChart = ({ startDate, endDate }) => {
   const chartData = points.map((point) => {
     runningTotal += Number(point.new_customers) || 0;
     return {
-      label: formatDate(point.period),
+      label: formatPeriodLabel(point.period),
       newCustomers: Number(point.new_customers) || 0,
       cumulative: runningTotal,
     };

@@ -1,5 +1,5 @@
 // Local state hook — tracks whether the product image failed to load
-import { useState } from "react";
+import { useState, useRef } from "react";
 // Link (for navigating to the product page) + navigate (for redirecting to
 // login when an unauthenticated user tries to act on a product)
 import { Link, useNavigate } from "react-router-dom";
@@ -18,6 +18,14 @@ import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
 // Wishlist hook — exposes current wishlist items + optimistic add/remove helpers
 import useWishlist from "../../hooks/useWishlist";
+// Fly-to-icon animation trigger functions — see hooks/useFlyToIcon.js.
+// flyToWishlist/flyToCart make the real product image fly from this row
+// into the centered bag/cart graphic. flyBackToWishlistCard reverses it
+// when a product is un-hearted right here on a listing page (the row
+// stays visible, so the item flies back down into it). Same hook
+// ProductCard (grid view) and ProductInfo (detail page) already use —
+// this list view was just never wired up to it.
+import useFlyToIcon from "../../hooks/useFlyToIcon";
 // Toast helpers for success/error feedback
 import { showSuccess, showError } from "../ui/Toast";
 
@@ -49,6 +57,13 @@ const ProductListItem = ({ product }) => {
     handleAddToWishlist,
     handleRemoveFromWishlist,
   } = useWishlist();
+
+  // Fly-to-icon animation triggers — see import comment above.
+  const { flyToWishlist, flyBackToWishlistCard, flyToCart } = useFlyToIcon();
+
+  // Ref to the actual <img> element rendered below — this is the flight's
+  // starting point (its exact on-screen position + the real image itself).
+  const imageRef = useRef(null);
 
   // Whether this specific product is currently saved to the wishlist
   const inWishlist = isProductInWishlist(product?.id);
@@ -93,11 +108,22 @@ const ProductListItem = ({ product }) => {
     onError: () => showError("Failed to update wishlist"),
   });
 
+  // Decide which image to show — real image, or the fallback if missing/broken
+  const imageSrc =
+    !product?.primary_image || imageFailed
+      ? FALLBACK_IMAGE
+      : product?.primary_image;
+
   // Handles the "Add to Cart" button click
   const handleAddToCart = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
     if (!isAuthenticated) return navigate(ROUTES.LOGIN); // Guests must log in first
     if (!product?.in_stock) return; // Safety guard — button is disabled anyway when out of stock
+
+    // Fly the image immediately — purely visual feedback, doesn't need to
+    // wait for the network request to resolve.
+    flyToCart(imageRef.current, imageSrc);
+
     cartMutation.mutate();
   };
 
@@ -105,17 +131,21 @@ const ProductListItem = ({ product }) => {
   const handleWishlist = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
     if (!isAuthenticated) return navigate(ROUTES.LOGIN); // Guests must log in first
+
+    // Fires immediately, before the network call — this row stays on
+    // screen either way, so the item either flies up into the bag
+    // (adding) or flies back down into this exact row (removing).
+    if (inWishlist) {
+      flyBackToWishlistCard(imageRef.current, imageSrc);
+    } else {
+      flyToWishlist(imageRef.current, imageSrc);
+    }
+
     wishlistMutation.mutate();
   };
 
   // If somehow no product data was passed in, render nothing rather than crash
   if (!product) return null;
-
-  // Decide which image to show — real image, or the fallback if missing/broken
-  const imageSrc =
-    !product.primary_image || imageFailed
-      ? FALLBACK_IMAGE
-      : product.primary_image;
 
   return (
     // The entire row is a single Link — clicking anywhere (except the two
@@ -127,6 +157,7 @@ const ProductListItem = ({ product }) => {
       {/* ===== Product image ===== */}
       <div className="relative w-full h-44 sm:w-32 sm:h-32 rounded-xl border border-gray-100 overflow-hidden bg-gray-50 shrink-0">
         <img
+          ref={imageRef}
           src={imageSrc}
           alt={product.name}
           onError={() => setImageFailed(true)} // Swap to placeholder on load failure

@@ -25,6 +25,23 @@ import CustomerGrowthStatsCards from "../../components/admin-analytics/CustomerG
 import CumulativeGrowthChart from "../../components/admin-analytics/CumulativeGrowthChart";
 import TopCustomersTable from "../../components/admin-analytics/TopCustomersTable";
 
+const toLocalISODate = (date) => {
+  // toLocalISODate — formats a Date as "YYYY-MM-DD" using its LOCAL
+  // year/month/day, never converting to UTC first.
+  // BUG THIS FIXES: date.toISOString() always converts to UTC before
+  // formatting. For any admin in a timezone AHEAD of UTC (e.g.
+  // Pakistan, UTC+5), local midnight on Jan 1 becomes 19:00 on Dec 31
+  // in UTC — so toISOString().slice(0, 10) silently returns
+  // "2025-12-31" instead of the intended "2026-01-01". Building the
+  // string manually from getFullYear/getMonth/getDate keeps it in
+  // the browser's local timezone, matching what the admin actually
+  // sees on their calendar.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const getDefaultRange = () => {
   // getDefaultRange — computes the initial date range shown when the
   // page first loads: from the 1st of January this year, through today
@@ -33,10 +50,11 @@ const getDefaultRange = () => {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   // startOfYear — January 1st of the current year
   return {
-    startDate: startOfYear.toISOString().slice(0, 10),
-    // Converts to "YYYY-MM-DD" — the shape the date <Input> and the
-    // API's start_date query param both expect
-    endDate: now.toISOString().slice(0, 10),
+    startDate: toLocalISODate(startOfYear),
+    // "YYYY-MM-DD" in the browser's own local timezone — the shape
+    // the date <Input> and the API's start_date query param both
+    // expect
+    endDate: toLocalISODate(now),
     // endDate — today, in the same "YYYY-MM-DD" shape
   };
 };
