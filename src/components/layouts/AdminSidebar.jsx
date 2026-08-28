@@ -38,6 +38,7 @@ import useAuth from "../../hooks/useAuth"; // Import custom hook to access authe
 import useUI from "../../hooks/useUI"; // Import custom hook to access UI state like sidebar open/close
 import useAdminLogout from "../../hooks/useAdminLogout"; // Import the shared admin logout hook — same logic used by TopHeader's profile menu, kept in one place instead of duplicated here
 import Avatar from "../ui/Avatar"; // Import Avatar component to display the user's profile picture
+import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
 
 // =============================================
 // NAV ITEMS CONFIG
@@ -221,7 +222,7 @@ const AdminSidebar = () => {
   const navigate = useNavigate(); // Get function to programmatically navigate to other pages (used for sub-item clicks below)
   const { user } = useAuth(); // Get the current logged-in user's info from the auth hook (name, role, avatar)
   const { sidebarOpen, handleToggleSidebar } = useUI(); // Get sidebar open/closed state and toggle function from the UI hook
-  const handleLogout = useAdminLogout(); // Shared logout handler — calls the logout API, clears Redux auth state, shows a toast, and redirects to /admin/login
+  const { requestLogout, confirmModalProps } = useAdminLogout(); // Shared logout handler — requestLogout opens a confirm modal; confirmModalProps wires up the ConfirmModal rendered below
 
   // Tracking which sub menu is expanded — pre-computed so whichever
   // group CONTAINS the current page starts already open, instead of
@@ -651,7 +652,7 @@ const AdminSidebar = () => {
               <button
                 onClick={() => {
                   setProfileMenuOpen(false); // Close the dropdown first
-                  handleLogout(); // Then run the shared logout flow
+                  requestLogout(); // Opens the "Are you sure?" confirmation modal
                 }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-300 hover:text-white hover:bg-danger/10 transition-colors"
               >
@@ -780,7 +781,7 @@ const AdminSidebar = () => {
                 <button
                   onClick={() => {
                     setProfileMenuOpen(false); // Close the dropdown first
-                    handleLogout(); // Then run the shared logout flow
+                    requestLogout(); // Opens the "Are you sure?" confirmation modal
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-300 hover:text-white hover:bg-danger/10 transition-colors"
                 >
@@ -899,6 +900,12 @@ const AdminSidebar = () => {
           </div>,
           document.body, // Mount target — escapes every parent's overflow/clipping so the flyout always renders on top, fully visible
         )}
+
+      {/* "Are you sure?" confirmation — shown before the logout actually
+          runs. Wired via confirmModalProps from useAdminLogout(), so both
+          logout buttons in this file (collapsed-icon footer + expanded
+          profile-menu footer) share the exact same modal instance. */}
+      <ConfirmModal {...confirmModalProps} />
     </>
   );
 };

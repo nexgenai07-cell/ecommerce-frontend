@@ -147,7 +147,18 @@ const Cart = () => {
   // Pulls the array of individual cart items out of the cart object.
   // Defaults to an empty array so the rest of the component can safely
   // render (e.g. cartItems.length) before real data has loaded.
-  const cartItems = cart?.items || [];
+  //
+  // IMPORTANT: the array is re-sorted by each item's own id (ascending)
+  // rather than rendered in whatever order the backend happens to return.
+  // A cart item's id is assigned once, when it's first added, and never
+  // changes afterward — so sorting by it keeps the row order locked to
+  // "the order the customer originally added things" regardless of
+  // quantity changes or other items being removed, both of which
+  // otherwise cause the backend's own ordering to shift around after
+  // every refetch. The original array is never mutated directly.
+  const cartItems = cart?.items
+    ? [...cart.items].sort((a, b) => a.id - b.id)
+    : [];
 
   // --------------------------------------------------------------------------
   // EFFECT: Sync cart into Redux

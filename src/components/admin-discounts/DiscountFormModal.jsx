@@ -23,8 +23,13 @@ const discountSchema = z
   .object({
     code: z
       .string()
+      .trim()
       .min(1, "Coupon code is required")
-      .max(30)
+      .max(30, "Coupon code is too long")
+      .regex(
+        /^[A-Za-z0-9-]+$/,
+        "Coupon code can only contain letters, numbers, and hyphens",
+      )
       .transform((val) => val.toUpperCase()),
     // Uppercased automatically — coupon codes are conventionally
     // case-insensitive from the customer's perspective, so normalizing
@@ -34,8 +39,22 @@ const discountSchema = z
     value: z
       .string()
       .min(1, "Value is required")
+      .refine(
+        (val) => !Number.isNaN(parseFloat(val)),
+        "Value must be a valid number",
+      )
       .refine((val) => parseFloat(val) > 0, "Value must be greater than 0"),
-    min_order_amount: z.string().optional(),
+    min_order_amount: z
+      .string()
+      .optional()
+      .refine(
+        (val) => !val || !Number.isNaN(parseFloat(val)),
+        "Minimum order amount must be a valid number",
+      )
+      .refine(
+        (val) => !val || parseFloat(val) >= 0,
+        "Minimum order amount cannot be negative",
+      ),
     start_date: z.string().optional(),
     end_date: z.string().optional(),
     is_active: z.boolean(),
@@ -62,6 +81,18 @@ const discountSchema = z
         path: ["end_date"],
       });
     }
+  })
+  // A percentage-type discount can never be worth more than 100% — this
+  // can only be checked once "type" and "value" exist together, so it
+  // lives here rather than on the "value" field's own chain.
+  .superRefine((data, ctx) => {
+    if (data.type === "percent" && parseFloat(data.value) > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Percentage discount cannot be greater than 100%.",
+        path: ["value"],
+      });
+    }
   });
 
 const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
@@ -77,6 +108,17 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(discountSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       code: "",
       type: "percent",
@@ -171,6 +213,7 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
             type="number"
             step="0.01"
             min="0"
+            placeholder={watch("type") === "percent" ? "e.g. 25" : "e.g. 500"}
             required
             {...register("value")}
             error={errors.value?.message}
@@ -182,6 +225,7 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
           type="number"
           step="0.01"
           min="0"
+          placeholder="0.00"
           hint="Optional — leave blank for no minimum"
           leftIcon={<span className="text-gray-400">Rs.</span>}
           {...register("min_order_amount")}

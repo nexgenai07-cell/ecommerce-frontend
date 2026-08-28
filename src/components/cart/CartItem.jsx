@@ -102,17 +102,84 @@ const CartItem = ({ item, onRemove }) => {
     // mutationFn receives whatever value is passed to mutate(newQty).
     mutationFn: (newQty) => updateCartItem(item.id, { quantity: newQty }),
 
+    // Runs INSTANTLY, before the network request even finishes — writes the
+    // new quantity straight into the shared cart cache so this row's line
+    // total AND the cart-wide subtotal/total (rendered by CartSummary)
+    // update on screen right away, instead of waiting for the update
+    // request to complete and then waiting again for a follow-up refetch.
+    onMutate: async (newQty) => {
+      // Stop any in-flight cart refetch so it can't overwrite our
+      // optimistic write below with stale data a moment later.
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+
+      // Snapshot of the cache exactly as it was, so it can be restored
+      // if the update ends up failing server-side.
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const unitPrice = parseFloat(item.product.price) || 0;
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+
+        // Recalculate just this one line's total from the unit price —
+        // every other line is left completely untouched.
+        const updatedItems = old.data.items.map((cartItem) =>
+          cartItem.id === item.id
+            ? {
+                ...cartItem,
+                quantity: newQty,
+                total_price: (unitPrice * newQty).toFixed(2),
+              }
+            : cartItem,
+        );
+
+        // Subtotal is simply the sum of every line total, so it can be
+        // recalculated exactly on the frontend. The grand total is shifted
+        // by that same difference so any already-applied coupon discount
+        // stays proportionally correct until the server's own numbers
+        // arrive a moment later and quietly replace this estimate.
+        const newSubtotal = updatedItems.reduce(
+          (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
+          0,
+        );
+        const newTotal = oldTotal + (newSubtotal - oldSubtotal);
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      // Handed to onError below so the optimistic write can be undone.
+      return { previousCart };
+    },
+
     // Runs when the update succeeds. The second argument (newQty) is the
     // value that was originally passed into mutate().
     onSuccess: (_, newQty) => {
       // Updates the Redux cart slice so the navbar total updates instantly.
       handleUpdateQuantity(item.id, newQty);
-      // Marks the cart query as stale so React Query refetches fresh cart data.
+      // Quietly re-syncs with the authoritative server numbers in the
+      // background — the screen already shows the right values from the
+      // optimistic update above, so this refetch corrects silently rather
+      // than being something the customer has to wait on.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
 
     // Runs when the update fails (e.g. network error, out of stock, etc.).
-    onError: () => {
+    onError: (_err, _newQty, context) => {
+      // Undoes the optimistic cache write from onMutate above, since the
+      // change never actually happened server-side.
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
       // Rolls the displayed quantity back to whatever the server last confirmed.
       setQuantity(item.quantity);
       // Shows a red error toast explaining the failure to the user.
@@ -128,11 +195,62 @@ const CartItem = ({ item, onRemove }) => {
     // mutationFn calls the removeCartItem API function with this item's id.
     mutationFn: () => removeCartItem(item.id),
 
+    // Runs INSTANTLY, before the network request even finishes — pulls this
+    // item straight out of the shared cart cache. The Cart page's list is
+    // rendered directly from that cache, so this row disappears (and plays
+    // its exit animation) and the subtotal/total shrink immediately, rather
+    // than waiting on the delete request to complete and a follow-up refetch.
+    onMutate: async () => {
+      // Stop any in-flight cart refetch so it can't overwrite our
+      // optimistic write below with stale data a moment later.
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+
+      // Snapshot of the cache exactly as it was, so it can be restored
+      // if the removal ends up failing server-side.
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+        const removedLineTotal = parseFloat(item.total_price) || 0;
+
+        const updatedItems = old.data.items.filter(
+          (cartItem) => cartItem.id !== item.id,
+        );
+
+        // Subtracting this line's own total from the subtotal is exact.
+        // The grand total is shifted by that same amount so any
+        // already-applied coupon discount stays proportionally correct
+        // until the server's own numbers arrive a moment later and
+        // quietly replace this estimate.
+        const newSubtotal = oldSubtotal - removedLineTotal;
+        const newTotal = oldTotal - removedLineTotal;
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      // Handed to onError below so the optimistic removal can be undone.
+      return { previousCart };
+    },
+
     // Runs when the removal succeeds.
     onSuccess: () => {
       // Removes the item from the Redux cart slice so the navbar count drops.
       handleRemoveItem(item.id);
-      // Refetches the cart query so the parent page shows updated data.
+      // Quietly re-syncs with the authoritative server numbers in the
+      // background — the row is already gone and the totals already
+      // reflect it, so this refetch corrects silently rather than being
+      // something the customer has to wait on.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
       // Shows a green success toast confirming the removal.
       showSuccess("Item removed from cart");
@@ -142,7 +260,13 @@ const CartItem = ({ item, onRemove }) => {
     },
 
     // Runs when the removal fails.
-    onError: () => {
+    onError: (_err, _vars, context) => {
+      // Undoes the optimistic cache write from onMutate above, bringing
+      // the row and the totals back since the deletion never actually
+      // happened server-side.
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
       // Shows a red error toast telling the user to try again.
       showError("Failed to remove item. Please try again.");
     },

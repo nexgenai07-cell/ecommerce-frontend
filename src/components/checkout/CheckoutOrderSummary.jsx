@@ -138,63 +138,85 @@ const CheckoutOrderSummary = ({
       <div className="h-px bg-gray-100" />
 
       {/* Coupon code */}
-      {/* Conditional rendering: if a coupon is already applied, show the applied coupon badge with a remove button */}
-      {appliedCoupon ? (
-        <div className="flex items-center justify-between bg-success-light border border-success/20 rounded-lg px-3 py-2">
-          <div className="flex items-center gap-2">
-            {/* Tag icon representing a coupon/discount code */}
+      {/* BUGFIX: the apply/remove coupon controls used to render unconditionally,
+          which meant a customer could still add or remove a coupon on the
+          Stripe "payment" step — AFTER the order (and its PaymentIntent
+          amount) had already been created server-side. Doing so silently
+          changed the on-screen total without touching what Stripe would
+          actually charge. Coupons should only be editable while we're still
+          on the "details" step, before the order exists — same gating the
+          "Place Order" button already uses (showPlaceOrderButton). Once the
+          order is placed, we just show the coupon that was used (read-only,
+          no remove button) so the customer can still see it was applied. */}
+      {showPlaceOrderButton ? (
+        appliedCoupon ? (
+          <div className="flex items-center justify-between bg-success-light border border-success/20 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              {/* Tag icon representing a coupon/discount code */}
+              <AiOutlineTag className="w-3.5 h-3.5 text-success" />
+              {/* Displaying the actual applied coupon code text */}
+              <p className="text-xs font-semibold text-success">
+                {appliedCoupon.code}
+              </p>
+            </div>
+            {/* Button to remove the currently applied coupon */}
+            <button
+              onClick={() => removeCouponMutation.mutate()}
+              // Triggers the removeCouponMutation when clicked, which calls the remove coupon API
+              className="text-success hover:text-green-700"
+            >
+              {/* Close/X icon indicating this button removes the coupon */}
+              <AiOutlineClose className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          // If no coupon is applied yet, show a form with an input field and "Apply" button
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyCouponMutation.mutate();
+            }}
+            // Prevents default form submission (page reload) and instead triggers the apply coupon mutation
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={couponCode} // Controlled input — value tied to local couponCode state
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              // Updates state on every keystroke, automatically converting input to uppercase (common for coupon codes)
+              placeholder="Coupon Code" // Placeholder text shown when input is empty
+              className="
+                flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl
+                focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary
+                placeholder:text-gray-300 transition-all
+              "
+              // Input takes remaining space in the flex row, styled with border, padding, and emerald focus ring
+            />
+            <button
+              type="submit" // Submitting this form triggers the onSubmit handler above
+              disabled={!couponCode.trim() || applyCouponMutation.isPending}
+              // Button is disabled if input is empty/whitespace-only, OR if a coupon application request is already in progress
+              className="
+                px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700
+                hover:border-gray-300 hover:bg-gray-50
+                disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0
+              "
+            >
+              Apply
+            </button>
+          </form>
+        )
+      ) : (
+        appliedCoupon && (
+          // Payment step, order already created — show the coupon as an
+          // inert badge (no remove button) purely for the customer's info.
+          <div className="flex items-center gap-2 bg-success-light border border-success/20 rounded-lg px-3 py-2">
             <AiOutlineTag className="w-3.5 h-3.5 text-success" />
-            {/* Displaying the actual applied coupon code text */}
             <p className="text-xs font-semibold text-success">
-              {appliedCoupon.code}
+              {appliedCoupon.code} applied
             </p>
           </div>
-          {/* Button to remove the currently applied coupon */}
-          <button
-            onClick={() => removeCouponMutation.mutate()}
-            // Triggers the removeCouponMutation when clicked, which calls the remove coupon API
-            className="text-success hover:text-green-700"
-          >
-            {/* Close/X icon indicating this button removes the coupon */}
-            <AiOutlineClose className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ) : (
-        // If no coupon is applied yet, show a form with an input field and "Apply" button
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyCouponMutation.mutate();
-          }}
-          // Prevents default form submission (page reload) and instead triggers the apply coupon mutation
-          className="flex gap-2"
-        >
-          <input
-            type="text"
-            value={couponCode} // Controlled input — value tied to local couponCode state
-            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-            // Updates state on every keystroke, automatically converting input to uppercase (common for coupon codes)
-            placeholder="Coupon Code" // Placeholder text shown when input is empty
-            className="
-              flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl
-              focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary
-              placeholder:text-gray-300 transition-all
-            "
-            // Input takes remaining space in the flex row, styled with border, padding, and emerald focus ring
-          />
-          <button
-            type="submit" // Submitting this form triggers the onSubmit handler above
-            disabled={!couponCode.trim() || applyCouponMutation.isPending}
-            // Button is disabled if input is empty/whitespace-only, OR if a coupon application request is already in progress
-            className="
-              px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700
-              hover:border-gray-300 hover:bg-gray-50
-              disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0
-            "
-          >
-            Apply
-          </button>
-        </form>
+        )
       )}
 
       {/* Price breakdown */}

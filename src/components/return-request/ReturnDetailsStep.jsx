@@ -94,6 +94,7 @@ const ReturnDetailsStep = ({
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Please provide more context about your return request..."
           rows={4}
+          maxLength={1000}
           className="
             w-full px-4 py-3 text-sm rounded-xl border border-gray-200 bg-white
             placeholder:text-gray-300 text-gray-900 resize-none
@@ -102,6 +103,11 @@ const ReturnDetailsStep = ({
             transition-all
           "
         />
+        {/* Soft character counter -- description is optional, so this is
+            guidance rather than a hard validation error */}
+        <span className="text-xs text-gray-400 self-end">
+          {description.length}/1000
+        </span>
       </div>
     </div>
   );

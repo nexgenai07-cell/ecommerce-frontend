@@ -62,11 +62,23 @@ const ContactForm = ({ register, errors }) => {
             id="phone"
             type="tel"
             // type="tel" brings up the numeric dialpad on mobile devices
+            inputMode="tel"
+            maxLength={13}
             placeholder="+92 300 1234567"
             // Placeholder shows the expected Pakistani phone number format
             autoComplete="tel"
             // autoComplete helps browsers autofill saved phone numbers
             {...register("phone")}
+            onChange={(e) => {
+              // Block anything that isn't a digit or a leading "+" --
+              // letters, commas, spaces typed mid-number, etc. are
+              // stripped out before they ever reach the field, so the
+              // user physically cannot type an invalid character
+              e.target.value = e.target.value
+                .replace(/[^\d+]/g, "")
+                .replace(/(?!^)\+/g, "");
+              register("phone").onChange(e);
+            }}
             className={`
               w-full px-4 py-2.5 text-sm rounded-xl border bg-white
               placeholder:text-gray-300 text-gray-900

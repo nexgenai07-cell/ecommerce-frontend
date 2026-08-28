@@ -1,12 +1,3 @@
-// Personal Info Form Section
-// Avatar, Full Name, Email (verified)
-// Save Changes button — real API call
-// React Hook Form + Zod validation
-// Fully responsive
-//
-// NOTE: Phone Number field was removed from this form per client request
-// (kept as UI-only decision — schema/payload updated to only send `name`).
-
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,8 +13,11 @@ import Avatar from "../ui/Avatar";
 const personalInfoSchema = z.object({
   name: z
     .string()
+    .trim()
     .min(1, "Full name is required")
-    .min(3, "Name must be at least 3 characters"),
+    .min(3, "Name must be at least 3 characters")
+    .max(50, "Name must be less than 50 characters")
+    .regex(/^[A-Za-z\s'-]+$/, "Name can only contain letters"),
 });
 
 const PersonalInfoForm = ({ user }) => {
@@ -36,6 +30,17 @@ const PersonalInfoForm = ({ user }) => {
     formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(personalInfoSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       name: user?.name || "",
     },

@@ -6,6 +6,8 @@ import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key
 import { getReturns } from "../../api/returns.api"; // API 51 — GET /api/v1/returns/
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — handles both flat-array and paginated API response shapes
 import formatDate from "../../utils/formatDate"; // Converts ISO date string into a readable format e.g. "Jun 29, 2026"
+import { Link } from "react-router-dom"; // Navigates to the Return Detail page when "View" is clicked
+import { ROUTES } from "../../constants/routes"; // Route path constants, used for the "View" link below
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
 
 // How many returns to show per page
@@ -78,16 +80,21 @@ const PreviousReturns = () => {
             <thead>
               {/* Header row — soft gradient tint instead of a flat gray, ties into the page's brand color */}
               <tr className="border-b border-gray-100 bg-linear-to-r from-primary-50/60 to-transparent">
-                {["ID", "Order ID", "Reason", "Status", "Filed On"].map(
-                  (col) => (
-                    <th
-                      key={col}
-                      className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
-                  ),
-                )}
+                {[
+                  "ID",
+                  "Order ID",
+                  "Reason",
+                  "Status",
+                  "Filed On",
+                  "Action",
+                ].map((col) => (
+                  <th
+                    key={col}
+                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {col}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -127,6 +134,16 @@ const PreviousReturns = () => {
                   {/* Filed-on date */}
                   <td className="px-5 py-4 text-gray-400 whitespace-nowrap">
                     {formatDate(ret.created_at)}
+                  </td>
+
+                  {/* View link — navigates to the Return Detail page (API 66) for this specific return */}
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <Link
+                      to={ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", ret.id)}
+                      className="text-sm text-primary font-semibold hover:underline"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

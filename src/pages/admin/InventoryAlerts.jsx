@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // useState — local state for the active tab, filters, search, and page
 // useEffect — resets the current page back to 1 whenever a filter changes
+// useRef — points at the tabs/table section so "Review All" can
+// smooth-scroll down to it
 
 import { useNavigate } from "react-router-dom";
 // useNavigate — client-side navigation for "Restock" and "Create New"
@@ -9,8 +11,6 @@ import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches server data automatically
 
 import {
-  AiOutlinePlus,
-  // "Create New" button icon
   AiOutlineDownload,
   // "Export Report" button icon
   AiOutlineSearch,
@@ -76,8 +76,12 @@ const InventoryAlerts = () => {
   const navigate = useNavigate();
   // navigate — used by the Restock and Create New buttons
 
-  const [activeTab, setActiveTab] = useState("");
-  // activeTab — which STATUS_TABS key is currently selected ("" = All)
+  const [activeTabs, setActiveTabs] = useState([]);
+  // activeTabs — an ARRAY of currently selected status filters
+  // (out_of_stock / low_stock / healthy). Multiple can be selected at
+  // once — e.g. selecting BOTH "Out of Stock" and "Low Stock" shows
+  // products matching EITHER one, combined together. An empty array
+  // means "All" — no status filtering at all.
 
   const [categoryId, setCategoryId] = useState("");
   // categoryId — currently selected category filter ("" = All Categories)
@@ -90,6 +94,10 @@ const InventoryAlerts = () => {
 
   const [isExporting, setIsExporting] = useState(false);
   // isExporting — true while the CSV export download is in progress
+
+  const tableSectionRef = useRef(null);
+  // tableSectionRef — points at the tabs/filter/table section below;
+  // "Review All" in the alert banner scrolls down to this element
 
   const debouncedSearch = useDebounce(search, 400);
   // Waits 400ms after the admin stops typing before actually filtering
@@ -157,12 +165,22 @@ const InventoryAlerts = () => {
     queryFn: fetchAllProducts,
   });
 
+  // getProductStatus — resolves a product down to exactly one of the
+  // three status keys used by the tabs, using the REAL
+  // alertsByProductId map built above
+  const getProductStatus = (product) => {
+    const alert = alertsByProductId[product.id];
+    if (!alert) return "healthy";
+    return alert.stock === 0 ? "out_of_stock" : "low_stock";
+  };
+
   // --------------------------------------------------
-  // CLIENT-SIDE FILTERING — search, category, AND status tab are all
+  // CLIENT-SIDE FILTERING — search, category, AND status tabs are all
   // applied together, in one pass, over the COMPLETE product list.
-  // This is what fixes the reported bug: whichever tab is active now
-  // always reflects the real, full set of matching products across
-  // the ENTIRE catalog, not just whatever page happened to be loaded.
+  // Status filtering is now MULTI-SELECT: a product passes if its
+  // status is included ANYWHERE in the activeTabs array, so selecting
+  // both "Out of Stock" and "Low Stock" shows both groups together,
+  // collectively — not just whichever one was clicked last.
   // --------------------------------------------------
   const filteredProducts = allProducts.filter((product) => {
     // Search filter — matches against product name or SKU,
@@ -180,23 +198,14 @@ const InventoryAlerts = () => {
       return false;
     }
 
-    // Status tab filter — uses the REAL alertsByProductId map built
-    // above to determine each product's true stock status
-    if (activeTab === "out_of_stock") {
-      return alertsByProductId[product.id]?.stock === 0;
-    }
-    if (activeTab === "low_stock") {
-      return (
-        !!alertsByProductId[product.id] &&
-        alertsByProductId[product.id].stock > 0
-      );
-    }
-    if (activeTab === "healthy") {
-      return !alertsByProductId[product.id];
+    // Status tabs filter — empty activeTabs means "All" (no status
+    // filtering at all). Otherwise the product must match ONE of the
+    // selected tab keys — this is what makes multiple tabs combine
+    // collectively instead of only the last click taking effect.
+    if (activeTabs.length > 0) {
+      return activeTabs.includes(getProductStatus(product));
     }
 
-    // "All" tab (activeTab === "") — no status filtering, only
-    // whatever search/category filters above already applied
     return true;
   });
 
@@ -221,7 +230,7 @@ const InventoryAlerts = () => {
   // list would either show nothing or the wrong rows
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, categoryId, activeTab]);
+  }, [debouncedSearch, categoryId, activeTabs]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -346,8 +355,7 @@ const InventoryAlerts = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Shared gradient PageHeader — matches every other admin screen.
-          Export + Create New buttons live inside the header's `actions`
-          slot, stacking responsively on narrow screens. */}
+          Export Report button lives inside the header's `actions` slot. */}
       <PageHeader
         icon={<AiOutlineWarning />}
         // Same icon already used for "Inventory Alerts" in the sidebar
@@ -363,14 +371,6 @@ const InventoryAlerts = () => {
             >
               Export Report
             </Button>
-            <Button
-              variant="primary"
-              leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-              onClick={() => navigate(ROUTES.ADMIN_PRODUCT_ADD)}
-              className="w-full sm:w-auto"
-            >
-              Create New
-            </Button>
           </div>
         }
       />
@@ -378,30 +378,83 @@ const InventoryAlerts = () => {
       <InventoryAlertBanner
         outOfStockCount={outOfStockCount}
         lowStockCount={lowStockCount}
-        onReviewAll={() => setActiveTab("out_of_stock")}
+        onReviewAll={() => {
+          // Selects BOTH the "Out of Stock" and "Low Stock" tabs
+          // together (multi-select), so the table below shows every
+          // product that needs attention and both tabs are highlighted
+          setActiveTabs(["out_of_stock", "low_stock"]);
+          // Smooth-scrolls the page down to the tabs/table section so
+          // the admin immediately sees the filtered results, instead
+          // of the filter silently changing off-screen above
+          tableSectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }}
       />
 
       <InventoryStatsCards />
 
-      {/* Tabs + search + category filter */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      {/* Tabs + search + category filter — ref target for the
+          "Review All" smooth-scroll above */}
+      <div
+        ref={tableSectionRef}
+        className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
+      >
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
           {/* overflow-x-auto + scrollbar-hide — lets the tab row
               scroll horizontally on narrow phone screens instead of
               wrapping awkwardly or overflowing the card */}
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.key || "all"}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors shrink-0 ${
-                activeTab === tab.key
-                  ? "bg-primary-50 text-primary"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {STATUS_TABS.map((tab) => {
+            // "All" (tab.key === "") is active ONLY when truly nothing
+            // is filtered — no status tabs selected, no search text,
+            // and no category picked. If the admin has typed a search
+            // or picked a category, "All" should NOT stay highlighted
+            // even though no status tab is selected, since a filter is
+            // still in effect. Every other tab is active when its key
+            // is present anywhere in the activeTabs array — this is
+            // what lets multiple tabs be highlighted and filtered
+            // together.
+            const isActive =
+              tab.key === ""
+                ? activeTabs.length === 0 && !search && !categoryId
+                : activeTabs.includes(tab.key);
+
+            return (
+              <button
+                key={tab.key || "all"}
+                onClick={() => {
+                  if (tab.key === "") {
+                    // Clicking "All" is now a FULL reset — clears the
+                    // status tab selection, the search text, AND the
+                    // category dropdown, so "All" always means "show
+                    // everything, no filters active" instead of only
+                    // resetting the status tabs while search/category
+                    // filters stayed applied underneath
+                    setActiveTabs([]);
+                    setSearch("");
+                    setCategoryId("");
+                    return;
+                  }
+                  // Any other tab TOGGLES in/out of the selection —
+                  // clicking a second tab adds it alongside the first
+                  // instead of replacing it, so both filter together
+                  setActiveTabs((prev) =>
+                    prev.includes(tab.key)
+                      ? prev.filter((key) => key !== tab.key)
+                      : [...prev, tab.key],
+                  );
+                }}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors shrink-0 ${
+                  isActive
+                    ? "bg-primary-50 text-primary"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">

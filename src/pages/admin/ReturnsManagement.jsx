@@ -398,37 +398,42 @@ const ReturnDetailModal = ({
                 rounded
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex items-center gap-2.5 bg-gray-50 rounded-lg px-3 py-2.5">
-                <AiOutlineShoppingCart className="w-4 h-4 text-gray-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-400">Order</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">
-                    {returnItem.order_number}
-                  </p>
-                </div>
+            {/* Compact stacked list instead of a 2-column grid — each
+                row is FULL width and label + value sit on the SAME
+                line, so the order number always has enough room and
+                never wraps onto a second line. Rows are also shorter
+                (py-2 instead of py-2.5, single line instead of a small
+                label line + a separate bold value line), so this whole
+                block takes up noticeably less vertical space too. */}
+            <div className="flex flex-col rounded-lg border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+              <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
+                <AiOutlineShoppingCart className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span className="text-xs text-gray-400 shrink-0">Order</span>
+                <span className="ml-auto text-sm font-semibold text-gray-900 whitespace-nowrap">
+                  {returnItem.order_number}
+                </span>
               </div>
-              <div className="flex items-center gap-2.5 bg-gray-50 rounded-lg px-3 py-2.5">
-                <AiOutlineCalendar className="w-4 h-4 text-gray-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-400">Requested</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {formatDate(returnItem.created_at)}
-                  </p>
-                </div>
+              <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
+                <AiOutlineCalendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span className="text-xs text-gray-400 shrink-0">
+                  Requested
+                </span>
+                <span className="ml-auto text-sm font-semibold text-gray-900 whitespace-nowrap">
+                  {formatDate(returnItem.created_at)}
+                </span>
               </div>
               {/* resolved_at only exists once an admin has actually made a
                   decision — hidden entirely for still-pending returns
                   instead of showing a blank/misleading date. */}
               {returnItem.resolved_at && (
-                <div className="flex items-center gap-2.5 bg-gray-50 rounded-lg px-3 py-2.5 sm:col-span-2">
-                  <AiOutlineCheckCircle className="w-4 h-4 text-gray-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-gray-400">Resolved</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatDate(returnItem.resolved_at)}
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
+                  <AiOutlineCheckCircle className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="text-xs text-gray-400 shrink-0">
+                    Resolved
+                  </span>
+                  <span className="ml-auto text-sm font-semibold text-gray-900 whitespace-nowrap">
+                    {formatDate(returnItem.resolved_at)}
+                  </span>
                 </div>
               )}
             </div>

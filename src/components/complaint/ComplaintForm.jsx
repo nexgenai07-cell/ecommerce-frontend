@@ -34,13 +34,19 @@ const complaintSchema = z.object({
   type: z.string().min(1, "Please select a complaint type"),
   // "order" is an optional string field (user may or may not link a related order)
   order: z.string().optional(),
-  // "subject" must be a string, required, with a minimum length of 1 and a maximum length of 200 characters
+  // "subject" must be a string, required, with a minimum length of 1 and a maximum length of 200 characters.
+  // .trim() first so a subject of only spaces is correctly rejected.
   subject: z
     .string()
+    .trim()
     .min(1, "Subject is required")
     .max(200, "Subject too long"),
   // "message" must be a string with a minimum length of 10 characters to ensure enough detail is provided
-  message: z.string().min(10, "Please provide more detail (min 10 characters)"),
+  message: z
+    .string()
+    .trim()
+    .min(10, "Please provide more detail (min 10 characters)")
+    .max(2000, "Message is too long (max 2000 characters)"),
   // "priority" must be exactly one of these two allowed enum values
   priority: z.enum(["normal", "urgent"]),
 });
@@ -80,6 +86,17 @@ const ComplaintForm = ({ onSuccess }) => {
   } = useForm({
     // Tell react-hook-form to validate using our Zod schema via the zodResolver adapter
     resolver: zodResolver(complaintSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     // Set the initial/default values for each form field when the component first mounts
     defaultValues: {
       type: "",

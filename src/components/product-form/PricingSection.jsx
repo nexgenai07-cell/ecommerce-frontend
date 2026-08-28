@@ -30,6 +30,7 @@ const PricingSection = ({ register, errors, watch }) => {
           type="number"
           step="0.01"
           min="0"
+          placeholder="e.g. 2500"
           leftIcon={<span className="text-gray-400">Rs.</span>}
           {...register("original_price")}
           error={errors.original_price?.message}
@@ -41,6 +42,7 @@ const PricingSection = ({ register, errors, watch }) => {
             type="number"
             step="0.01"
             min="0"
+            placeholder="e.g. 1999"
             required
             leftIcon={<span className="text-gray-400">Rs.</span>}
             {...register("price")}

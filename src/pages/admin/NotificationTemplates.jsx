@@ -40,6 +40,10 @@ const NotificationTemplates = () => {
   const [message, setMessage] = useState("");
   const [type, setType] = useState("system");
   const [sentVia, setSentVia] = useState("in_app");
+  // Same "onTouched"-style pattern as the rest of the project: a field's
+  // error only shows once the admin has left it (blur) or tried to send.
+  const [touched, setTouched] = useState({ title: false, message: false });
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const debouncedSearch = useDebounce(customerSearch, 400);
 
@@ -79,6 +83,27 @@ const NotificationTemplates = () => {
 
   const canSend =
     title.trim() && message.trim() && (isBroadcast || selectedCustomer);
+
+  const titleError = !title.trim()
+    ? "Title is required"
+    : title.trim().length > 100
+      ? "Title is too long (max 100 characters)"
+      : "";
+
+  const messageError = !message.trim()
+    ? "Message is required"
+    : message.trim().length > 500
+      ? "Message is too long (max 500 characters)"
+      : "";
+
+  const showTitleError = (touched.title || submitAttempted) && titleError;
+  const showMessageError = (touched.message || submitAttempted) && messageError;
+
+  const handleSend = () => {
+    setSubmitAttempted(true);
+    if (titleError || messageError || !canSend) return;
+    sendMutation.mutate();
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -159,20 +184,34 @@ const NotificationTemplates = () => {
             )}
           </div>
 
-          <Input
-            label="Title"
-            placeholder="Your order has shipped!"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <div className="flex flex-col gap-1">
+            <Input
+              label="Title"
+              placeholder="Your order has shipped!"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, title: true }))}
+              error={showTitleError ? titleError : undefined}
+            />
+            {showTitleError && (
+              <p className="text-xs text-danger">{titleError}</p>
+            )}
+          </div>
 
-          <Textarea
-            label="Message"
-            placeholder="Write the notification content..."
-            rows={5}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
+          <div className="flex flex-col gap-1">
+            <Textarea
+              label="Message"
+              placeholder="Write the notification content..."
+              rows={5}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, message: true }))}
+              error={showMessageError ? messageError : undefined}
+            />
+            {showMessageError && (
+              <p className="text-xs text-danger">{messageError}</p>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Select
@@ -192,9 +231,8 @@ const NotificationTemplates = () => {
           <Button
             variant="primary"
             leftIcon={<AiOutlineSend className="w-4 h-4" />}
-            onClick={() => sendMutation.mutate()}
+            onClick={handleSend}
             isLoading={sendMutation.isPending}
-            disabled={!canSend}
             className="self-end"
           >
             {isBroadcast ? "Broadcast to Everyone" : "Send Notification"}

@@ -1,9 +1,3 @@
-// Delivery Address Form Section
-// Address Line 1, City, Province, Postal Code
-// Update Address button
-// React Hook Form + Zod
-// Fully responsive
-
 // Import "useEffect" hook from React to run side effects (used to parse and pre-fill the address)
 import { useEffect } from "react";
 // Import "useForm" hook from react-hook-form to manage form state, validation, and submission
@@ -22,14 +16,31 @@ import { showSuccess, showError } from "../ui/Toast";
 // Validation schema
 // Define a zod object schema describing the validation rules for each address field
 const addressSchema = z.object({
-  // "address_line1" must be a non-empty string — shows this message if left blank
-  address_line1: z.string().min(1, "Address is required"),
+  // "address_line1" must be a non-empty string — shows this message if left blank.
+  // .trim() first so a field containing only spaces is correctly rejected
+  // instead of slipping through as a "non-empty" 1+ character string.
+  address_line1: z
+    .string()
+    .trim()
+    .min(1, "Address is required")
+    .min(5, "Please enter a complete address")
+    .max(150, "Address is too long"),
   // "city" must be a non-empty string — shows this message if left blank
-  city: z.string().min(1, "City is required"),
+  city: z
+    .string()
+    .trim()
+    .min(1, "City is required")
+    .max(60, "City name is too long")
+    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters"),
   // "province" must be a non-empty string — shows this message if left blank
-  province: z.string().min(1, "Province is required"),
-  // "postal_code" must be a non-empty string — shows this message if left blank
-  postal_code: z.string().min(1, "Postal code is required"),
+  province: z.string().trim().min(1, "Province is required"),
+  // "postal_code" must be a non-empty string — shows this message if left blank.
+  // Pakistani postal codes are 5 numeric digits.
+  postal_code: z
+    .string()
+    .trim()
+    .min(1, "Postal code is required")
+    .regex(/^\d{5}$/, "Postal code must be exactly 5 digits"),
 });
 
 // Pakistan provinces
@@ -59,6 +70,17 @@ const DeliveryAddressForm = ({ user }) => {
   } = useForm({
     // Connect zod schema validation to this form via the zodResolver
     resolver: zodResolver(addressSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     // Set the initial default values for all address fields to empty strings
     defaultValues: {
       address_line1: "",
@@ -176,7 +198,7 @@ const DeliveryAddressForm = ({ user }) => {
             {/* Text input for the city name, registered with react-hook-form under the "city" field key */}
             <input
               type="text"
-              placeholder="New York"
+              placeholder="Lahore"
               autoComplete="address-level2"
               {...register("city")}
               // Dynamically apply a red/danger border if there's a validation error on this field, otherwise use the default gray border
@@ -238,7 +260,9 @@ const DeliveryAddressForm = ({ user }) => {
             {/* Text input for the postal/zip code, registered with react-hook-form under the "postal_code" field key */}
             <input
               type="text"
-              placeholder="10001"
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="54000"
               autoComplete="postal-code"
               {...register("postal_code")}
               // Dynamically apply a red/danger border if there's a validation error on this field, otherwise use the default gray border

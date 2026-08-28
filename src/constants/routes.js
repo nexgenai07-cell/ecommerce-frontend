@@ -55,6 +55,7 @@ export const ROUTES = {
   ACCOUNT_WISHLIST: "/account/wishlist",
   ACCOUNT_PROFILE: "/account/profile",
   ACCOUNT_RETURNS: "/account/returns",
+  ACCOUNT_RETURN_DETAIL: "/account/returns/:id",
   ACCOUNT_COMPLAINTS: "/account/complaints",
   ACCOUNT_COMPLAINT_DETAIL: "/account/complaints/:id",
   ACCOUNT_NOTIFICATIONS: "/account/notifications",

@@ -1,11 +1,3 @@
-// Previous Complaints Table
-// ID, Type, Subject, Status badge, Date, View link
-// Pagination
-// Real API — getComplaints
-// This is the ONE section on the complaints page that keeps its own elevated card —
-// it's a genuinely separate history section, styled to match PreviousReturns.jsx
-// Fully responsive
-
 // Import React's useState hook for managing local component state (e.g., current pagination page)
 import { useState } from "react";
 // Import the useQuery hook from React Query for fetching and caching server data
@@ -159,15 +151,17 @@ const PreviousComplaints = () => {
             <thead>
               {/* Header row — soft gradient tint instead of a flat gray, ties into the page's brand color */}
               <tr className="border-b border-gray-100 bg-linear-to-r from-primary-50/60 to-transparent">
-                {/* Map over an array of column title strings to render one header cell per column (last one is empty for the "View" action column) */}
-                {["ID", "Type", "Subject", "Status", "Date", ""].map((col) => (
-                  <th
-                    key={col}
-                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-                  >
-                    {col}
-                  </th>
-                ))}
+                {/* Map over an array of column title strings to render one header cell per column (last one is the "View" action column) */}
+                {["ID", "Type", "Subject", "Status", "Date", "Action"].map(
+                  (col) => (
+                    <th
+                      key={col}
+                      className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                    >
+                      {col}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             {/* Table body section, with thin divider lines between each row */}

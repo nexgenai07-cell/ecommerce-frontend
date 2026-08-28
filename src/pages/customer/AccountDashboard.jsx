@@ -126,6 +126,9 @@ const AccountDashboard = () => {
         // real Network-tab responses (API 51), which only expose id, order, order_number,
         // reason, resolved_at, status, created_at. Using created_at as the filed-on date.
         expectedResolution: r.created_at,
+        // Route to this specific return's detail page (API 66) — uses the return's
+        // raw numeric id, not the "#TIC-" prefixed display id above.
+        linkTo: ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", r.id),
       })),
     // Map open (non-closed) complaints into the shared ticket shape
     ...complaints
@@ -149,6 +152,9 @@ const AccountDashboard = () => {
         // customer_name, message, order, order_number, resolved_by_name, response,
         // status, type, created_at. Using created_at as the filed-on date.
         expectedResolution: c.created_at,
+        // Route to this specific complaint's detail page (API 56) — uses the
+        // complaint's raw numeric id, not the "#CMP-" prefixed display id above.
+        linkTo: ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", c.id),
       })),
   ].sort(
     (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),

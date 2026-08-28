@@ -258,19 +258,22 @@ const ProductCard = ({
         {/* Dim overlay when out of stock */}
         {isOutOfStock && <div className="absolute inset-0 bg-white/40" />}
 
-        {/* Top-right action button — remove (X) in controlled mode, wishlist heart otherwise */}
+        {/* Top-right action button — remove (X) in controlled mode, wishlist heart otherwise.
+            Default state: a small white circle with a red ring and a red X, so it stays
+            subtle until noticed. On hover, the circle fills solid red and the X turns
+            white — a clear "this will delete" signal right before the click. */}
         {isControlledRemove ? (
           <button
             onClick={handleRemoveClick}
             aria-label="Remove from wishlist"
             className={cn(
-              "absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm shadow-sm border border-gray-100",
-              "flex items-center justify-center text-gray-400",
-              "hover:text-white hover:bg-danger hover:border-danger",
-              "transition-all duration-200 opacity-0 group-hover:opacity-100",
+              "absolute top-2 right-2 w-7 h-7 rounded-full bg-white border-2 border-danger shadow-sm",
+              "flex items-center justify-center text-danger",
+              "hover:bg-danger hover:text-white hover:scale-110 active:scale-95",
+              "transition-all duration-200",
             )}
           >
-            <AiOutlineClose className="w-4 h-4" />
+            <AiOutlineClose className="w-3.5 h-3.5" strokeWidth={1} />
           </button>
         ) : (
           <button

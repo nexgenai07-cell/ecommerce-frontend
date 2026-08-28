@@ -62,25 +62,54 @@ import formatPrice from "../../utils/formatPrice";
 // =============================================
 const checkoutSchema = z.object({
   // Contact
-  // Email field — must not be empty and must match a valid email format
-  email: z.string().min(1, "Email required").email("Invalid email"),
+  // Email field — must not be empty and must match a valid email format.
+  // .trim() strips accidental leading/trailing spaces (very common from
+  // copy-paste) before the format check runs.
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email required")
+    .email("Invalid email")
+    .max(255, "Email is too long"),
   // Phone field — must not be empty and must match Pakistani phone number pattern (+92 or 0 followed by 10 digits)
   phone: z
     .string()
+    .trim()
     .min(1, "Phone required")
     .regex(/^(\+92|0)[0-9]{10}$/, "Invalid Pakistani phone number"),
 
   // Address
   // Full name — required, and must be at least 3 characters long
-  fullName: z.string().min(1, "Full name required").min(3, "Min 3 characters"),
-  // Street address — simply required, no length restriction beyond non-empty
-  street: z.string().min(1, "Street address required"),
+  fullName: z
+    .string()
+    .trim()
+    .min(1, "Full name required")
+    .min(3, "Min 3 characters")
+    .max(50, "Name must be less than 50 characters"),
+  // Street address — required, with a sane minimum so a single character
+  // can't pass as a "complete" address
+  street: z
+    .string()
+    .trim()
+    .min(1, "Street address required")
+    .min(5, "Please enter a complete street address")
+    .max(150, "Address is too long"),
   // City — required field
-  city: z.string().min(1, "City required"),
+  city: z
+    .string()
+    .trim()
+    .min(1, "City required")
+    .max(60, "City name is too long")
+    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters"),
   // Province — required field
-  province: z.string().min(1, "Province required"),
-  // Postal code — required, and capped at a maximum of 10 characters
-  postalCode: z.string().min(1, "Postal code required").max(10),
+  province: z.string().trim().min(1, "Province required"),
+  // Postal code — required, numeric, and capped at a maximum of 10 characters
+  postalCode: z
+    .string()
+    .trim()
+    .min(1, "Postal code required")
+    .max(10)
+    .regex(/^\d+$/, "Postal code can only contain numbers"),
   // Optional checkbox to save this address for future use — not mandatory
   saveAddress: z.boolean().optional(),
 
@@ -123,6 +152,16 @@ const Checkout = () => {
   // A promise resolving to the Stripe instance, initialized with the
   // publishable_key returned by OUR backend — never hardcoded here
   const [stripePromise, setStripePromise] = useState(null);
+  // BUGFIX (checkout page showing Rs. 0 during payment step): once the order
+  // is placed, checkoutMutation clears the cart and invalidates the CART
+  // query so it refetches as empty. But the Order Summary sidebar below
+  // stays mounted through the payment step and was reading subtotal/
+  // discount/coupon straight off that same live `cart` — so the instant the
+  // cart came back empty, the sidebar collapsed to Rs. 0 while the customer
+  // was still looking at the Stripe payment form. We snapshot the values
+  // that actually matter right before the cart gets cleared, and use that
+  // frozen snapshot instead of the live cart once we're on the payment step.
+  const [orderSnapshot, setOrderSnapshot] = useState(null);
 
   // Login check
   // Side effect that runs whenever isAuthenticated or navigate changes
@@ -166,6 +205,17 @@ const Checkout = () => {
     formState: { errors }, // Object containing validation error messages for each field
   } = useForm({
     resolver: zodResolver(checkoutSchema), // Connects the Zod schema defined above as the validation logic for this form
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       // Pre-filling form fields with existing user data where available, otherwise empty strings/defaults
       email: user?.email || "",
@@ -193,6 +243,15 @@ const Checkout = () => {
   const discount = parseFloat(cart?.discount_amount || 0);
   // Calculating the final total: subtotal minus discount plus shipping cost
   const total = subtotal - discount + shippingCost;
+
+  // Once we're on the payment step, show the frozen orderSnapshot instead of
+  // the live (now-cleared) cart, so the sidebar keeps reflecting what the
+  // customer actually agreed to pay while Stripe collects payment.
+  const displayCart =
+    step === "payment" && orderSnapshot ? orderSnapshot : cart;
+  const displaySubtotal = parseFloat(displayCart?.subtotal || 0);
+  const displayDiscount = parseFloat(displayCart?.discount_amount || 0);
+  const displayTotal = displaySubtotal - displayDiscount + shippingCost;
 
   // =============================================
   // STEP 1 — CREATE PAYMENT INTENT (API 69)
@@ -229,13 +288,22 @@ const Checkout = () => {
   // =============================================
   // Mutation hook to handle the actual order placement API call
   const checkoutMutation = useMutation({
-    // Function that transforms form data into the API's expected payload format and sends the request
+    // Function that transforms form data into the API's expected payload format and sends the request.
+    // Per API 55 (Checkout) in the docs, the backend wants shipping_address,
+    // city, postal_code, and phone as SEPARATE fields — not one combined
+    // string. Sending everything squashed into shipping_address means the
+    // backend never receives a `city` value, and shipping_address + city are
+    // the two fields it 400s on if both are missing. That was the checkout
+    // failure. coupon_code also isn't part of this endpoint's accepted
+    // fields at all — the coupon is already applied to the cart earlier
+    // (API 50), so it doesn't need to be resent here.
     mutationFn: (data) =>
       checkout({
-        // Combining individual address fields into a single formatted shipping address string
-        shipping_address: `${data.fullName}, ${data.street}, ${data.city}, ${data.province} ${data.postalCode}`,
-        // Passing the applied coupon code if one exists on the cart, otherwise undefined
-        coupon_code: cart?.coupon?.code || undefined,
+        shipping_address: `${data.fullName}, ${data.street}`,
+        city: data.city,
+        postal_code: data.postalCode,
+        phone: data.phone,
+        save_address: !!data.saveAddress,
         notes: "", // Empty notes field sent by default — no order notes feature implemented yet
       }),
 
@@ -243,6 +311,15 @@ const Checkout = () => {
     onSuccess: (response) => {
       const newOrderNumber = response.data.order_number;
       setOrderNumber(newOrderNumber);
+
+      // Freeze the order summary numbers NOW, before the cart gets cleared
+      // and refetched below — see the orderSnapshot comment above.
+      setOrderSnapshot({
+        items: cartItems,
+        subtotal: cart?.subtotal,
+        discount_amount: cart?.discount_amount,
+        coupon: cart?.coupon,
+      });
 
       // Redux cart clear
       // Order create hote hi backend cart already clear kar chuka hai — Redux
@@ -427,8 +504,8 @@ const Checkout = () => {
           {/* ===== RIGHT — Order Summary ===== */}
           <div className="hidden lg:block lg:col-span-1">
             <CheckoutOrderSummary
-              cart={cart}
-              total={total}
+              cart={displayCart}
+              total={displayTotal}
               shippingCost={shippingCost}
               onPlaceOrder={handleSubmit(onSubmit)}
               isPlacingOrder={isPlacingOrder}

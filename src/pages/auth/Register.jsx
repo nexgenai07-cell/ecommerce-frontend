@@ -34,15 +34,20 @@ const registerSchema = z
   .object({
     name: z
       .string()
+      .trim()
       .min(1, "Full name is required")
       .min(3, "Name must be at least 3 characters")
-      .max(50, "Name must be less than 50 characters"),
+      .max(50, "Name must be less than 50 characters")
+      .regex(/^[A-Za-z\s'-]+$/, "Name can only contain letters"),
     email: z
       .string()
+      .trim()
       .min(1, "Email is required")
-      .email("Please enter a valid email address"),
+      .email("Please enter a valid email address")
+      .max(255, "Email is too long"),
     phone: z
       .string()
+      .trim()
       .min(1, "Phone number is required")
       .regex(
         /^(\+92|0)[0-9]{10}$/,
@@ -50,12 +55,18 @@ const registerSchema = z
       ),
     address: z
       .string()
+      .trim()
       .min(1, "Address is required")
-      .min(10, "Please enter a complete address"),
+      .min(10, "Please enter a complete address")
+      .max(150, "Address is too long"),
+    // NOTE: no .trim() on password fields — a leading/trailing space is a
+    // valid password character, and stripping it here would send a
+    // different value than what the user actually typed.
     password: z
       .string()
       .min(1, "Password is required")
       .min(8, "Password must be at least 8 characters")
+      .max(128, "Password is too long")
       .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
       .regex(/[a-z]/, "Password must contain at least one lowercase letter")
       .regex(/[0-9]/, "Password must contain at least one number")
@@ -117,6 +128,17 @@ const Register = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(registerSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       name: "",
       email: "",
@@ -413,9 +435,21 @@ const Register = () => {
                 <input
                   id="phone"
                   type="tel"
-                  placeholder="+1 (555) 000-0000"
+                  inputMode="tel"
+                  maxLength={13}
+                  placeholder="+92 300 1234567"
                   autoComplete="tel"
                   {...register("phone")}
+                  onChange={(e) => {
+                    // Block anything that isn't a digit or a leading "+" --
+                    // letters, commas, spaces typed mid-number, etc. are
+                    // stripped out before they ever reach the field, so
+                    // the user physically cannot type an invalid character
+                    e.target.value = e.target.value
+                      .replace(/[^\d+]/g, "")
+                      .replace(/(?!^)\+/g, "");
+                    register("phone").onChange(e);
+                  }}
                   className={`w-full px-4 py-2.5 text-sm rounded-lg border bg-white placeholder:text-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-150 ${errors.phone ? "border-danger focus:ring-danger" : "border-gray-200"}`}
                 />
                 {errors.phone && (

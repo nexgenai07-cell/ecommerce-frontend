@@ -15,8 +15,10 @@ import { ROUTES } from "../../constants/routes";
 const forgotPasswordSchema = z.object({
   email: z
     .string()
+    .trim()
     .min(1, "Email is required")
-    .email("Please enter a valid email address"),
+    .email("Please enter a valid email address")
+    .max(255, "Email is too long"),
 });
 
 const ForgotPassword = () => {
@@ -29,6 +31,17 @@ const ForgotPassword = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(forgotPasswordSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: { email: "" },
   });
 

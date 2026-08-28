@@ -27,23 +27,78 @@ import InventorySection from "../../components/product-form/InventorySection";
 import ProductImagesSection from "../../components/product-form/ProductImagesSection";
 import LivePreviewCard from "../../components/product-form/LivePreviewCard";
 
-const productSchema = z.object({
-  name: z.string().min(1, "Product name is required").max(200),
-  description: z.string().optional(),
-  category_id: z.string().min(1, "Please select a category"),
-  price: z
-    .string()
-    .min(1, "Sale price is required")
-    .refine((val) => parseFloat(val) > 0, "Sale price must be greater than 0"),
-  original_price: z.string().optional(),
-  stock: z
-    .string()
-    .min(1, "Quantity is required")
-    .refine((val) => parseInt(val, 10) >= 0, "Quantity cannot be negative"),
-  low_stock_threshold: z.string().optional(),
-  sku: z.string().optional(),
-  is_active: z.boolean(),
-});
+const productSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Product name is required")
+      .max(200, "Product name is too long"),
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Description is too long")
+      .optional(),
+    category_id: z.string().min(1, "Please select a category"),
+    price: z
+      .string()
+      .trim()
+      .min(1, "Sale price is required")
+      .refine(
+        (val) => !Number.isNaN(parseFloat(val)),
+        "Sale price must be a valid number",
+      )
+      .refine(
+        (val) => parseFloat(val) > 0,
+        "Sale price must be greater than 0",
+      ),
+    original_price: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (val) => !val || !Number.isNaN(parseFloat(val)),
+        "Original price must be a valid number",
+      )
+      .refine(
+        (val) => !val || parseFloat(val) > 0,
+        "Original price must be greater than 0",
+      ),
+    stock: z
+      .string()
+      .trim()
+      .min(1, "Quantity is required")
+      .refine((val) => /^\d+$/.test(val), "Quantity must be a whole number")
+      .refine((val) => parseInt(val, 10) >= 0, "Quantity cannot be negative"),
+    low_stock_threshold: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (val) => !val || /^\d+$/.test(val),
+        "Low stock threshold must be a whole number",
+      ),
+    sku: z.string().trim().optional(),
+    is_active: z.boolean(),
+  })
+  // Cross-field check: if an "original price" (compare-at / strike-through
+  // price) is given, it should be higher than the actual sale price —
+  // otherwise the "discount" shown to customers on the storefront would
+  // be negative or zero, which is almost always a data-entry mistake.
+  .superRefine((data, ctx) => {
+    if (
+      data.original_price &&
+      !Number.isNaN(parseFloat(data.original_price)) &&
+      !Number.isNaN(parseFloat(data.price)) &&
+      parseFloat(data.original_price) <= parseFloat(data.price)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Original price must be greater than the sale price",
+        path: ["original_price"],
+      });
+    }
+  });
 
 // Reads the backend's validation error for the sku field specifically,
 // out of a DRF-style error response — { "sku": ["already exists..."] }
@@ -73,6 +128,17 @@ const ProductAdd = () => {
     formState: { errors, dirtyFields },
   } = useForm({
     resolver: zodResolver(productSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       name: "",
       description: "",

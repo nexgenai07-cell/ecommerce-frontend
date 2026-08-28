@@ -1,3 +1,4 @@
+import { useState } from "react"; // useState — controls the "Are you sure?" logout confirmation modal
 import { Link, useLocation, useNavigate } from "react-router-dom"; // Import Link for navigation, useLocation to get current path, useNavigate to redirect
 import { useQuery } from "@tanstack/react-query"; // Import hook to fetch and cache data from APIs
 import {
@@ -23,6 +24,7 @@ import { getNotifications } from "../../api/notifications.api"; // Import the AP
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on notifications endpoint)
 import { getMyProfile } from "../../api/auth.api"; // Import the API function that fetches the current user's profile
 import Avatar from "../ui/Avatar"; // Import Avatar component to display the user's profile picture
+import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
 
 // =============================================
 // SIDEBAR NAV ITEMS
@@ -172,6 +174,10 @@ const CustomerAccountSidebar = () => {
   // =============================================
   // LOGOUT HANDLER
   // =============================================
+  // Whether the "Are you sure?" confirmation modal is currently open —
+  // the actual logout only runs after the customer confirms inside it.
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
   const handleLogout = async () => {
     // Async function to handle the logout process
     try {
@@ -180,11 +186,15 @@ const CustomerAccountSidebar = () => {
     } catch (error) {
       // Even if the backend call fails, still log out locally
     } finally {
+      setIsLogoutConfirmOpen(false); // Close the confirmation modal
       logoutUser(); // Clear the user's auth state locally (Redux)
       showSuccess("Logged out successfully"); // Show a success toast
       navigate(ROUTES.HOME); // Redirect to the home page
     }
   };
+
+  // Opens the confirmation modal — wired to the Logout button below
+  const requestLogout = () => setIsLogoutConfirmOpen(true);
 
   // Check if a route is the currently active page
   const isActive = (route) => location.pathname === route; // Returns true if the current URL path matches this route
@@ -342,7 +352,7 @@ const CustomerAccountSidebar = () => {
           {" "}
           {/* Footer section with top border and padding */}
           <button
-            onClick={handleLogout} // Trigger the logout process when clicked
+            onClick={requestLogout} // Opens the "Are you sure?" confirmation modal
             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-danger hover:bg-danger-light/10 transition-colors" // Full-width red-colored button, lighter red background on hover
           >
             <AiOutlineLogout className="w-5 h-5" /> {/* Logout icon */}
@@ -386,6 +396,17 @@ const CustomerAccountSidebar = () => {
       {/* Spacer to compensate for the mobile bottom tab bar's height */}
       <div className="md:hidden h-16" />{" "}
       {/* Empty div with fixed height, only shown on mobile, to prevent content from being hidden behind the fixed tab bar */}
+      {/* "Are you sure?" confirmation — shown before logout actually runs */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirm={handleLogout}
+        title="Are you sure?"
+        message="You'll need to log in again to access your account."
+        confirmLabel="Log Out"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </>
   );
 };

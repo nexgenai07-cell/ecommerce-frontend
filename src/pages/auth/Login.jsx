@@ -25,12 +25,18 @@ import { ROUTES } from "../../constants/routes";
 const loginSchema = z.object({
   email: z
     .string()
+    .trim()
     .min(1, "Email is required")
-    .email("Please enter a valid email address"),
+    .email("Please enter a valid email address")
+    .max(255, "Email is too long"),
+  // NOTE: no .trim() on password — a leading/trailing space is a valid
+  // password character, and stripping it here would send a different
+  // value than what the user actually typed (and than what's on record).
   password: z
     .string()
     .min(1, "Password is required")
-    .min(6, "Password must be at least 6 characters"),
+    .min(6, "Password must be at least 6 characters")
+    .max(128, "Password is too long"),
   rememberMe: z.boolean().optional(),
 });
 
@@ -42,22 +48,19 @@ const Login = () => {
   const registeredEmail = location.state?.registeredEmail;
 
   // ----------------------------------------------------------------
-  // SAFE REDIRECT TARGET — always land on the CUSTOMER portal
+  // SAFE REDIRECT TARGET — customer accounts only
   // ----------------------------------------------------------------
-  // "from" above is whatever page originally redirected the person here
-  // (e.g. AdminProtectedRoute sends an unauthenticated visitor who typed
-  // an admin URL to /login and remembers that admin URL in state.from).
-  // Per the new single-login-page rule, EVERY successful login — admin
-  // or customer — must land on the customer-facing site first. An admin
-  // only reaches the admin panel afterwards by clicking "Go to Admin
-  // Portal" from the navbar avatar menu, never automatically. So if the
-  // remembered "from" path starts with "/admin", we deliberately throw
-  // it away and send the person to the customer homepage instead; any
-  // other "from" (e.g. /checkout) is still honoured normally, since
-  // that is a normal customer-side deep link with no admin implications.
+  // "from" is the page that redirected here (e.g. ProtectedRoute
+  // remembers /checkout). Falls back to home if it points to /admin.
   const safeFrom = from.startsWith("/admin") ? ROUTES.HOME : from;
 
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, role } = useAuth();
+
+  // Post-login destination by role: admins go to the admin dashboard,
+  // customers go to safeFrom. Keeps admins off the customer portal,
+  // matching the CustomerOnlyRoute guard in App.jsx.
+  const getPostLoginDestination = (userRole) =>
+    userRole === "admin" ? ROUTES.ADMIN_DASHBOARD : safeFrom;
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -102,6 +105,17 @@ const Login = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(loginSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       email: "",
       password: "",
@@ -122,16 +136,12 @@ const Login = () => {
   }, [setValue, registeredEmail]);
 
   useEffect(() => {
-    // Regardless of role, a person who is already logged in has no
-    // business sitting on the login page — send them onward. Both
-    // customer AND admin accounts go to safeFrom (customer portal by
-    // default), never straight to the admin dashboard. An admin can
-    // always reach the admin panel afterwards via the navbar's
-    // "Go to Admin Portal" button.
+    // Already logged in — redirect away from the login page.
     if (isAuthenticated) {
-      navigate(safeFrom, { replace: true });
+      navigate(getPostLoginDestination(role), { replace: true });
     }
-  }, [isAuthenticated, navigate, safeFrom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, role, navigate, safeFrom]);
 
   // Shared success handler — used both by a normal (no-2FA) login AND by the
   // 2FA verify step (API 10), since both ultimately return { user, tokens }.
@@ -145,13 +155,7 @@ const Login = () => {
     login({ user, tokens });
     showSuccess(`Welcome back, ${user.name}!`);
 
-    // Single-login-page rule: EVERY successful login lands on the
-    // customer portal (safeFrom), whether this account is "customer"
-    // or "admin". We deliberately do NOT branch on user.role here and
-    // send admins to ROUTES.ADMIN_DASHBOARD — an admin only reaches the
-    // admin panel by clicking "Go to Admin Portal" in the navbar avatar
-    // menu after landing here, never automatically on login.
-    navigate(safeFrom, { replace: true });
+    navigate(getPostLoginDestination(user.role), { replace: true });
   };
 
   // =============================================

@@ -26,9 +26,10 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const categorySchema = z.object({
   name: z
     .string()
+    .trim()
     .min(1, "Category name is required")
     .max(100, "Category name is too long"),
-  description: z.string().optional(),
+  description: z.string().trim().max(500, "Description is too long").optional(),
 });
 
 const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
@@ -75,6 +76,17 @@ const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(categorySchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       name: activeCategory?.name || "",
       description: activeCategory?.description || "",

@@ -1,4 +1,5 @@
 import { useState } from "react"; // Local pagination state — which page of tickets is currently visible
+import { Link } from "react-router-dom"; // Navigates to the return/complaint detail page when "View" is clicked
 import formatDate from "../../utils/formatDate"; // Converts an ISO date string into a readable format e.g. "Jun 29, 2026"
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
 import Pagination from "../ui/Pagination"; // Reusable prev/next + page-number control — same component used on OrderHistory/NotificationHistory
@@ -80,16 +81,21 @@ const ActiveTickets = ({ tickets }) => {
                     whitespace-nowrap prevents column labels from wrapping onto two lines
                     "Reference" replaces the old "Order ID" label — see the reference
                     cell comment below for why */}
-                {["ID", "Type", "Reference", "Status", "Filed On"].map(
-                  (col) => (
-                    <th
-                      key={col}
-                      className="text-left px-5 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
-                  ),
-                )}
+                {[
+                  "ID",
+                  "Type",
+                  "Reference",
+                  "Status",
+                  "Filed On",
+                  "Action",
+                ].map((col) => (
+                  <th
+                    key={col}
+                    className="text-left px-5 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {col}
+                  </th>
+                ))}
               </tr>
             </thead>
 
@@ -135,6 +141,19 @@ const ActiveTickets = ({ tickets }) => {
                   <td className="px-5 py-4 text-gray-400">
                     {formatDate(ticket.expectedResolution)}{" "}
                     {/* e.g. "Jul 5, 2026" */}
+                  </td>
+
+                  {/* View link — navigates straight to the underlying return's
+                      or complaint's own detail page, using the linkTo built
+                      for this ticket in AccountDashboard.jsx (it already knows
+                      whether this row is a return or a complaint). */}
+                  <td className="px-5 py-4">
+                    <Link
+                      to={ticket.linkTo}
+                      className="text-sm text-primary font-semibold hover:underline"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

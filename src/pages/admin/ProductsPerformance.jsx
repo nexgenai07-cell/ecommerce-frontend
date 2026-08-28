@@ -1,32 +1,17 @@
-// useState -> React hook, used here to hold the currently selected
-// start date and end date for the whole page (both the stat cards and
-// the tables below all read from these same two values)
 import { useState } from "react";
 
 // useQuery -> TanStack Query hook, fetches + caches the Best Sellers
 // data from the backend so it isn't refetched on every re-render
 import { useQuery } from "@tanstack/react-query";
 
-// AiOutlinePlus -> the small "+" icon shown inside the "Add Product" button
 // AiOutlineTrophy -> the trophy icon shown inside the page header's
 // gradient badge — the SAME icon already used for this page's link in
 // the admin sidebar ("Product Performance"), kept consistent here
-import { AiOutlinePlus, AiOutlineTrophy } from "react-icons/ai";
-
-// useNavigate -> React Router hook, lets the "Add Product" button push
-// the browser to the Add Product page when clicked
-import { useNavigate } from "react-router-dom";
+import { AiOutlineTrophy } from "react-icons/ai";
 
 // getBestSellers -> the single API call this whole page is built on;
 // returns products ranked by sales for the chosen date range
 import { getBestSellers } from "../../api/analytics.api";
-
-// ROUTES -> central place where every URL path string lives, so pages
-// never hardcode a raw path like "/admin/products/add" directly
-import { ROUTES } from "../../constants/routes";
-
-// Button -> shared button component used everywhere in the admin panel
-import Button from "../../components/ui/Button";
 
 // Input -> shared input component, used here twice for the two date pickers
 import Input from "../../components/ui/Input";
@@ -73,10 +58,6 @@ const getDefaultRange = () => {
 // ProductsPerformance -> the main page component rendered at
 // ROUTES.ADMIN_ANALYTICS_PRODUCTS ("/admin/analytics/products")
 const ProductsPerformance = () => {
-  const navigate = useNavigate();
-  // navigate -> function used by the "Add Product" button to jump to
-  // the Add Product page when clicked
-
   const defaultRange = getDefaultRange();
   // defaultRange -> computed once per render; used only to seed the
   // two pieces of state below on first mount
@@ -117,11 +98,11 @@ const ProductsPerformance = () => {
       {/* ================================================================
           PAGE HEADER — shared gradient icon + title component, matching
           every other admin screen (Dashboard, Orders, Revenue Report...).
-          The date-range pickers and the "Add Product" button are passed
-          in as `actions` so they render on the right side of the header
-          (and wrap below the title on narrow screens, since PageHeader's
-          outer row is flex-wrap) — exactly the same layout pattern
-          already used on the Revenue Report page.
+          The date-range pickers are passed in as `actions` so they
+          render on the right side of the header (and wrap below the
+          title on narrow screens, since PageHeader's outer row is
+          flex-wrap) — exactly the same layout pattern already used on
+          the Revenue Report page.
           ================================================================ */}
       <PageHeader
         icon={<AiOutlineTrophy />}
@@ -155,22 +136,6 @@ const ProductsPerformance = () => {
                 aria-label="End date"
               />
             </div>
-
-            {/* "Add Product" button — navigates to the Add Product
-                form. size="sm" is the fix requested for this button:
-                it now uses the compact Button size (px-3 py-1.5) so
-                its height matches the shorter date-picker fields next
-                to it, instead of the taller default "md" size that
-                made it stick out above the rest of the header row. */}
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-              onClick={() => navigate(ROUTES.ADMIN_PRODUCT_ADD)}
-              className="w-full sm:w-auto shrink-0"
-            >
-              Add Product
-            </Button>
           </div>
         }
       />

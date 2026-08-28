@@ -12,6 +12,10 @@
 // key), a duplicated version could easily be missed and left stale.
 // Centralizing it here means BOTH places always stay in sync.
 
+import { useState } from "react";
+// useState — used to control whether the "Are you sure?" confirmation
+// modal is currently open
+
 import { useNavigate } from "react-router-dom";
 // useNavigate — React Router hook, lets us redirect the browser to a
 // different route programmatically (not via a clickable <Link>)
@@ -50,13 +54,16 @@ const useAdminLogout = () => {
   // (this is DIFFERENT from logoutApi above — logoutUser here only
   // touches local Redux/localStorage state, it does NOT call the backend)
 
+  // Whether the "Are you sure you want to log out?" confirmation modal
+  // is currently showing. Logging out ends the admin's session, so it
+  // gets the same confirm-before-destructive-action treatment as
+  // deleting a category, canceling an order, etc. elsewhere in the app.
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+
   // --------------------------------------------------
-  // THE ACTUAL LOGOUT HANDLER
+  // THE ACTUAL LOGOUT HANDLER (runs only after confirming)
   // --------------------------------------------------
-  // Returned to whichever component calls useAdminLogout() — that
-  // component then wires this function up to its own logout button's
-  // onClick handler.
-  const handleLogout = async () => {
+  const performLogout = async () => {
     try {
       // Read the refresh token straight from localStorage rather than
       // from Redux state, because the backend logout call specifically
@@ -75,6 +82,7 @@ const useAdminLogout = () => {
     } finally {
       // "finally" guarantees this runs whether the API call above
       // succeeded OR failed — local logout must always happen.
+      setIsConfirmOpen(false);
       logoutUser();
       // Clears user, token, refreshToken, isAuthenticated, and role
       // from BOTH Redux state and localStorage (handled inside the
@@ -89,10 +97,26 @@ const useAdminLogout = () => {
     }
   };
 
-  // Return just the handler function itself — callers do:
-  //   const handleLogout = useAdminLogout();
-  //   <button onClick={handleLogout}>Logout</button>
-  return handleLogout;
+  // Returned to whichever component calls useAdminLogout() — that
+  // component wires requestLogout up to its Logout button's onClick,
+  // and spreads confirmModalProps onto a <ConfirmModal /> it renders.
+  // requestLogout no longer logs out immediately — it just opens the
+  // confirmation modal; the actual logout only runs if the admin then
+  // clicks "Log Out" inside that modal.
+  const requestLogout = () => setIsConfirmOpen(true);
+
+  const confirmModalProps = {
+    isOpen: isConfirmOpen,
+    onClose: () => setIsConfirmOpen(false),
+    onConfirm: performLogout,
+    title: "Are you sure?",
+    message: "You'll need to log in again to access the admin dashboard.",
+    confirmLabel: "Log Out",
+    cancelLabel: "Cancel",
+    variant: "danger",
+  };
+
+  return { requestLogout, confirmModalProps };
 };
 
 export default useAdminLogout;

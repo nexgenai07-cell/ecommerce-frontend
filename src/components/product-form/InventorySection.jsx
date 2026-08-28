@@ -56,6 +56,7 @@ const InventorySection = ({
             label="Starting Quantity"
             type="number"
             min="0"
+            placeholder="e.g. 50"
             required
             {...register("stock")}
             error={errors.stock?.message}
@@ -101,6 +102,7 @@ const InventorySection = ({
         label="Low Stock Threshold"
         type="number"
         min="0"
+        placeholder="e.g. 5"
         hint="Admin gets alerted when stock falls to or below this number"
         {...register("low_stock_threshold")}
         error={errors.low_stock_threshold?.message}

@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // useState — local state for the orders sub-table's filters/page
 // useEffect — resets those filters whenever a different customer is opened
+// useRef — used by the custom status/sort dropdowns below to detect
+// clicks outside them so they close automatically
 
 import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches the orders list
@@ -13,19 +15,30 @@ import {
   AiOutlineShoppingCart,
   AiOutlineWallet,
   AiOutlineRise,
+  AiOutlineFilter,
+  AiOutlineSortAscending,
+  AiOutlineDown,
+  AiOutlineCheck,
 } from "react-icons/ai";
 // AiOutlineMail / Phone / Environment — contact info icons
 // AiOutlineSearch — orders search box icon
 // AiOutlineShoppingCart — "Total Orders" metric icon
 // AiOutlineWallet — "Lifetime Value" metric icon
 // AiOutlineRise — "Average Order Value" metric icon
+// AiOutlineFilter / AiOutlineSortAscending — leading icons for the
+// status and sort dropdown buttons
+// AiOutlineDown — chevron on the dropdown buttons, rotates when open
+// AiOutlineCheck — checkmark next to the currently selected option in
+// the custom dropdown menu
+
+import cn from "../../utils/cn";
+// cn — merges Tailwind classes, used by the custom FilterDropdown below
 
 import Drawer from "../ui/Drawer";
 import Avatar from "../ui/Avatar";
 import Spinner from "../ui/Spinner";
 import Badge from "../ui/Badge";
 import Input from "../ui/Input";
-import Select from "../ui/Select";
 import Pagination from "../ui/Pagination";
 import EmptyState from "../ui/EmptyState";
 
@@ -48,6 +61,15 @@ const ORDER_STATUS_OPTIONS = [
   { value: ORDER_STATUS.SHIPPED, label: "Shipped" },
   { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
   { value: ORDER_STATUS.CANCELLED, label: "Cancelled" },
+];
+
+// The custom status dropdown below needs its own explicit "All
+// Statuses" (value: "") entry — the shared Select component used to
+// add that automatically as its built-in placeholder option, but the
+// custom dropdown renders exactly the list it's given.
+const ORDER_STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All Statuses" },
+  ...ORDER_STATUS_OPTIONS,
 ];
 
 // Human-readable label for each status value, used on the order row
@@ -86,6 +108,109 @@ const ORDERS_SORTERS = {
 // PAGE_SIZE assumption already used on the main Orders page, since
 // the backend doesn't document its own page size explicitly
 const ORDERS_PAGE_SIZE = 10;
+
+// --------------------------------------------------
+// FilterDropdown — a custom-styled dropdown used ONLY for the status
+// and sort filters inside this drawer. The previous version used the
+// shared <Select>, whose OPEN options list is a native browser <select>
+// menu — plain white rows with no way to theme them. This component
+// renders its own themed menu (rounded corners, shadow, emerald
+// highlight + checkmark on the selected row, hover highlight) so the
+// dropdown looks intentional instead of the plain default browser
+// list. It's local to this file only, so no other page's dropdowns
+// are affected.
+// --------------------------------------------------
+const FilterDropdown = ({ icon, value, options, onChange, ariaLabel }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  // Closes the menu whenever a click lands outside this dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption =
+    options.find((option) => option.value === value) || options[0];
+
+  return (
+    <div className="relative" ref={containerRef}>
+      {/* Closed state — the visible button showing the current
+          selection, styled to match Input's height/border/focus so it
+          sits perfectly level with the search box next to it */}
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className={cn(
+          "w-full flex items-center gap-2 rounded-lg border bg-gray-50 pl-3 pr-3 py-2.5 text-sm font-medium text-gray-900 transition-all duration-150",
+          "hover:border-primary-300 hover:bg-white",
+          isOpen
+            ? "border-primary ring-2 ring-primary bg-white"
+            : "border-gray-200",
+        )}
+      >
+        <span className="text-primary shrink-0">{icon}</span>
+        <span className="flex-1 text-left truncate">
+          {selectedOption?.label}
+        </span>
+        <AiOutlineDown
+          className={cn(
+            "w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform duration-150",
+            isOpen && "rotate-180",
+          )}
+        />
+      </button>
+
+      {/* Open state — the themed menu, absolutely positioned right
+          below the button so it never disturbs the layout of the row
+          it sits in */}
+      {isOpen && (
+        <div
+          role="listbox"
+          className="absolute z-20 left-0 right-0 mt-1.5 rounded-xl border border-gray-100 bg-white shadow-lg shadow-gray-200/70 py-1.5 max-h-60 overflow-y-auto"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors",
+                  isSelected
+                    ? "bg-primary-50 text-primary font-semibold"
+                    : "text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                <span className="truncate">{option.label}</span>
+                {isSelected && (
+                  <AiOutlineCheck className="w-3.5 h-3.5 shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
   // --------------------------------------------------
@@ -275,32 +400,35 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
               </span>
             </div>
 
-            {/* Filter row — search by order number, filter by status,
-                sort by date/amount — the "rich filtering" for this
-                customer's own orders */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search order number..."
-                  leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-                  value={ordersSearchInput}
-                  onChange={(e) => setOrdersSearchInput(e.target.value)}
-                />
-              </div>
-              <div className="sm:w-40 shrink-0">
-                <Select
+            {/* Filter row — search on its own full-width row (so the
+                placeholder text always has room to show completely),
+                then status + sort as two EQUAL-width, equal-height
+                custom dropdowns below. This fixes the earlier text
+                getting cut off (each control now has enough room for
+                its full label) and replaces the plain native dropdown
+                menu with the themed FilterDropdown menu above. */}
+            <div className="flex flex-col gap-2.5">
+              <Input
+                placeholder="Search order number..."
+                leftIcon={<AiOutlineSearch className="w-4 h-4" />}
+                value={ordersSearchInput}
+                onChange={(e) => setOrdersSearchInput(e.target.value)}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <FilterDropdown
+                  icon={<AiOutlineFilter className="w-4 h-4" />}
+                  ariaLabel="Filter by status"
                   value={ordersStatusFilter}
-                  onChange={(e) => setOrdersStatusFilter(e.target.value)}
-                  options={ORDER_STATUS_OPTIONS}
-                  placeholder="All Statuses"
+                  onChange={setOrdersStatusFilter}
+                  options={ORDER_STATUS_FILTER_OPTIONS}
                 />
-              </div>
-              <div className="sm:w-44 shrink-0">
-                <Select
+                <FilterDropdown
+                  icon={<AiOutlineSortAscending className="w-4 h-4" />}
+                  ariaLabel="Sort orders"
                   value={ordersSortBy}
-                  onChange={(e) => setOrdersSortBy(e.target.value)}
+                  onChange={setOrdersSortBy}
                   options={ORDERS_SORT_OPTIONS}
-                  placeholder="Sort by..."
                 />
               </div>
             </div>

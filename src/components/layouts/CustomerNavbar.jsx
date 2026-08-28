@@ -13,7 +13,6 @@ import {
   AiOutlineMenu,
   AiOutlineLogout,
   AiOutlineSetting,
-  AiOutlineBarChart,
 } from "react-icons/ai";
 import { IoChevronDownOutline } from "react-icons/io5";
 import { BsArrowRight } from "react-icons/bs";
@@ -37,6 +36,7 @@ import { showSuccess } from "../ui/Toast";
 import debounce from "../../utils/debounce";
 import Container from "./Container";
 import Avatar from "../ui/Avatar";
+import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
 
 const CustomerNavbar = () => {
   const navigate = useNavigate();
@@ -277,6 +277,13 @@ const CustomerNavbar = () => {
   };
 
   // ===== LOGOUT =====
+  // "Are you sure you want to log out?" — same confirm-before-destructive-
+  // action pattern used everywhere else in the app (delete account,
+  // cancel order, etc). isLogoutConfirmOpen controls the ConfirmModal
+  // rendered near the bottom of this component; the actual logout only
+  // runs once the customer confirms inside that modal.
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
   const handleLogout = async () => {
     try {
       const refreshToken = localStorage.getItem("refreshToken");
@@ -284,6 +291,7 @@ const CustomerNavbar = () => {
     } catch {
       // backend failure — local logout still proceeds below
     } finally {
+      setIsLogoutConfirmOpen(false);
       logoutUser();
       setUserDropdownOpen(false);
       setMobileDrawerOpen(false);
@@ -291,6 +299,10 @@ const CustomerNavbar = () => {
       navigate(ROUTES.HOME);
     }
   };
+
+  // Opens the confirmation modal instead of logging out immediately —
+  // wired to both logout buttons below (desktop dropdown + mobile drawer)
+  const requestLogout = () => setIsLogoutConfirmOpen(true);
 
   // Menu items shown inside the avatar dropdown
   const accountMenuItems = useMemo(
@@ -613,7 +625,7 @@ const CustomerNavbar = () => {
                   {/* Unread badge — only rendered once there's at least one
                       unread notification. AnimatePresence + motion.span give
                       it the same pop-in/pop-out animation as the cart and
-                      wishlist badges for a consistent feel across the navbar. */}
+                   wishlist badges for a consistent feel across the navbar. */}
                   <AnimatePresence>
                     {unreadNotificationCount > 0 && (
                       <motion.span
@@ -703,36 +715,12 @@ const CustomerNavbar = () => {
                             </div>
                           </div>
                           <span className="relative inline-block mt-3 px-2.5 py-1 bg-white/20 backdrop-blur-sm rounded-full text-[10px] font-bold uppercase tracking-wider text-white">
-                            {user?.role === "admin" ? "Admin" : "Member"}
+                            {user?.role === "admin" ? "Admin" : "Customer"}
                           </span>
                         </div>
 
                         {/* Menu items */}
                         <div className="py-2">
-                          {/* ===== ADMIN-ONLY LINK ===== */}
-                          {/* Shown ONLY when the logged-in account's role is
-                              "admin" — a regular customer never sees this
-                              link at all, since user?.role will be
-                              "customer" for them and this block simply does
-                              not render. This is the ONLY way an admin
-                              reaches the admin panel after logging in —
-                              login itself always lands everyone on the
-                              customer portal first (see Login.jsx). */}
-                          {user?.role === "admin" && (
-                            <Link
-                              to={ROUTES.ADMIN_DASHBOARD}
-                              // ROUTES.ADMIN_DASHBOARD — "/admin/dashboard", the
-                              // main admin overview page
-                              onClick={() => setUserDropdownOpen(false)}
-                              // close the dropdown as soon as the admin clicks through
-                              className="flex items-center gap-3 mx-2 mb-1 px-3 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-primary-50 transition-colors group"
-                            >
-                              <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white transition-colors">
-                                <AiOutlineBarChart className="w-4 h-4" />
-                              </span>
-                              Go to Admin Portal
-                            </Link>
-                          )}
                           {accountMenuItems.map((item) => (
                             <Link
                               key={item.label}
@@ -751,7 +739,7 @@ const CustomerNavbar = () => {
                         {/* Logout */}
                         <div className="border-t border-gray-100 py-2">
                           <button
-                            onClick={handleLogout}
+                            onClick={requestLogout}
                             className="flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl w-[calc(100%-1rem)] text-sm font-medium text-danger hover:bg-danger-light transition-colors group"
                           >
                             <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-danger-light text-danger group-hover:bg-danger group-hover:text-white transition-colors">
@@ -1029,22 +1017,8 @@ const CustomerNavbar = () => {
                           </span>
                         )}
                       </Link>
-                      {/* ===== ADMIN-ONLY LINK (mobile) ===== */}
-                      {/* Same rule as the desktop dropdown above: only
-                          renders when user?.role is "admin", so a regular
-                          customer's mobile drawer never shows this at all. */}
-                      {user?.role === "admin" && (
-                        <Link
-                          to={ROUTES.ADMIN_DASHBOARD}
-                          onClick={() => setMobileDrawerOpen(false)}
-                          className="flex items-center gap-3 py-2.5 text-sm font-semibold text-primary hover:text-primary-dark transition-colors mt-1"
-                        >
-                          <AiOutlineBarChart className="w-4 h-4" />
-                          Go to Admin Portal
-                        </Link>
-                      )}
                       <button
-                        onClick={handleLogout}
+                        onClick={requestLogout}
                         className="flex items-center gap-3 py-2.5 text-sm text-danger hover:text-red-600 transition-colors mt-2"
                       >
                         <AiOutlineLogout className="w-4 h-4" />
@@ -1058,6 +1032,20 @@ const CustomerNavbar = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* "Are you sure?" confirmation — shown before logout actually runs.
+          Shared by both logout triggers above (desktop avatar dropdown +
+          mobile drawer). */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirm={handleLogout}
+        title="Are you sure?"
+        message="You'll need to log in again to access your account."
+        confirmLabel="Log Out"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </>
   );
 };

@@ -25,10 +25,13 @@ import {
 
 const resetPasswordSchema = z
   .object({
+    // NOTE: no .trim() on password fields — see ChangePasswordForm.jsx
+    // for why a leading/trailing space is intentionally preserved.
     new_password: z
       .string()
       .min(1, "Password is required")
       .min(8, "Password must be at least 8 characters")
+      .max(128, "Password is too long")
       .regex(/[A-Z]/, "Must contain at least one uppercase letter")
       .regex(/[a-z]/, "Must contain at least one lowercase letter")
       .regex(/[0-9]/, "Must contain at least one number")
@@ -62,6 +65,17 @@ const ResetPassword = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(resetPasswordSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       new_password: "",
       confirm_password: "",

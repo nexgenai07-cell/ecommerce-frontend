@@ -19,12 +19,21 @@ import {
 } from "../../utils/passwordStrength";
 import cn from "../../utils/cn";
 
+// NOTE: password fields are intentionally NOT trimmed. A leading/trailing
+// space is a valid character in a password, and silently stripping it
+// client-side would make the value sent to the server different from
+// what the user actually typed (and different from what they'll type
+// again next time they log in).
 const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, "Current password is required"),
+    currentPassword: z
+      .string()
+      .min(1, "Current password is required")
+      .max(128, "Password is too long"),
     newPassword: z
       .string()
       .min(8, "Password must be at least 8 characters")
+      .max(128, "Password is too long")
       .regex(/[A-Z]/, "Must contain uppercase letter")
       .regex(/[a-z]/, "Must contain lowercase letter")
       .regex(/[0-9]/, "Must contain a number")
@@ -34,6 +43,10 @@ const changePasswordSchema = z
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "New password must be different from your current password",
+    path: ["newPassword"],
   });
 
 const STRENGTH_CONFIG = {
@@ -74,6 +87,17 @@ const ChangePasswordForm = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(changePasswordSchema),
+    // Live validation (industry-standard pattern, same one Gmail/Amazon/
+    // most production sites use): a field is left completely alone while
+    // the user is still typing into it for the first time -- no error,
+    // no matter how invalid the in-progress value looks. The first check
+    // happens on "blur", i.e. the moment the user leaves that field
+    // (Tab key or clicking elsewhere) -- mode: "onTouched" below. From
+    // that point on, react-hook-form's default reValidateMode ("onChange")
+    // takes over automatically: if the field was invalid, it re-checks on
+    // every keystroke so the error clears the instant the value becomes
+    // valid, without needing another blur.
+    mode: "onTouched",
     defaultValues: {
       currentPassword: "",
       newPassword: "",
