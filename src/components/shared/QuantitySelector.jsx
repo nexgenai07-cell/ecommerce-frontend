@@ -1,9 +1,3 @@
-// Reusable QuantitySelector component
-// Quantity changes using minus, input, and plus buttons
-// Min and max validation is built in
-// Used in ProductDetail and Cart
-// Fully responsive
-
 // Import a helper function that merges/conditionally joins CSS class names
 import cn from "../../utils/cn";
 
@@ -15,6 +9,12 @@ const QuantitySelector = ({
   max = 99, // Maximum allowed quantity — usually comes from stock availability
   disabled = false, // Set to true to disable the entire selector
   size = "md", // Size variant of the component — sm or md
+  showMaxHint = false, // When true, shows a small "Max X available" caption
+  // below the control once the quantity reaches max — so the customer
+  // always knows WHY the + button stopped responding instead of it just
+  // silently disabling with no explanation. Defaults to false, so every
+  // other existing usage of this component (e.g. Product Detail page)
+  // keeps rendering exactly as before.
   className = "", // Any extra CSS classes passed in from the parent component
 }) => {
   // Function to decrease the quantity — won't go below the minimum
@@ -64,8 +64,10 @@ const QuantitySelector = ({
   // Pick the class set that matches the current "size" prop
   const sizes = sizeClasses[size];
 
-  // Return the JSX that will be rendered on the screen
-  return (
+  // The actual -/input/+ control — unchanged from before. Kept as its own
+  // variable so it can be returned as-is (no wrapper) when showMaxHint is
+  // off, preserving the exact original markup for every existing caller.
+  const control = (
     <div
       className={cn(
         "inline-flex items-center rounded-lg border border-gray-200 overflow-hidden", // Base container styling — inline flex, rounded border
@@ -146,6 +148,24 @@ const QuantitySelector = ({
           />
         </svg>
       </button>
+    </div>
+  );
+
+  // Default path — identical to the component's original return value,
+  // so every caller that doesn't opt in stays completely unaffected
+  if (!showMaxHint) return control;
+
+  // Opt-in path — stacks the control above a small caption that only
+  // appears once the customer has actually hit the max quantity, so the
+  // disabled + button always explains itself
+  return (
+    <div className="inline-flex flex-col items-start gap-1">
+      {control}
+      {value >= max && (
+        <p className="text-[11px] text-gray-400 leading-none">
+          Max {max} available
+        </p>
+      )}
     </div>
   );
 };

@@ -47,6 +47,10 @@ const PostAnalytics = () => {
         image_url: post.image_url,
       }),
     onSuccess: () => {
+      // Without this, the new draft would not appear in the Posts list
+      // until the page is manually refreshed, since PostsList.jsx reads
+      // from the same QUERY_KEYS.SOCIAL_POSTS cache.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SOCIAL_POSTS });
       showSuccess("Post duplicated as a new draft.");
       navigate(ROUTES.ADMIN_SOCIAL_POSTS);
     },

@@ -21,7 +21,11 @@ import cn from "../../utils/cn";
 // Import the Container layout component used to constrain and center page content with consistent padding/max-width
 import Container from "../../components/layouts/Container";
 // Import the full-page skeleton loader shown while the return detail is being fetched
-import { SkeletonDetail } from "../../components/ui/Skeleton";
+// SkeletonDetailThread mirrors this page's actual "conversation thread" layout
+// (icon-badge header + two stacked message cards) rather than the unrelated
+// generic detail-page skeleton, so the page no longer jumps in height once
+// the real return data arrives.
+import { SkeletonDetailThread } from "../../components/ui/Skeleton";
 // Import the reusable error state component shown if the fetch fails
 import ErrorState from "../../components/ui/ErrorState";
 
@@ -74,7 +78,7 @@ const ReturnDetail = () => {
   if (isLoading) {
     return (
       <Container className="py-6 sm:py-8">
-        <SkeletonDetail />
+        <SkeletonDetailThread />
       </Container>
     );
   }

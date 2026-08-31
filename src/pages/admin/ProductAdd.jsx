@@ -6,9 +6,17 @@ import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AiOutlinePlus } from "react-icons/ai";
 
-import { createProduct, uploadProductImage } from "../../api/products.api";
+import {
+  createProduct,
+  uploadProductImage,
+  checkProductNameExists,
+  checkProductSkuExists,
+} from "../../api/products.api";
 // createProduct       — API 19: POST /api/v1/products/ (multipart)
 // uploadProductImage  — API 22: POST /api/v1/products/{id}/images/
+// checkProductNameExists / checkProductSkuExists — API 31.1 / API 31.2
+
+import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 
 import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
@@ -125,6 +133,8 @@ const ProductAdd = () => {
     watch,
     setValue,
     setError,
+    clearErrors,
+    trigger,
     formState: { errors, dirtyFields },
   } = useForm({
     resolver: zodResolver(productSchema),
@@ -158,6 +168,26 @@ const ProductAdd = () => {
     staleTime: 1000 * 60 * 10,
   });
   const categories = extractListData(categoriesResponse);
+
+  // Real-time "already exists" checks (API 31.1 / API 31.2) — fire on
+  // blur of the Name / SKU fields (wired via BasicInfoSection's
+  // onNameBlur and InventorySection's onSkuBlur below). No excludeId
+  // here: this is the CREATE form, so there's no existing record of
+  // its own to exclude from the match.
+  const { checkOnBlur: checkNameOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkProductNameExists,
+    fieldName: "name",
+    message: "A product with this name already exists.",
+    setError,
+    clearErrors,
+  });
+  const { checkOnBlur: checkSkuOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkProductSkuExists,
+    fieldName: "sku",
+    message: "This SKU already exists.",
+    setError,
+    clearErrors,
+  });
 
   const watchedValues = watch();
   const selectedCategoryLabel = categories.find(
@@ -264,7 +294,14 @@ const ProductAdd = () => {
         });
       }
 
+      // QUERY_KEYS.PRODUCTS ("products") is the storefront's cache key,
+      // used by the customer-facing product listings. The Admin Products
+      // list (ProductList.jsx) reads from a separate cache key
+      // ("adminProducts"), so it must be invalidated here as well —
+      // otherwise the new product would not appear in the admin list
+      // until the page is manually refreshed.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       showSuccess(
         data.is_active
           ? "Product published successfully."
@@ -319,8 +356,14 @@ const ProductAdd = () => {
             errors={errors}
             watch={watch}
             setValue={setValue}
+            onNameBlur={checkNameOnBlur}
           />
-          <PricingSection register={register} errors={errors} watch={watch} />
+          <PricingSection
+            register={register}
+            errors={errors}
+            watch={watch}
+            trigger={trigger}
+          />
           <ProductImagesSection
             images={pendingImages}
             onAddFiles={handleAddFiles}
@@ -336,6 +379,7 @@ const ProductAdd = () => {
             errors={errors}
             isNewProduct={true}
             onRegenerateSku={handleRegenerateSku}
+            onSkuBlur={checkSkuOnBlur}
           />
           <LivePreviewCard
             name={watchedValues.name}

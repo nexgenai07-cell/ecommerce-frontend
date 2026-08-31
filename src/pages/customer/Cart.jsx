@@ -243,51 +243,143 @@ const Cart = () => {
 
   // ----------------------------------------------------------------------------
   // LOADING STATE
-  // While the cart's very first fetch is still in progress, show a custom
-  // skeleton layout that mirrors the real page's structure: a fake header,
-  // fake item rows on the left, and a fake summary card on the right.
+  // While the cart's very first fetch is still in progress, show a skeleton
+  // layout that mirrors the real page's structure exactly — same outer
+  // wrapper and padding, same breadcrumb, same item-row content (image,
+  // title, category, price/quantity/total row), and the same fully-built
+  // order summary card (price breakdown, coupon box, checkout button,
+  // payment icons, and trust badges). Matching all of this precisely is
+  // what stops the page from visibly growing taller the instant the real
+  // cart data replaces this placeholder.
   // ----------------------------------------------------------------------------
   if (cartLoading) {
     return (
-      <Container className="py-6 sm:py-8 md:px-12">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gray-100 animate-pulse shrink-0" />
-          <div className="flex flex-col gap-2">
-            <div className="h-6 sm:h-7 w-32 bg-gray-100 rounded animate-pulse" />
-            <div className="h-3.5 w-48 bg-gray-100 rounded animate-pulse" />
-          </div>
-        </div>
+      <div className="relative overflow-hidden min-h-screen bg-gray-50 md:px-20">
+        <Container className="py-6 sm:py-8">
+          <div className="flex flex-col gap-8">
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5">
+              <div className="h-3.5 w-10 bg-gray-200 rounded animate-pulse" />
+              <span className="text-gray-300">›</span>
+              <div className="h-3.5 w-10 bg-gray-200 rounded animate-pulse" />
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          <div className="lg:col-span-2 flex flex-col gap-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 animate-pulse"
-              >
-                <div className="flex gap-4">
-                  <div className="w-24 h-24 bg-gray-100 rounded-xl shrink-0" />
-                  <div className="flex-1 flex flex-col gap-2">
-                    <div className="h-4 bg-gray-100 rounded w-3/4" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2" />
-                    <div className="h-8 bg-gray-100 rounded w-24 mt-2" />
+            {/* Page heading — icon box + title/subtitle stack */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gray-200 animate-pulse shrink-0" />
+              <div className="flex flex-col gap-2">
+                <div className="h-7 sm:h-8 w-28 bg-gray-200 rounded animate-pulse" />
+                <div className="h-3.5 w-52 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+              {/* Item rows — same shape as CartItem.jsx: responsive image,
+                  a 2-line title/category block, and a price/quantity/total
+                  row underneath */}
+              <div className="lg:col-span-2 flex flex-col gap-4">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm"
+                  >
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-200 rounded-xl animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0 flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-col gap-1.5 flex-1">
+                          <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
+                          <div className="h-3 w-1/3 bg-gray-200 rounded animate-pulse" />
+                        </div>
+                        <div className="w-6 h-6 rounded-lg bg-gray-100 animate-pulse shrink-0" />
+                      </div>
+                      <div className="flex items-center justify-between gap-3 flex-wrap mt-1">
+                        <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse" />
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="h-3 w-8 bg-gray-100 rounded animate-pulse" />
+                          <div className="h-4 w-14 bg-gray-200 rounded animate-pulse" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Order summary card — full shape: heading, price breakdown,
+                  divider, total row, coupon input, checkout button, payment
+                  icons, and trust badges, matching CartSummary.jsx exactly */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6 flex flex-col gap-5 h-fit">
+                <div className="h-5 w-32 bg-gray-200 rounded animate-pulse" />
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                    <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                    <div className="h-4 w-12 bg-gray-200 rounded animate-pulse" />
+                  </div>
+                  <div className="h-px bg-gray-100" />
+                  <div className="flex items-center justify-between">
+                    <div className="h-5 w-12 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit animate-pulse">
-            <div className="h-5 bg-gray-100 rounded w-1/2 mb-4" />
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex justify-between mb-3">
-                <div className="h-4 bg-gray-100 rounded w-1/3" />
-                <div className="h-4 bg-gray-100 rounded w-1/4" />
+                {/* Coupon input row */}
+                <div className="flex gap-2">
+                  <div className="flex-1 h-10.5 bg-gray-100 rounded-xl animate-pulse" />
+                  <div className="w-16 h-10.5 bg-gray-100 rounded-xl animate-pulse shrink-0" />
+                </div>
+
+                {/* Proceed to Checkout button */}
+                <div className="w-full h-12.5 bg-gray-200 rounded-xl animate-pulse" />
+
+                {/* Payment method pills */}
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-10 h-6 bg-gray-100 rounded-md animate-pulse" />
+                  <div className="w-8 h-6 bg-gray-100 rounded-md animate-pulse" />
+                  <div className="w-12 h-6 bg-gray-100 rounded-md animate-pulse" />
+                </div>
+
+                {/* Trust badges */}
+                <div className="flex flex-col gap-2 pt-1 border-t border-gray-100">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 bg-gray-100 rounded-full animate-pulse shrink-0" />
+                      <div className="h-3 w-40 bg-gray-100 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            </div>
+
+            {/* ─── You Might Also Like — skeleton ───────────────────────────
+                The real page only renders this section once cartItems.length
+                is greater than 0, which is never true yet during this very
+                first loading phase — so without a placeholder here, the
+                whole section used to pop into existence out of nowhere the
+                moment the cart finished loading, instead of already being
+                on screen. Reusing ProductGrid with isLoading={true} guarantees
+                this placeholder is pixel-identical to the real section's
+                own loading state, since it's the exact same component. */}
+            <section className="flex flex-col gap-6 pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between pt-4">
+                <div className="h-7 w-52 bg-gray-200 rounded animate-pulse" />
+                <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse" />
+              </div>
+
+              <ProductGrid
+                products={[]}
+                isLoading={true}
+                skeletonCount={4}
+                cols={{ default: 2, sm: 2, md: 4, lg: 4 }}
+              />
+            </section>
           </div>
-        </div>
-      </Container>
+        </Container>
+      </div>
     );
   }
 

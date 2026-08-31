@@ -136,9 +136,16 @@ const PreviousComplaints = () => {
       {isLoading ? (
         // Loading state container: padding around the skeleton rows, vertical flex layout with gap spacing between them
         <div className="p-5 flex flex-col gap-3">
-          {/* Render three placeholder skeleton bars to simulate loading rows */}
+          {/* Render three placeholder skeleton bars to simulate loading rows.
+              bg-gray-100 (not gray-50) is used here to match every other
+              skeleton in the app — gray-50 sits almost flush with the white
+              card background, so the animate-pulse fade made this section
+              look empty instead of loading. */}
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 bg-gray-50 rounded-lg animate-pulse" />
+            <div
+              key={i}
+              className="h-10 bg-gray-100 rounded-lg animate-pulse"
+            />
           ))}
         </div>
       ) : (
@@ -245,36 +252,45 @@ const PreviousComplaints = () => {
       )}
 
       {/* Pagination footer */}
-      {/* Footer row: flex container spacing the "showing X of Y" text and pagination arrows apart, with padding and a top border */}
-      <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50 bg-gray-50/30">
-        {/* Text summarizing which range of complaints is currently shown out of the total count */}
-        <p className="text-xs text-gray-400">
-          {/* Calculate the starting item number for the current page, capped so it never exceeds the total complaint count */}
-          Showing {Math.min((currentPage - 1) * PER_PAGE + 1, totalComplaints)}-
-          {Math.min(currentPage * PER_PAGE, totalComplaints)} of{" "}
-          {totalComplaints} complaints
-        </p>
+      {/* Only rendered once loading has actually finished — previously this
+          rendered unconditionally, so while the table above was still
+          showing its skeleton rows, this footer would already say
+          "Showing 1-0 of 0 complaints" with both arrows disabled, which
+          didn't match anything the customer could see yet. Gated the same
+          way PreviousReturns.jsx already gates its own footer, for
+          consistency between the two components. */}
+      {!isLoading && (
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50 bg-gray-50/30">
+          {/* Text summarizing which range of complaints is currently shown out of the total count */}
+          <p className="text-xs text-gray-400">
+            {/* Calculate the starting item number for the current page, capped so it never exceeds the total complaint count */}
+            Showing{" "}
+            {Math.min((currentPage - 1) * PER_PAGE + 1, totalComplaints)}-
+            {Math.min(currentPage * PER_PAGE, totalComplaints)} of{" "}
+            {totalComplaints} complaints
+          </p>
 
-        {/* Container for the previous/next pagination arrow buttons, arranged horizontally with small gap spacing */}
-        <div className="flex items-center gap-2">
-          {/* "Previous page" button — pill-shaped, glows with the brand gradient on hover only when actually clickable */}
-          <button
-            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-            disabled={currentPage === 1}
-            className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-          >
-            <AiOutlineArrowLeft className="w-4 h-4" />
-          </button>
-          {/* "Next page" button — same pill/gradient treatment as the previous button */}
-          <button
-            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-          >
-            <AiOutlineArrowRight className="w-4 h-4" />
-          </button>
+          {/* Container for the previous/next pagination arrow buttons, arranged horizontally with small gap spacing */}
+          <div className="flex items-center gap-2">
+            {/* "Previous page" button — pill-shaped, glows with the brand gradient on hover only when actually clickable */}
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
+            >
+              <AiOutlineArrowLeft className="w-4 h-4" />
+            </button>
+            {/* "Next page" button — same pill/gradient treatment as the previous button */}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
+            >
+              <AiOutlineArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,8 @@
 // React hooks — useState for local state, useEffect for side effects like redirect-on-load checks
 import { useState, useEffect } from "react";
-// React Router hook to programmatically navigate/redirect the user to different routes
-import { useNavigate } from "react-router-dom";
+// React Router hooks — useNavigate to redirect programmatically, useSearchParams
+// to read the "resume" query param used by the failed-payment retry flow
+import { useNavigate, useSearchParams } from "react-router-dom";
 // React Query hooks — useQuery to fetch data, useMutation to perform write operations, useQueryClient to manually manage cache
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 // React Hook Form's main hook for managing form state, validation, and submission
@@ -20,8 +21,9 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 // API function to fetch the current user's cart data from the backend
 import { getCart } from "../../api/cart.api";
-// API function to submit the checkout request and place the order
-import { checkout } from "../../api/orders.api";
+// API function to submit the checkout request and place the order, and to
+// fetch an existing order's details (needed for the resume-payment flow)
+import { checkout, getOrderDetail } from "../../api/orders.api";
 // API function to create a Stripe Payment Intent for an existing order (API 69)
 import { createPaymentIntent } from "../../api/payments.api";
 // Custom hook providing authentication state (isAuthenticated flag and logged-in user info)
@@ -125,10 +127,174 @@ const SHIPPING_COSTS = {
   express: 999, // Express shipping costs 999
 };
 
+// =============================================
+// CHECKOUT LOADING SKELETON
+// =============================================
+// Shown while the cart request (used to populate both the form defaults
+// and the order summary sidebar) is still in flight. Previously this page
+// had no loading placeholder at all: the moment a visitor landed here, the
+// order summary rendered immediately with an empty item list and a Rs. 0
+// total, then suddenly snapped to the real items and price once the cart
+// request resolved — the exact "small skeleton, then everything jumps
+// bigger" problem this skeleton exists to prevent.
+//
+// The page header (CheckoutStepper) never depends on the cart request, so
+// it is reused here directly instead of being re-implemented as a
+// placeholder — this guarantees it is pixel-identical to the real header
+// in every state. Only the parts that actually depend on the cart data —
+// the three form cards on the left and the order summary card on the
+// right — are mocked, matching each real component's structure, spacing,
+// and element sizes one-for-one.
+const CheckoutSkeleton = () => (
+  <div className="min-h-screen bg-gray-50 lg:px-20">
+    {/* Stepper — identical to the real header, not a placeholder */}
+    <div className="bg-white border-b border-gray-100 py-4">
+      <Container>
+        <CheckoutStepper currentStep={2} />
+      </Container>
+    </div>
+
+    <Container className="py-6 sm:py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* ===== LEFT — Contact / Address / Shipping form cards ===== */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
+          {/* Contact Information — matches ContactForm.jsx: heading plus a
+              2-column grid of labeled inputs on sm+ screens */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col gap-5 animate-pulse">
+            <div className="h-6 w-48 bg-gray-200 rounded" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <div className="h-3.5 w-28 bg-gray-100 rounded" />
+                  {/* h-10.5: matches the real "py-2.5 text-sm" input height */}
+                  <div className="h-10.5 w-full bg-gray-100 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Delivery Address — matches AddressForm.jsx: heading, two
+              full-width fields, then a 3-column City/Province/Postal Code
+              row, then the "save address" checkbox row */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col gap-5 animate-pulse">
+            <div className="h-6 w-44 bg-gray-200 rounded" />
+            <div className="flex flex-col gap-1.5">
+              <div className="h-3.5 w-20 bg-gray-100 rounded" />
+              <div className="h-10.5 w-full bg-gray-100 rounded-xl" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="h-3.5 w-28 bg-gray-100 rounded" />
+              <div className="h-10.5 w-full bg-gray-100 rounded-xl" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <div className="h-3.5 w-16 bg-gray-100 rounded" />
+                  <div className="h-10.5 w-full bg-gray-100 rounded-xl" />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-4 h-4 bg-gray-100 rounded" />
+              <div className="h-3.5 w-56 bg-gray-100 rounded" />
+            </div>
+          </div>
+
+          {/* Shipping Method — matches ShippingMethod.jsx: heading plus a
+              2-column grid of the two option cards (real cards render at
+              roughly 80px tall once icon, label, price, and estimate text
+              are all accounted for) */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col gap-4 animate-pulse">
+            <div className="h-6 w-40 bg-gray-200 rounded" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-xl border-2 border-gray-100 bg-gray-50"
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile "Continue to Payment" button — only rendered below the
+              lg breakpoint, exactly like the real button it replaces */}
+          <div className="lg:hidden h-12.5 w-full bg-gray-200 rounded-xl animate-pulse" />
+        </div>
+
+        {/* ===== RIGHT — Order Summary sidebar ===== */}
+        {/* hidden lg:block: matches the real sidebar, which is desktop-only */}
+        <div className="hidden lg:block lg:col-span-1">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-5 sticky top-6 animate-pulse">
+            {/* Cart item rows — matches CheckoutOrderSummary.jsx's thumbnail
+                + name/category/price stack */}
+            <div className="flex flex-col gap-3">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0" />
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <div className="h-3.5 w-3/4 bg-gray-100 rounded" />
+                    <div className="h-3 w-1/2 bg-gray-100 rounded" />
+                    <div className="h-3.5 w-16 bg-gray-100 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="h-px bg-gray-100" />
+
+            {/* Coupon input row */}
+            <div className="flex gap-2">
+              <div className="flex-1 h-10.5 bg-gray-100 rounded-xl" />
+              <div className="w-16 h-10.5 bg-gray-100 rounded-xl shrink-0" />
+            </div>
+
+            {/* Price breakdown — Subtotal, Shipping, Tax, then the divider
+                and final Total row */}
+            <div className="flex flex-col gap-2.5">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex justify-between">
+                  <div className="h-4 w-16 bg-gray-100 rounded" />
+                  <div className="h-4 w-14 bg-gray-100 rounded" />
+                </div>
+              ))}
+              <div className="h-px bg-gray-100 my-1" />
+              <div className="flex justify-between">
+                <div className="h-5 w-12 bg-gray-200 rounded" />
+                <div className="h-6 w-20 bg-gray-200 rounded" />
+              </div>
+            </div>
+
+            {/* Buyer Protection card */}
+            <div className="h-16 bg-gray-50 border border-gray-100 rounded-xl" />
+
+            {/* Place Order button — h-12.5 matches the real "py-3.5" button */}
+            <div className="w-full h-12.5 bg-gray-200 rounded-xl" />
+
+            {/* Trust icons row */}
+            <div className="flex items-center justify-center gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <div className="w-5 h-5 bg-gray-100 rounded-full" />
+                  <div className="h-3 w-10 bg-gray-100 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Container>
+  </div>
+);
+
 // Main Checkout page component
 const Checkout = () => {
   // Hook to programmatically redirect the user to other routes
   const navigate = useNavigate();
+  // Reading query params — specifically "resume", which the payment result
+  // page sets when sending a customer back here after a failed payment
+  // attempt on an order that already exists (see RESUME PAYMENT FLOW below)
+  const [searchParams] = useSearchParams();
+  const resumeOrderNumber = searchParams.get("resume");
   // Access to React Query's client instance for cache invalidation after mutations
   const queryClient = useQueryClient();
   // Destructuring authentication state and current logged-in user data from custom auth hook
@@ -262,23 +428,142 @@ const Checkout = () => {
     mutationFn: (orderNum) => createPaymentIntent({ order_number: orderNum }),
 
     onSuccess: (response) => {
+      // UPDATED (API 73) — if a coupon reduced the order to Rs. 0, the
+      // backend confirms the order directly and never calls Stripe at
+      // all. There is no client_secret in this case, so Stripe must be
+      // skipped entirely here — attempting to render the Payment Element
+      // with no client_secret would break the page. Go straight to the
+      // same success screen a paid order would land on.
+      if (response.data?.free_order) {
+        navigate(
+          `${ROUTES.PAYMENT_RESULT}?order=${response.data.order_number || orderNumber}&status=succeeded`,
+        );
+        return;
+      }
+
       const { client_secret, publishable_key } = response.data;
 
-      // Stripe.js ko is order ke liye initialize karo — publishable_key
-      // HAMESHA is response se aati hai, kabhi frontend mein hardcode nahi
-      // (yahi wo cheez hai jo test -> live switch ko sirf backend .env
-      // change tak mehdood rakhti hai, frontend code ko touch nahi karna parta)
+      // Initialize Stripe.js for this order. publishable_key ALWAYS comes
+      // from this response and is never hardcoded on the frontend — this
+      // is what keeps a test -> live switch limited to a backend .env
+      // change, with no frontend code changes required.
       setStripePromise(loadStripe(publishable_key));
       setClientSecret(client_secret);
       setStep("payment");
+
+      // Also persist the publishable key for this browser tab. If the
+      // customer's card requires 3D Secure, Stripe performs a full browser
+      // navigation to returnUrl — that is a fresh page load, so this
+      // component's state (including publishable_key) will not exist
+      // anymore. The payment result page reads it back from here to
+      // re-initialize Stripe.js and confirm the outcome directly with
+      // Stripe, rather than trusting the URL alone.
+      sessionStorage.setItem("stripe_publishable_key", publishable_key);
     },
 
-    onError: () => {
+    onError: (error) => {
+      // NEW (API 73) — calling this again for an order that's already
+      // paid now returns a 400 instead of a fresh PaymentIntent. Most
+      // likely to happen on the resume-payment flow, if the customer
+      // resumes an order that the Stripe webhook already confirmed as
+      // paid in the background. Send them to their order instead of
+      // showing a dead-end "failed to initialize" error.
+      if (error?.response?.status === 400) {
+        navigate(
+          `${ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber || resumeOrderNumber)}`,
+        );
+        return;
+      }
+
       showError(
         "Failed to initialize payment. Please try placing your order again.",
       );
     },
   });
+
+  // =============================================
+  // RESUME PAYMENT FLOW
+  // Triggered when the customer is sent back here as
+  // "/checkout?resume=ORD-2024-00001" after a failed payment attempt (see
+  // PaymentResult.jsx). The order already exists with status
+  // "pending_payment" — creating it again would leave the original order
+  // stranded and produce a duplicate. Instead, this jumps straight to
+  // requesting a new Payment Intent for that same order number and moves
+  // the page directly into the payment step, skipping the details form
+  // entirely.
+  // =============================================
+  useEffect(() => {
+    if (!resumeOrderNumber) return;
+    // Guards against re-triggering on re-renders once the resume attempt
+    // is already under way or has already completed for this order.
+    if (orderNumber || createIntentMutation.isPending) return;
+
+    setOrderNumber(resumeOrderNumber);
+    createIntentMutation.mutate(resumeOrderNumber);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeOrderNumber]);
+
+  // The order summary sidebar reads its numbers from orderSnapshot (see
+  // BUGFIX comment on that state above). On a normal first-time checkout,
+  // that snapshot is built from the live cart right before it gets
+  // cleared. On resume, the cart was already cleared when the order was
+  // originally placed, so there is nothing live to snapshot from — the
+  // order's own saved totals have to be fetched and reshaped into the
+  // same structure instead, or the sidebar would show Rs. 0 throughout
+  // the whole resumed payment step.
+  const { data: resumeOrderData } = useQuery({
+    queryKey: QUERY_KEYS.ORDER_DETAIL(resumeOrderNumber),
+    queryFn: () => getOrderDetail(resumeOrderNumber),
+    enabled: !!resumeOrderNumber,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  useEffect(() => {
+    const order = resumeOrderData?.data;
+    if (!order) return;
+
+    // Keep the shipping method in sync with what this order was actually
+    // placed with — the form's own default ("standard") would otherwise
+    // silently override it when computing shippingCost/displayTotal below.
+    if (
+      order.shipping_method &&
+      SHIPPING_COSTS[order.shipping_method] !== undefined
+    ) {
+      setValue("shippingMethod", order.shipping_method);
+    }
+
+    // Order items come back shaped differently from cart items (flat
+    // product_name/price fields instead of a nested product object), so
+    // they are reshaped here to match what CheckoutOrderSummary expects.
+    const reshapedItems = (order.items || []).map((item) => ({
+      id: item.id,
+      quantity: item.quantity,
+      product: {
+        name: item.product_name,
+        // API returns this as a flat "product_image" field on the order
+        // item — "product" itself is just the numeric product id, not an
+        // object, so it never has a primary_image to read.
+        primary_image: item.product_image,
+        price: item.price,
+        category: item.product?.category,
+      },
+    }));
+
+    setOrderSnapshot({
+      items: reshapedItems,
+      // total_amount = subtotal - discount + shipping_cost, so the
+      // original subtotal is reconstructed by reversing that — same
+      // relationship OrderItems.jsx relies on for the order detail page,
+      // extended here to also back out shipping_cost.
+      subtotal:
+        parseFloat(order.total_amount || 0) +
+        parseFloat(order.discount_amount || 0) -
+        parseFloat(order.shipping_cost || 0),
+      discount_amount: order.discount_amount,
+      coupon: order.coupon,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeOrderData]);
 
   // =============================================
   // CHECKOUT MUTATION (API 52)
@@ -350,21 +635,62 @@ const Checkout = () => {
   };
 
   // Called by PaymentMethod once stripe.confirmPayment() reports "succeeded"
-  // client-side. The order's FINAL "confirmed" status still comes from the
-  // Stripe Webhook on the backend — this only moves the customer forward.
+  // client-side, without needing a redirect. The order's FINAL "confirmed"
+  // status still comes from the Stripe webhook on the backend — this only
+  // moves the customer forward, into the payment result page, which shows
+  // a brief success confirmation before continuing on to the order itself.
   const handlePaymentSuccess = () => {
+    navigate(`${ROUTES.PAYMENT_RESULT}?order=${orderNumber}&status=succeeded`);
+  };
+
+  // Called by PaymentMethod when stripe.confirmPayment() reports a failure
+  // (e.g. card declined) without needing a redirect. Reason is Stripe's
+  // own message, safe to display directly to the customer.
+  const handlePaymentFailure = (reason) => {
     navigate(
-      `${ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber)}?success=true`,
+      `${ROUTES.PAYMENT_RESULT}?order=${orderNumber}&status=failed&reason=${encodeURIComponent(reason)}`,
     );
   };
+
+  // Destination Stripe redirects the browser to when a card requires an
+  // extra authentication step (3D Secure) that can't be resolved inline.
+  // Only the order number travels in the URL here — Stripe appends its own
+  // payment_intent_client_secret and redirect_status params on top of
+  // this, which the payment result page reads to determine the outcome.
+  const stripeReturnUrl = `${window.location.origin}${ROUTES.PAYMENT_RESULT}?order=${orderNumber}`;
 
   // Combined loading flag for the Step 1 button (order creation + intent creation both run back-to-back)
   const isPlacingOrder =
     checkoutMutation.isPending || createIntentMutation.isPending;
 
-  // Cart empty ho toh cart pe redirect — sirf details step par (agar order
-  // already ban chuka hai to cart khali hona expected hai, payment step ko na todein)
-  if (!cartLoading && cartItems.length === 0 && step === "details") {
+  // While the cart is still being fetched, show the full-page skeleton
+  // instead of letting the form and order summary render with empty/zero
+  // values first and then jump to their real size the moment the request
+  // resolves. This must be checked before the empty-cart redirect below,
+  // since cartItems is still an empty array at this point regardless of
+  // whether the cart is genuinely empty or simply hasn't loaded yet.
+  if (cartLoading) {
+    return <CheckoutSkeleton />;
+  }
+
+  // Resuming payment for an existing order — keep showing the skeleton
+  // until the new Payment Intent comes back and flips step to "payment".
+  // Without this, the details form (with empty fields, since there is no
+  // cart to prefill from) would flash on screen for a moment first.
+  if (resumeOrderNumber && step === "details") {
+    return <CheckoutSkeleton />;
+  }
+
+  // Cart empty ho toh cart pe redirect — sirf details step par, aur sirf
+  // jab hum resume flow mein na hoon. Resume flow mein order pehle hi ban
+  // chuka hai, is liye cart ka khali hona expected hai — usay redirect ki
+  // wajah nahi banana, chahay abhi "payment" step shuru bhi na hua ho.
+  if (
+    !cartLoading &&
+    cartItems.length === 0 &&
+    step === "details" &&
+    !resumeOrderNumber
+  ) {
     return (
       <Container className="py-16 px-12">
         <EmptyState
@@ -487,8 +813,9 @@ const Checkout = () => {
                       }}
                     >
                       <PaymentMethod
-                        returnUrl={`${window.location.origin}${ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber)}?success=true`}
+                        returnUrl={stripeReturnUrl}
                         onSuccess={handlePaymentSuccess}
+                        onFailure={handlePaymentFailure}
                       />
                     </Elements>
                   ) : (

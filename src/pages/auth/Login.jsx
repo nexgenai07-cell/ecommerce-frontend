@@ -102,6 +102,7 @@ const Login = () => {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(loginSchema),
@@ -196,11 +197,34 @@ const Login = () => {
     },
 
     onError: (error) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        "Invalid email or password. Please try again.";
-      showError(message);
+      const data = error?.response?.data;
+      const message = data?.message || data?.detail || "";
+
+      // Some backends return this same gate as an HTTP error response
+      // (400/401) instead of a 200 success body with a flag. The
+      // onSuccess handler above already covers the flagged-200 shape —
+      // this covers the error-response shape, checking both an explicit
+      // flag and, as a fallback, the wording of the message itself, so
+      // the same block screen still opens either way. The account's
+      // email may not be echoed back on an error response, so the email
+      // the user just typed is used as a fallback.
+      if (
+        data?.email_not_verified ||
+        /not verified|verify your (email|account)/i.test(message)
+      ) {
+        setUnverifiedEmail(data?.email || getValues("email"));
+        return;
+      }
+
+      if (
+        data?.account_deactivated ||
+        /deactivat|account (has been )?delet/i.test(message)
+      ) {
+        setDeactivatedEmail(data?.email || getValues("email"));
+        return;
+      }
+
+      showError(message || "Invalid email or password. Please try again.");
     },
   });
 

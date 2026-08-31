@@ -7,35 +7,44 @@ import {
 import { showError } from "../ui/Toast";
 
 // Props:
-// returnUrl -> Stripe ke liye return URL (3D Secure jaisi redirect-based
-//              authentication ke liye Stripe iska use karta hai; normal
-//              cards ke liye redirect nahi hota, isi page par result mil jata hai)
-// onSuccess -> Payment client-side confirm hone par parent (Checkout.jsx) ko batata hai
-const PaymentMethod = ({ returnUrl, onSuccess }) => {
-  // Stripe.js aur Elements instance — jab tak Stripe.js load nahi hota, dono null rehte hain
+// returnUrl -> Where Stripe redirects the customer back to after an
+//              authentication step (3D Secure) that requires leaving the
+//              page. Cards that don't need extra authentication never
+//              trigger this redirect — the result is resolved inline,
+//              on this same page, without a navigation.
+// onSuccess -> Called once stripe.confirmPayment() resolves with a
+//              "succeeded" PaymentIntent without needing a redirect.
+// onFailure -> Called with a human-readable reason once
+//              stripe.confirmPayment() resolves with a hard failure
+//              (e.g. card declined) without needing a redirect. The
+//              parent is responsible for taking the customer to the
+//              payment result page with that reason.
+const PaymentMethod = ({ returnUrl, onSuccess, onFailure }) => {
+  // Stripe.js and Elements instance — both stay null until Stripe.js has
+  // finished loading and the PaymentElement has mounted.
   const stripe = useStripe();
   const elements = useElements();
 
-  // Payment submit ho rahi hai ya nahi — button disable/spinner ke liye
+  // Whether a payment attempt is currently in flight — drives the
+  // disabled/spinner state of the submit button.
   const [isProcessing, setIsProcessing] = useState(false);
-  // Stripe se aane wala error message (card declined, incomplete details, waghera)
-  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Stripe.js abhi load nahi hua ya Elements mount nahi hua — submit na karein
+    // Stripe.js hasn't finished loading, or the Payment Element hasn't
+    // mounted yet — there is nothing to submit.
     if (!stripe || !elements) return;
 
     setIsProcessing(true);
-    setErrorMessage("");
 
-    // stripe.confirmPayment() — Payment Element mein jo bhi details customer
-    // ne dali hain, unhe Stripe ko bhejta hai aur PaymentIntent confirm karta hai.
-    // redirect: "if_required" ka matlab: agar card ko koi extra authentication
-    // (jaise 3D Secure) na chahiye ho, to page redirect NAHI hoga — result
-    // seedha yahin milega. Agar authentication chahiye ho, Stripe khud ek
-    // secure popup/modal khol dega, phir wapas isi page par le aayega.
+    // stripe.confirmPayment() sends whatever the customer entered into the
+    // Payment Element to Stripe and attempts to confirm the PaymentIntent.
+    // redirect: "if_required" means the browser will only navigate away
+    // to returnUrl when the card genuinely requires an extra
+    // authentication step (e.g. 3D Secure). When no such step is needed,
+    // the result comes back directly in this same call, with no
+    // navigation involved.
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
@@ -45,32 +54,35 @@ const PaymentMethod = ({ returnUrl, onSuccess }) => {
     });
 
     if (error) {
-      // Card declined (e.g. test card 4000 0000 0000 0002), incomplete
-      // fields, ya koi aur validation error — Stripe khud clear, customer
-      // ko dikhaane layak message deta hai.
+      // Card declined, incomplete fields, or another validation error —
+      // Stripe already provides a message that is safe to show directly
+      // to the customer.
       const message = error.message || "Payment failed. Please try again.";
-      setErrorMessage(message);
       showError(message);
       setIsProcessing(false);
+      onFailure(message);
       return;
     }
 
     if (paymentIntent && paymentIntent.status === "succeeded") {
-      // Client-side confirmation mil gayi. IMPORTANT: ye order ko khud
-      // "paid" mark nahi karta — asli/final confirmation hamesha Stripe
-      // Webhook (API 70) se hi backend par aati hai. Hum sirf customer ko
-      // order confirmation page par le ja rahe hain.
+      // Client-side confirmation received. This does not mark the order
+      // as paid — the authoritative confirmation always comes from the
+      // Stripe webhook on the backend. This only moves the customer
+      // forward in the UI.
+      setIsProcessing(false);
       onSuccess();
       return;
     }
 
-    // Kabhi kabhi status "processing" ya "requires_action" reh sakta hai —
-    // is case mein bhi customer ko wait karwayein, order pending_payment
-    // hi rahega jab tak webhook update na kare.
-    setErrorMessage(
-      "Payment is being processed. Please wait a moment and check your order status.",
-    );
+    // Any other status at this point (e.g. "processing") means the
+    // payment is still being finalized on Stripe's side. Treat it the
+    // same way as a failure to reach the customer here, since there is
+    // nothing further this page can do — send them to the result page,
+    // where the PaymentIntent status is read fresh.
     setIsProcessing(false);
+    onFailure(
+      "Payment is still being processed. Please check your order status shortly.",
+    );
   };
 
   return (
@@ -84,28 +96,26 @@ const PaymentMethod = ({ returnUrl, onSuccess }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {/* Stripe's own pre-built card/payment form — validation, formatting,
-            and network detection (Visa/Mastercard/etc.) are all handled by Stripe */}
+        {/* Stripe's own pre-built card/payment form — validation,
+            formatting, and card network detection are all handled by
+            Stripe itself. */}
         <PaymentElement options={{ layout: "tabs" }} />
 
-        {/* Inline error message from the last failed attempt */}
-        {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}
-
-        {/* Test mode helper card — test card numbers customer/QA yahan use kar sakta hai */}
+        {/* Test mode helper card — reference card numbers for QA */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 flex flex-col gap-1">
           <p className="text-xs font-semibold text-blue-700">Test Mode</p>
           <p className="text-xs text-blue-600 leading-relaxed">
-            Koi real payment nahi hogi. Success ke liye card{" "}
+            No real payment will be made. Use{" "}
             <span className="font-mono font-semibold">4242 4242 4242 4242</span>{" "}
-            use karein — koi bhi future expiry (e.g. 12/34), koi bhi 3-digit
-            CVC, koi bhi ZIP/postal code. Decline test karne ke liye{" "}
+            for a successful payment — any future expiry (e.g. 12/34), any
+            3-digit CVC, and any ZIP/postal code. Use{" "}
             <span className="font-mono font-semibold">4000 0000 0000 0002</span>{" "}
-            use karein.
+            to test a decline.
           </p>
         </div>
 
-        {/* Pay button — disabled until Stripe.js finishes loading, or while a
-            payment attempt is already in progress */}
+        {/* Pay button — disabled until Stripe.js finishes loading, or
+            while a payment attempt is already in progress. */}
         <button
           type="submit"
           disabled={!stripe || !elements || isProcessing}
@@ -128,5 +138,4 @@ const PaymentMethod = ({ returnUrl, onSuccess }) => {
   );
 };
 
-// Exporting the component so it can be imported and used elsewhere in the application
 export default PaymentMethod;

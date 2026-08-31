@@ -6,8 +6,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 // Import "z" from zod, used to build the validation schema for this form
 import { z } from "zod";
-// Import "useMutation" hook from react-query to handle the address update API call
-import { useMutation } from "@tanstack/react-query";
+// Import "useMutation" and "useQueryClient" hooks from react-query — useMutation
+// handles the address update API call, useQueryClient lets us invalidate the
+// cached profile data once the update succeeds
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+// Shared React Query cache key constants, e.g. QUERY_KEYS.MY_PROFILE
+import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that sends the profile update request (used here to update the address field)
 import { updateMyProfile } from "../../api/auth.api";
 // Import toast notification helper functions for showing success and error messages
@@ -57,6 +61,10 @@ const PROVINCES = [
 
 // Main functional component for the delivery address form; receives the "user" object as a prop
 const DeliveryAddressForm = ({ user }) => {
+  // Access to the shared React Query cache, used below to invalidate the
+  // cached profile data once the address update succeeds
+  const queryClient = useQueryClient();
+
   // Destructure the values and methods returned by useForm
   const {
     // Function used to register input/select fields with react-hook-form
@@ -123,6 +131,12 @@ const DeliveryAddressForm = ({ user }) => {
 
     // Callback executed when the mutation succeeds
     onSuccess: () => {
+      // QUERY_KEYS.MY_PROFILE is the cache that supplies the "user" prop
+      // this form receives, and is also read by other places (e.g. the
+      // Checkout page's address section). Without this invalidation, the
+      // new address would not appear anywhere until the page is manually
+      // refreshed.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
       // Show a success toast notification to the user
       showSuccess("Address updated successfully!");
     },

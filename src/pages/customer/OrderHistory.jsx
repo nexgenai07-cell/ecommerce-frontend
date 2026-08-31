@@ -86,29 +86,57 @@ const OrderHistory = () => {
             orders={dateFilteredOrders} // date-window-filtered list — so tab badge counts (e.g. "Cancelled (1)") match what the date dropdown currently shows, not the full unfiltered history
           />
 
-          {/* ── Loading skeleton ────────────────────────────────────────────── */}
+          {/* ── Loading skeleton ──────────────────────────────────────────────
+              Mirrors OrderCard.jsx exactly: the top row has BOTH an Order ID
+              block AND a separate Date block (divided by a thin vertical
+              line) next to the status badge — not just one bar — and the
+              bottom row includes the action button(s) (View Details / Track
+              Order / Return Items), not just a single price line. Without
+              these two pieces the real cards rendered noticeably taller than
+              their placeholders the moment the order data arrived. */}
           {isLoading && (
             <div className="flex flex-col gap-4">
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse"
+                  className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-4 animate-pulse"
                 >
-                  <div className="flex justify-between mb-4">
-                    <div className="h-4 bg-gray-100 rounded w-32" />
-                    <div className="h-6 bg-gray-100 rounded w-24" />
+                  {/* Top row: Order ID block + divider + Date block, status badge on the right */}
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-start gap-6 flex-wrap">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="h-3 w-14 bg-gray-100 rounded" />
+                        <div className="h-4 w-20 bg-gray-200 rounded" />
+                      </div>
+                      <div className="hidden sm:block w-px h-8 bg-gray-100" />
+                      <div className="flex flex-col gap-1.5">
+                        <div className="h-3 w-10 bg-gray-100 rounded" />
+                        <div className="h-4 w-20 bg-gray-200 rounded" />
+                      </div>
+                    </div>
+                    <div className="h-6 w-24 bg-gray-100 rounded-full" />
                   </div>
-                  <div className="flex gap-2 mb-4">
+
+                  {/* Product thumbnails row */}
+                  <div className="flex items-center gap-2">
                     {[1, 2, 3].map((j) => (
                       <div
                         key={j}
-                        className="w-16 h-16 bg-gray-100 rounded-xl"
+                        className="w-16 h-16 bg-gray-100 rounded-xl shrink-0"
                       />
                     ))}
                   </div>
-                  <div className="flex justify-between pt-3 border-t border-gray-50">
-                    <div className="h-4 bg-gray-100 rounded w-40" />
-                    <div className="h-8 bg-gray-100 rounded w-32" />
+
+                  {/* Bottom row: item count + total, plus the action button(s) */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-gray-50">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-24 bg-gray-100 rounded" />
+                      <div className="h-5 w-20 bg-gray-200 rounded" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-28 bg-gray-100 rounded-xl" />
+                      <div className="h-9 w-28 bg-gray-200 rounded-xl" />
+                    </div>
                   </div>
                 </div>
               ))}

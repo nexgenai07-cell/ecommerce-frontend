@@ -4,13 +4,28 @@ import Input from "../ui/Input";
 import Badge from "../ui/Badge";
 import calculateDiscount from "../../utils/calculateDiscount";
 
-const PricingSection = ({ register, errors, watch }) => {
+const PricingSection = ({ register, errors, watch, trigger }) => {
   const originalPrice = parseFloat(watch("original_price")) || 0;
   const salePrice = parseFloat(watch("price")) || 0;
 
   const discountPercent = calculateDiscount(originalPrice, salePrice);
   // Returns 0 when prices are missing/equal/invalid — calculateDiscount
   // already guards against divide-by-zero and bad input internally
+
+  // The "original price must be greater than the sale price" rule lives
+  // in the schema's cross-field superRefine (see ProductAdd/ProductEdit),
+  // which only re-checks BOTH fields together when explicitly told to.
+  // With mode: "onTouched", blurring one field only re-validates that
+  // single field on its own — so this cross-field issue never actually
+  // surfaced until the whole form was validated on Submit. Calling
+  // trigger() for both field names together, on either field's blur,
+  // forces that pair to be re-checked as a pair right away — this is
+  // register()'s own onBlur (needed for its normal per-field validation)
+  // PLUS this extra pairwise re-check, not a replacement for it.
+  const revalidatePricePair = () => trigger(["price", "original_price"]);
+
+  const originalPriceField = register("original_price");
+  const salePriceField = register("price");
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-md hover:shadow-lg transition-shadow duration-300 p-5 sm:p-6 flex flex-col gap-5">
@@ -32,7 +47,11 @@ const PricingSection = ({ register, errors, watch }) => {
           min="0"
           placeholder="e.g. 2500"
           leftIcon={<span className="text-gray-400">Rs.</span>}
-          {...register("original_price")}
+          {...originalPriceField}
+          onBlur={(e) => {
+            originalPriceField.onBlur(e); // Keep react-hook-form's own per-field validation
+            revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
+          }}
           error={errors.original_price?.message}
         />
 
@@ -45,7 +64,11 @@ const PricingSection = ({ register, errors, watch }) => {
             placeholder="e.g. 1999"
             required
             leftIcon={<span className="text-gray-400">Rs.</span>}
-            {...register("price")}
+            {...salePriceField}
+            onBlur={(e) => {
+              salePriceField.onBlur(e); // Keep react-hook-form's own per-field validation
+              revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
+            }}
             error={errors.price?.message}
           />
 

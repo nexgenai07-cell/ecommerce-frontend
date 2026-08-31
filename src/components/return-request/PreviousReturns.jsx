@@ -68,8 +68,15 @@ const PreviousReturns = () => {
       {/* Loading skeleton */}
       {isLoading ? (
         <div className="p-5 flex flex-col gap-3">
+          {/* bg-gray-100 (not gray-50) matches every other skeleton in the
+              app — gray-50 is nearly the same shade as the white card
+              behind it, so the animate-pulse fade made this look empty
+              instead of loading. */}
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 bg-gray-50 rounded-lg animate-pulse" />
+            <div
+              key={i}
+              className="h-10 bg-gray-100 rounded-lg animate-pulse"
+            />
           ))}
         </div>
       ) : (

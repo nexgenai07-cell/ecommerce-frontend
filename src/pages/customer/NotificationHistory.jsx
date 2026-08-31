@@ -194,7 +194,16 @@ const NotificationHistory = () => {
           />
 
           {/* Loading skeleton */}
-          {/* Only show the loading skeleton placeholders while data is still being fetched */}
+          {/* Only shown while data is still being fetched. Rebuilt to match
+              NotificationItem.jsx element-for-element: that component uses
+              "p-4 pl-5" padding (not a plain "p-4" on every side), a
+              text-sm/leading-relaxed message paragraph that commonly wraps
+              onto two lines (it has no line-clamp/truncate), and an unread
+              accent dot on the far right — none of which the old version
+              accounted for. The old single h-3 bar for the message was
+              noticeably shorter than a real two-line text-sm paragraph, so
+              every card visibly grew taller the instant real notifications
+              replaced these placeholders. */}
           {isLoading && (
             // Vertical flex container stacking four skeleton rows with gap spacing
             <div className="flex flex-col gap-3">
@@ -202,16 +211,27 @@ const NotificationHistory = () => {
               {[1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
-                  className="flex gap-4 p-4 bg-white rounded-2xl border border-gray-100 animate-pulse"
+                  className="flex items-start gap-4 p-4 pl-5 bg-white rounded-2xl border border-gray-100 animate-pulse"
                 >
                   {/* Placeholder circle simulating the notification's type icon */}
                   <div className="w-10 h-10 bg-gray-100 rounded-full shrink-0" />
                   {/* Placeholder bars simulating the title, message, and timestamp text lines */}
-                  <div className="flex-1 flex flex-col gap-2">
-                    <div className="h-4 bg-gray-100 rounded w-3/4" />
-                    <div className="h-3 bg-gray-100 rounded w-full" />
-                    <div className="h-3 bg-gray-100 rounded w-1/4" />
+                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                    {/* Title — matches the real "text-sm" single-line title */}
+                    <div className="h-4 bg-gray-100 rounded w-2/3" />
+                    {/* Message — real paragraph is text-sm/leading-relaxed
+                        and wraps freely, so two lines is the representative
+                        case rather than one short bar */}
+                    <div className="flex flex-col gap-1 mt-0.5">
+                      <div className="h-3.5 bg-gray-100 rounded w-full" />
+                      <div className="h-3.5 bg-gray-100 rounded w-1/2" />
+                    </div>
+                    {/* Timestamp — matches the real "text-xs mt-1.5" line */}
+                    <div className="h-3 bg-gray-100 rounded w-20 mt-1" />
                   </div>
+                  {/* Unread accent dot placeholder — reserves the same
+                      right-hand space the real w-2.5 h-2.5 dot occupies */}
+                  <div className="w-2.5 h-2.5 rounded-full bg-gray-200 shrink-0 mt-1.5" />
                 </div>
               ))}
             </div>

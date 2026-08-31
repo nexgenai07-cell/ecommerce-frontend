@@ -25,6 +25,57 @@ const WishlistPreview = ({ wishlistItems }) => {
     mutationFn: (productId) =>
       addToCart({ product_id: productId, quantity: 1 }),
 
+    // Runs INSTANTLY, before the "add to cart" network request even
+    // finishes — so the cart total updates right away instead of waiting
+    // on this call AND the follow-up invalidateQueries refetch below.
+    // Only applies when the product is already in the cart, since a
+    // brand-new line item needs a server-generated id we don't have yet.
+    onMutate: async (productId) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const existingItem = old.data.items.find(
+          (cartItem) => cartItem.product.id === productId,
+        );
+        if (!existingItem) return old;
+
+        const unitPrice = parseFloat(existingItem.product.price) || 0;
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+
+        const updatedItems = old.data.items.map((cartItem) =>
+          cartItem.product.id === productId
+            ? {
+                ...cartItem,
+                quantity: cartItem.quantity + 1,
+                total_price: (unitPrice * (cartItem.quantity + 1)).toFixed(2),
+              }
+            : cartItem,
+        );
+
+        const newSubtotal = updatedItems.reduce(
+          (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
+          0,
+        );
+        const newTotal = oldTotal + (newSubtotal - oldSubtotal);
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      return { previousCart };
+    },
+
     onSuccess: (_, productId) => {
       // Find the full wishlist item object matching the productId that was just added
       // Used to pass the product details to handleAddItem for local state sync
@@ -38,7 +89,12 @@ const WishlistPreview = ({ wishlistItems }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
 
-    onError: () => showError("Failed to add to cart."), // red toast if the API call fails for any reason
+    onError: (_err, _productId, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
+      showError("Failed to add to cart."); // red toast if the API call fails for any reason
+    },
   });
 
   return (

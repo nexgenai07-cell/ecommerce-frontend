@@ -1,12 +1,3 @@
-// Profile Settings Page — Main file
-// Personal Info, Change Password + Account Security, Danger Zone
-// Real API — getMyProfile
-// Fully responsive
-//
-// NOTE: Delivery Address section was removed (see API_Documentation_v2.docx —
-// API 7/API 8 have no "address" field, and no dedicated Address API exists
-// yet). Re-add once backend exposes a proper endpoint for it.
-
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { HiOutlineShieldCheck } from "react-icons/hi2";
@@ -18,7 +9,12 @@ import ChangePasswordForm from "../../components/profile-settings/ChangePassword
 import AccountSecurity from "../../components/profile-settings/AccountSecurity";
 import DangerZone from "../../components/profile-settings/DangerZone";
 import Avatar from "../../components/ui/Avatar";
-import { SkeletonDetail } from "../../components/ui/Skeleton";
+// SkeletonProfileSettings mirrors this page's actual layout (gradient hero
+// header with avatar, Personal Information card, the Change Password /
+// Account Security 2-column row, and the Danger Zone card) rather than the
+// unrelated generic detail-page skeleton, so the page no longer jumps in
+// height once the real profile data arrives.
+import { SkeletonProfileSettings } from "../../components/ui/Skeleton";
 
 const ProfileSettings = () => {
   // =============================================
@@ -35,7 +31,7 @@ const ProfileSettings = () => {
   if (isLoading) {
     return (
       <Container className="py-8">
-        <SkeletonDetail />
+        <SkeletonProfileSettings />
       </Container>
     );
   }

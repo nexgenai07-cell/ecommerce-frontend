@@ -17,7 +17,18 @@ import Textarea from "../ui/Textarea";
 import Select from "../ui/Select";
 import Toggle from "../ui/Toggle";
 
-const BasicInfoSection = ({ register, errors, watch, setValue }) => {
+const BasicInfoSection = ({
+  register,
+  errors,
+  watch,
+  setValue,
+  onNameBlur,
+  // Optional — when passed (by ProductAdd/ProductEdit), it's called
+  // right after react-hook-form's own onBlur on the Name field, and
+  // triggers the "does a product with this name already exist?" check
+  // (API 31.1). Left undefined here does nothing extra, so this
+  // component works exactly as before if a caller doesn't pass it.
+}) => {
   // --------------------------------------------------
   // CATEGORIES — real dropdown options
   // --------------------------------------------------
@@ -46,6 +57,13 @@ const BasicInfoSection = ({ register, errors, watch, setValue }) => {
   // what actually gives us the true/false value to store.
   const isActive = watch("is_active");
 
+  const nameField = register("name");
+  // Captured separately (instead of spreading register("name") inline)
+  // so its own onBlur can be chained with the optional duplicate-name
+  // check below — react-hook-form does NOT support passing a custom
+  // onBlur through register()'s options object, so this is the correct
+  // way to add extra behavior on top of its built-in one.
+
   return (
     // Elevated card wrapper — white surface, soft rounded corners, a
     // resting shadow-md that grows to shadow-lg on hover, with a
@@ -66,7 +84,11 @@ const BasicInfoSection = ({ register, errors, watch, setValue }) => {
         label="Product Name"
         placeholder="e.g. Premium Ergonomic Office Chair"
         required
-        {...register("name")}
+        {...nameField}
+        onBlur={(e) => {
+          nameField.onBlur(e); // Keep react-hook-form's own per-field validation
+          onNameBlur?.(e.target.value); // Then run the optional duplicate-name check
+        }}
         error={errors.name?.message}
       />
 

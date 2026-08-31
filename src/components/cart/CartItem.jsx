@@ -1,16 +1,9 @@
-// ============================================================================
-// CartItem Component
-// ----------------------------------------------------------------------------
-// Renders a single row inside the Cart page's item list: product image,
-// name, category, price, a quantity +/- selector, and a delete (trash) button.
-// Every quantity change and every removal is sent to the real backend API and
-// then synced into the Redux store so the navbar cart badge stays accurate.
-// Framer Motion animates the whole row sliding out smoothly when it's removed.
-// ============================================================================
-
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 // useState is used to hold the quantity value locally, so the UI can update
 // instantly ("optimistically") before the server confirms the change.
+// useEffect keeps that local value in sync when the server-side quantity
+// changes from somewhere else (e.g. re-adding the product from its
+// Product Detail page).
 // useRef holds a reference to the actual <img> element below — the exact
 // on-screen starting point for the "fly out of the cart" animation.
 
@@ -93,6 +86,17 @@ const CartItem = ({ item, onRemove }) => {
   // Initialized from the item's quantity as it exists in the API response.
   // If an update API call fails, this gets reset back to the original value.
   const [quantity, setQuantity] = useState(item.quantity);
+
+  // Keeps the number above in sync whenever the cart's server-side quantity
+  // for this item changes from somewhere OTHER than this row's own +/-
+  // buttons — e.g. the customer re-adding this same product from the
+  // Product Detail page, which updates the shared cart cache but does not
+  // go through handleQuantityChange below. Without this, the price total
+  // (read directly from the cache) would update instantly while this
+  // number stayed stuck at its old value until the page was refreshed.
+  useEffect(() => {
+    setQuantity(item.quantity);
+  }, [item.quantity]);
 
   // --------------------------------------------------------------------------
   // MUTATION: Update Quantity
@@ -394,6 +398,10 @@ const CartItem = ({ item, onRemove }) => {
             max={item.product.stock || 99}
             disabled={updateMutation.isPending}
             size="sm"
+            showMaxHint
+            // showMaxHint: shows "Max N available" the moment the customer
+            // reaches the product's stock limit, so the disabled + button
+            // always explains itself instead of silently doing nothing
           />
 
           <div className="text-right">

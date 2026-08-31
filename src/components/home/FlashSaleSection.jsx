@@ -339,9 +339,18 @@ const CountdownUnit = ({ value, label, urgent }) => (
 // =============================================
 const FlashSaleTile = ({ product }) => {
   const [imageFailed, setImageFailed] = useState(false); // Tracks whether the real product image failed to load
-  const hasDiscount = product.original_price > product.price; // True only when there's a genuine price drop
+  // Convert both prices to real numbers ONCE — product.original_price and
+  // product.price arrive from the API as decimal strings (e.g. "10000.00"),
+  // and comparing raw strings with > does a lexicographic (character-by-
+  // character) comparison instead of a numeric one, which silently breaks
+  // whenever the original price's leading digit is smaller than the sale
+  // price's leading digit (e.g. "10000.00" > "9000.00" evaluates to false
+  // as strings, even though 10000 is numerically larger).
+  const numericOriginalPrice = Number(product.original_price);
+  const numericPrice = Number(product.price);
+  const hasDiscount = numericOriginalPrice > numericPrice; // True only when there's a genuine price drop
   const savedAmount = hasDiscount
-    ? parseFloat(product.original_price) - parseFloat(product.price) // Real rupee amount saved, never fabricated
+    ? numericOriginalPrice - numericPrice // Real rupee amount saved, never fabricated
     : 0;
   const imageSrc =
     !product.primary_image || imageFailed
@@ -377,8 +386,7 @@ const FlashSaleTile = ({ product }) => {
           <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-linear-to-r from-danger to-red-600 text-white text-[11px] font-bold rounded-md shadow-md">
             <AiFillFire className="w-3 h-3" />-
             {Math.round(
-              ((product.original_price - product.price) /
-                product.original_price) *
+              ((numericOriginalPrice - numericPrice) / numericOriginalPrice) *
                 100,
             )}
             %

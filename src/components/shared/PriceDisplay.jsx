@@ -1,9 +1,3 @@
-// Reusable PriceDisplay component
-// Shows the original price with a strikethrough and the sale price in emerald
-// Also shows a discount percentage badge
-// Used in ProductCard, ProductDetail, and Cart
-// Fully responsive
-
 // Import a helper function that merges/conditionally joins CSS class names
 import cn from "../../utils/cn";
 // Import a helper function that formats a number into a readable price string (e.g. currency symbol, decimals)
@@ -17,6 +11,13 @@ const PriceDisplay = ({
   originalPrice = 0, // Original price — will be shown with a strikethrough
   size = "md", // Size variant of the component — sm, md, or lg
   showDiscount = true, // Whether to show the discount percentage badge or not
+  nowrap = false, // When true, forces the sale price + original price onto
+  // ONE line instead of letting them wrap onto two — used by grid cards
+  // (ProductCard) so every card in a row ends up the same height,
+  // regardless of whether an individual product happens to have a
+  // discount or how wide its formatted price text is. Defaults to false
+  // so every other existing usage (ProductDetail, Cart) keeps its
+  // original wrapping behavior untouched.
   className = "", // Any extra CSS classes passed in from the parent component
 }) => {
   // Calculate the discount percentage using the helper function, based on original and sale price
@@ -49,10 +50,25 @@ const PriceDisplay = ({
 
   // Return the JSX that will be rendered on the screen
   return (
-    // Outer wrapper div — flex layout, wraps items if needed, with gap between children, plus any extra classes passed in
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    // Outer wrapper div — flex layout, wraps items if needed (unless nowrap
+    // forces a single row), with gap between children, plus any extra
+    // classes passed in
+    <div
+      className={cn(
+        nowrap
+          ? "flex flex-nowrap items-center gap-1.5"
+          : "flex flex-wrap items-center gap-2",
+        className,
+      )}
+    >
       {/* Sale price — displayed in the primary (emerald) color */}
-      <span className={cn("text-primary", sizes.sale)}>
+      <span
+        className={cn(
+          "text-primary",
+          sizes.sale,
+          nowrap && "whitespace-nowrap",
+        )}
+      >
         {formatPrice(price)}
       </span>
 
@@ -60,7 +76,13 @@ const PriceDisplay = ({
       {hasDiscount && (
         <>
           {/* Original price — shown in gray with a strikethrough line */}
-          <span className={cn("text-gray-400 line-through", sizes.original)}>
+          <span
+            className={cn(
+              "text-gray-400 line-through",
+              sizes.original,
+              nowrap && "whitespace-nowrap",
+            )}
+          >
             {formatPrice(originalPrice)}
           </span>
 

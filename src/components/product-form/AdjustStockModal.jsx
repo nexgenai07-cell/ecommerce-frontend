@@ -36,7 +36,13 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
 
       // Refresh every place that displays stock, so the admin sees the
       // real, authoritative number everywhere immediately.
+      // QUERY_KEYS.PRODUCTS ("products") is the storefront's cache key.
+      // The Admin Products list (ProductList.jsx) reads from a separate
+      // cache key ("adminProducts"), so it must be invalidated here too —
+      // otherwise the new stock count would not appear in the admin list
+      // until the page is manually refreshed.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.PRODUCT_DETAIL(productId),
       });

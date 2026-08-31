@@ -12,7 +12,11 @@ import {
   uploadProductImage,
   deleteProductImage,
   setPrimaryImage,
+  checkProductNameExists,
+  checkProductSkuExists,
 } from "../../api/products.api";
+// checkProductNameExists / checkProductSkuExists — API 31.1 / API 31.2
+import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -127,6 +131,8 @@ const ProductEdit = () => {
     watch,
     setValue,
     setError,
+    clearErrors,
+    trigger,
     reset,
     formState: { errors },
   } = useForm({
@@ -160,6 +166,27 @@ const ProductEdit = () => {
   });
 
   const product = productResponse?.data;
+
+  // Real-time "already exists" checks (API 31.1 / API 31.2) — fire on
+  // blur of the Name / SKU fields. excludeId is this product's OWN id
+  // (from the route param), so re-submitting the product's unchanged
+  // name/SKU never incorrectly flags it as a duplicate of itself.
+  const { checkOnBlur: checkNameOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkProductNameExists,
+    fieldName: "name",
+    message: "A product with this name already exists.",
+    excludeId: id,
+    setError,
+    clearErrors,
+  });
+  const { checkOnBlur: checkSkuOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkProductSkuExists,
+    fieldName: "sku",
+    message: "This SKU already exists.",
+    excludeId: id,
+    setError,
+    clearErrors,
+  });
 
   useEffect(() => {
     if (product) {
@@ -198,7 +225,13 @@ const ProductEdit = () => {
   const updateMutation = useMutation({
     mutationFn: (data) => updateProduct(id, data),
     onSuccess: () => {
+      // QUERY_KEYS.PRODUCTS ("products") is the storefront's cache key.
+      // The Admin Products list (ProductList.jsx) reads from a separate
+      // cache key ("adminProducts"), so it must be invalidated here too —
+      // otherwise the updated details would not appear in the admin list
+      // until the page is manually refreshed.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
       });
@@ -331,8 +364,14 @@ const ProductEdit = () => {
             errors={errors}
             watch={watch}
             setValue={setValue}
+            onNameBlur={checkNameOnBlur}
           />
-          <PricingSection register={register} errors={errors} watch={watch} />
+          <PricingSection
+            register={register}
+            errors={errors}
+            watch={watch}
+            trigger={trigger}
+          />
           <ProductImagesSection
             images={normalizedImages}
             onAddFiles={handleAddFiles}
@@ -349,6 +388,7 @@ const ProductEdit = () => {
             currentStock={product?.stock}
             onAdjustStockClick={() => setIsAdjustStockOpen(true)}
             onRegenerateSku={handleRegenerateSku}
+            onSkuBlur={checkSkuOnBlur}
           />
           <LivePreviewCard
             name={watchedValues.name}

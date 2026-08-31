@@ -1,9 +1,3 @@
-// ============================================================
-// ProductList — ADMIN PRODUCT MANAGEMENT TABLE
-// ============================================================
-// Lists every product in the catalog with search, category/status/price
-// filters, bulk delete, and quick edit/delete actions per row.
-
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -352,7 +346,12 @@ const ProductList = () => {
           <p className="text-sm font-medium text-gray-900">
             {formatPrice(row.price)}
           </p>
-          {row.original_price > row.price && (
+          {/* Number(): row.original_price and row.price arrive as decimal
+              strings (e.g. "10000.00") — comparing raw strings with > does
+              a lexicographic comparison instead of a numeric one, which
+              silently breaks whenever the original price's leading digit
+              is smaller than the sale price's leading digit. */}
+          {Number(row.original_price) > Number(row.price) && (
             <p className="text-xs text-gray-400 line-through">
               {formatPrice(row.original_price)}
             </p>

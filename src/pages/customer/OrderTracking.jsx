@@ -1,5 +1,3 @@
-// Order Tracking Page — Main file
-
 // Import "useParams" to read dynamic URL params and "Link" for client-side navigation, from react-router-dom
 import { useParams, Link } from "react-router-dom";
 // Import "useQuery" hook from react-query (tanstack) to handle data fetching, caching, and refetching
@@ -27,7 +25,7 @@ import TrackingOrderSummary from "../../components/order-tracking/TrackingOrderS
 // Import the delivery address card component (customer address)
 import TrackingDeliveryAddress from "../../components/order-tracking/TrackingDeliveryAddress";
 // Import a skeleton loading placeholder component used while the order detail data is loading
-import { SkeletonDetail } from "../../components/ui/Skeleton";
+import { SkeletonOrderTracking } from "../../components/ui/Skeleton"; // Mirrors this page's own header, stepper, and timeline/summary + address/help grid
 // Import a reusable error state component used to show an error message with a retry option
 import ErrorState from "../../components/ui/ErrorState";
 
@@ -97,9 +95,10 @@ const OrderTracking = () => {
   if (orderLoading) {
     return (
       // Container wrapper with vertical padding
-      <Container className="py-8">
-        {/* Skeleton placeholder mimicking the layout of the detail page while data loads */}
-        <SkeletonDetail />
+      <Container className="py-6 sm:py-8">
+        {/* Skeleton placeholder mimicking THIS page's actual layout — the
+            stepper and timeline, not a generic label/value block */}
+        <SkeletonOrderTracking />
       </Container>
     );
   }

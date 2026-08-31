@@ -75,6 +75,20 @@ export const createCategory = (data) => {
 };
 
 // ----------------------------
+// API 24.1 - Check whether a category name is already taken (Admin only)
+// ----------------------------
+// Used by the Add/Edit Category form to show an inline "already exists"
+// error the moment the admin leaves the Name field, instead of only
+// finding out after Submit. excludeId is passed only in edit mode, so
+// a category doesn't get flagged as a duplicate of itself.
+// Response shape (confirmed with backend): { exists: boolean }
+export const checkCategoryNameExists = (name, excludeId) => {
+  return axiosInstance.get("/api/v1/categories/check-name/", {
+    params: { name, exclude_id: excludeId },
+  });
+};
+
+// ----------------------------
 // API  - Get details of a single category
 // ----------------------------
 // Fetches the full details of one specific category, identified by

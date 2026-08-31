@@ -1,6 +1,3 @@
-// Main Product Detail page — fully centered, card-based, modern layout
-// Coordinator only — fetches data, passes it down. No static/fake content anywhere.
-
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -15,7 +12,7 @@ import ProductInfo from "../../components/product-detail/ProductInfo";
 import ProductTabs from "../../components/product-detail/ProductTabs";
 import RelatedProducts from "../../components/product-detail/RelatedProducts";
 
-import { SkeletonDetail } from "../../components/ui/Skeleton";
+import { SkeletonProductDetail } from "../../components/ui/Skeleton";
 import ErrorState from "../../components/ui/ErrorState";
 
 const ProductDetail = () => {
@@ -60,9 +57,17 @@ const ProductDetail = () => {
 
   if (isLoading) {
     return (
-      <Container className="py-8 max-w-6xl mx-auto">
-        <SkeletonDetail />
-      </Container>
+      // Same outer wrapper the real (loaded) page uses below — background
+      // color and md:px-35 horizontal padding included. Without this, the
+      // skeleton sat on a plain white background with no extra side
+      // padding, then the real page snapped in with a gray-tinted
+      // background AND shifted inward on desktop the moment the product
+      // finished loading — a visible layout jump on every single visit.
+      <div className="bg-gray-50/50 min-h-screen md:px-35">
+        <Container className="py-6 sm:py-10 max-w-6xl mx-auto">
+          <SkeletonProductDetail />
+        </Container>
+      </div>
     );
   }
 
@@ -95,12 +100,21 @@ const ProductDetail = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start">
             <div className="relative">
-              {product.original_price > product.price && (
+              {/* Numeric conversion is required here — product.original_price
+                  and product.price arrive from the API as decimal strings
+                  (e.g. "10000.00"), and comparing raw strings with > does a
+                  lexicographic comparison instead of a numeric one, which
+                  silently breaks whenever the original price's leading
+                  digit is smaller than the sale price's leading digit (e.g.
+                  "10000.00" > "9000.00" evaluates to false as strings, even
+                  though 10000 is numerically larger). */}
+              {Number(product.original_price) > Number(product.price) && (
                 <div className="absolute -top-2 -left-2 z-10 ">
                   <span className="px-3 py-1.5 bg-danger text-white text-xs font-bold rounded-xl shadow-lg shadow-danger/30">
                     {Math.round(
-                      ((product.original_price - product.price) /
-                        product.original_price) *
+                      ((Number(product.original_price) -
+                        Number(product.price)) /
+                        Number(product.original_price)) *
                         100,
                     )}
                     % OFF

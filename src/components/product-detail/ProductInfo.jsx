@@ -75,12 +75,86 @@ const ProductInfo = ({ product, imageRef }) => {
   // ─── ADD TO CART — API 33 ───
   const addToCartMutation = useMutation({
     mutationFn: () => addToCart({ product_id: product.id, quantity }),
+
+    // Runs INSTANTLY, before the "add to cart" network request even
+    // finishes. Without this, the toast and fly-to-cart animation fired
+    // in onSuccess below (right after the add call completes) made it
+    // look like the number and price should already be updated — but
+    // they were actually still waiting on a SECOND network round trip
+    // (the invalidateQueries refetch), which made the update visibly
+    // lag behind the animation. This mirrors the same optimistic-update
+    // pattern already used in CartItem.jsx's quantity mutation.
+    //
+    // This only optimistically updates the total when the product is
+    // ALREADY in the cart, since a brand-new line item needs a
+    // server-generated id we don't have yet — that case still updates
+    // as soon as the add call's own refetch completes.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const existingItem = old.data.items.find(
+          (cartItem) => cartItem.product.id === product.id,
+        );
+        if (!existingItem) return old;
+
+        const unitPrice = parseFloat(product.price) || 0;
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+
+        const updatedItems = old.data.items.map((cartItem) =>
+          cartItem.product.id === product.id
+            ? {
+                ...cartItem,
+                quantity: cartItem.quantity + quantity,
+                total_price: (
+                  unitPrice *
+                  (cartItem.quantity + quantity)
+                ).toFixed(2),
+              }
+            : cartItem,
+        );
+
+        const newSubtotal = updatedItems.reduce(
+          (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
+          0,
+        );
+        const newTotal = oldTotal + (newSubtotal - oldSubtotal);
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      return { previousCart };
+    },
+
     onSuccess: () => {
       handleAddItem({ product, quantity });
       showSuccess("Added to cart!");
+      // Quietly re-syncs with the authoritative server numbers in the
+      // background — the screen already shows the right values from the
+      // optimistic update above (when the product was already in the
+      // cart), so this refetch corrects silently rather than being
+      // something the customer has to wait on.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
-    onError: (error) => {
+
+    onError: (error, _vars, context) => {
+      // Undoes the optimistic cache write above, since the add never
+      // actually happened server-side.
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
       const message = error?.response?.data?.message || "Failed to add to cart";
       showError(message);
     },

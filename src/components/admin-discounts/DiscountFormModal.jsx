@@ -4,7 +4,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { createDiscount, updateDiscount } from "../../api/discounts.api";
+import {
+  createDiscount,
+  updateDiscount,
+  checkDiscountCodeExists,
+} from "../../api/discounts.api";
+// checkDiscountCodeExists — API 40.1
+import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
@@ -104,6 +110,8 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
     handleSubmit,
     watch,
     setValue,
+    setError,
+    clearErrors,
     reset,
     formState: { errors },
   } = useForm({
@@ -129,6 +137,23 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
       is_active: true,
     },
   });
+
+  // Real-time "already exists" check (API 40.1) — fires on blur of the
+  // Coupon Code field. excludeId is only passed in edit mode, so saving
+  // a discount with its own unchanged code never flags it as a
+  // duplicate of itself.
+  const { checkOnBlur: checkCodeOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkDiscountCodeExists,
+    fieldName: "code",
+    message: "This coupon code already exists.",
+    excludeId: isEditMode ? activeDiscount.id : undefined,
+    setError,
+    clearErrors,
+  });
+
+  const codeField = register("code");
+  // Captured separately so its own onBlur can be chained with the
+  // duplicate-code check above.
 
   // Re-fill the form whenever a different discount is opened for
   // editing, or reset to blank defaults when opening in create mode
@@ -197,7 +222,14 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
           label="Coupon Code"
           placeholder="SUMMER25"
           required
-          {...register("code")}
+          {...codeField}
+          onBlur={(e) => {
+            codeField.onBlur(e); // Keep react-hook-form's own per-field validation
+            checkCodeOnBlur(e.target.value); // Then run the duplicate-code check
+            // (backend compares case-insensitively against the stored
+            // uppercase value regardless of the casing sent here, per
+            // API 40.1's matching rule)
+          }}
           error={errors.code?.message}
         />
 

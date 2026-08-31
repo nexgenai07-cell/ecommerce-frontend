@@ -121,10 +121,18 @@ const CollectionsGrid = () => {
 
           {isLoading ? (
             // ---- LOADING STATE ----
-            // Gray pulse placeholders matching the exact shape of the real bento grid below
+            // Gray pulse placeholders matching the exact shape of the real
+            // bento grid below. The featured and bottom tile heights here
+            // must match the real CollectionTile "className" values passed
+            // further down exactly — they previously stopped at "sm:h-55"
+            // and "sm:h-30" while the real tiles render at "sm:h-75" and
+            // "sm:h-43", so every desktop visitor watched the whole section
+            // grow by 80px+ the instant real categories replaced these
+            // placeholders. The bottom row's gap is also "gap-4" on the
+            // real grid, not "gap-2".
             <div className="flex flex-col gap-2">
               <div className="flex flex-col sm:flex-row gap-2">
-                <div className="h-45 sm:h-55 flex-2 rounded-xl bg-gray-100 animate-pulse" />{" "}
+                <div className="h-45 sm:h-75 flex-2 rounded-xl bg-gray-100 animate-pulse" />{" "}
                 {/* Placeholder for the featured tile */}
                 <div className="flex flex-row sm:flex-col gap-4 flex-1">
                   <div className="h-21.25 sm:h-25.5 flex-1 rounded-xl bg-gray-100 animate-pulse" />{" "}
@@ -133,10 +141,10 @@ const CollectionsGrid = () => {
                   {/* Placeholder for side tile 2 */}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="h-25 sm:h-30 rounded-xl bg-gray-100 animate-pulse" />{" "}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="h-25 sm:h-43 rounded-xl bg-gray-100 animate-pulse" />{" "}
                 {/* Placeholder for bottom tile 1 */}
-                <div className="h-25 sm:h-30 rounded-xl bg-gray-100 animate-pulse" />{" "}
+                <div className="h-25 sm:h-43 rounded-xl bg-gray-100 animate-pulse" />{" "}
                 {/* Placeholder for bottom tile 2 */}
               </div>
             </div>

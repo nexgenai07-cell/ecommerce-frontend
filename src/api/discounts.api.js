@@ -46,6 +46,20 @@ export const createDiscount = (data) => {
 };
 
 // ----------------------------
+// API 40.1 - Check whether a coupon code is already taken (Admin only)
+// ----------------------------
+// Used by the Create/Edit Discount form to show an inline "already
+// exists" error the moment the admin leaves the Coupon Code field,
+// instead of only finding out after Submit. excludeId is passed only
+// in edit mode, so a coupon doesn't get flagged as a duplicate of
+// itself. Response shape (confirmed with backend): { exists: boolean }
+export const checkDiscountCodeExists = (code, excludeId) => {
+  return axiosInstance.get("/api/v1/discounts/check-code/", {
+    params: { code, exclude_id: excludeId },
+  });
+};
+
+// ----------------------------
 // API  - Get full details of a specific coupon (Admin only)
 // ----------------------------
 // Fetches everything about one specific coupon, identified by its

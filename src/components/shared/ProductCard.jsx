@@ -37,8 +37,13 @@ const ProductCard = ({
 
   const { isAuthenticated } = useAuth();
 
-  // Get cart actions — handleAddItem syncs Redux for instant UI feedback
-  const { handleAddItem } = useCart();
+  // Get cart actions — handleAddItem syncs Redux for instant UI feedback.
+  // "items" is needed here too — to check how many units of THIS product
+  // are already sitting in the cart, so the button can stop the customer
+  // before they hit a product they've already maxed out (see
+  // qtyAlreadyInCart / isMaxedInCart below), instead of letting the
+  // request go to the backend and fail with a generic error toast.
+  const { handleAddItem, items: cartItems } = useCart();
 
   // Fly-to-icon animation trigger functions — see hooks/useFlyToIcon.js.
   // flyToWishlist/flyToCart make the real product image fly from this
@@ -97,13 +102,70 @@ const ProductCard = ({
   // ─────────────────────────────────────────
   const cartMutation = useMutation({
     mutationFn: () => addToCart({ product_id: product.id, quantity: 1 }),
+
+    // Runs INSTANTLY, before the "add to cart" network request even
+    // finishes — so the cart total updates right away instead of waiting
+    // on this call AND the follow-up invalidateQueries refetch below.
+    // Only applies when the product is already in the cart, since a
+    // brand-new line item needs a server-generated id we don't have yet.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const existingItem = old.data.items.find(
+          (cartItem) => cartItem.product.id === product.id,
+        );
+        if (!existingItem) return old;
+
+        const unitPrice = parseFloat(product.price) || 0;
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+
+        const updatedItems = old.data.items.map((cartItem) =>
+          cartItem.product.id === product.id
+            ? {
+                ...cartItem,
+                quantity: cartItem.quantity + 1,
+                total_price: (unitPrice * (cartItem.quantity + 1)).toFixed(2),
+              }
+            : cartItem,
+        );
+
+        const newSubtotal = updatedItems.reduce(
+          (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
+          0,
+        );
+        const newTotal = oldTotal + (newSubtotal - oldSubtotal);
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      return { previousCart };
+    },
+
     onSuccess: () => {
       handleAddItem({ product, quantity: 1 });
       showSuccess("Added to cart");
       // Refresh the real cart cache so the Cart page / navbar count stay accurate
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
-    onError: () => showError("Failed to add to cart"),
+    onError: (_err, _vars, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
+      showError("Failed to add to cart");
+    },
   });
 
   // ─────────────────────────────────────────
@@ -184,6 +246,14 @@ const ProductCard = ({
 
     if (!product?.in_stock) return;
 
+    // Stop here — before any network request — if the customer's cart
+    // already holds every unit this product has in stock. Without this
+    // check, clicking "Add to Cart" on a related-product card would send
+    // a request the backend is guaranteed to reject (since it independently
+    // enforces the same stock limit), surfacing as a confusing generic
+    // error toast the customer has no context for.
+    if (isMaxedInCart) return;
+
     // Fly the image immediately, regardless of which mode this card is
     // in — the animation is purely visual feedback and doesn't need to
     // wait for the network request to resolve.
@@ -213,8 +283,34 @@ const ProductCard = ({
       ? { label: `Only ${stock} Left`, dot: "bg-warning" }
       : { label: "In Stock", dot: "bg-success" };
 
+  // How many units of THIS product are already sitting in the customer's
+  // cart right now (0 if it isn't in the cart at all).
+  const qtyAlreadyInCart =
+    cartItems.find((cartItem) => cartItem.product.id === product.id)
+      ?.quantity ?? 0;
+
+  // True only when the product genuinely still has stock (isOutOfStock is
+  // false) BUT the customer's own cart already holds every available unit.
+  // This is deliberately kept separate from isOutOfStock — a different
+  // customer could still buy this product, so it needs its own label and
+  // shouldn't be lumped in with "Out of Stock", which means nobody can.
+  const isMaxedInCart = !isOutOfStock && qtyAlreadyInCart >= stock;
+
+  // Convert both prices to real numbers ONCE here — product.original_price
+  // and product.price arrive from the API as decimal strings (e.g.
+  // "10000.00"), and comparing raw strings with > does a lexicographic
+  // (character-by-character) comparison instead of a numeric one. That
+  // silently breaks whenever the original price's leading digit is smaller
+  // than the sale price's leading digit — e.g. "10000.00" > "9000.00"
+  // evaluates to false as strings ("1" < "9"), even though 10000 is
+  // numerically larger — which is why a real discount like 10,000 → 9,000
+  // could fail to show its badge while a discount like 130,000 → 120,000
+  // worked fine by coincidence.
+  const numericOriginalPrice = Number(product.original_price);
+  const numericPrice = Number(product.price);
+
   const hasDiscount =
-    product.original_price > product.price && product.original_price > 0;
+    numericOriginalPrice > numericPrice && numericOriginalPrice > 0;
 
   return (
     <div
@@ -243,11 +339,13 @@ const ProductCard = ({
 
         {/* Discount badge — top-left, only rendered when a real discount exists.
             This is the ONLY place the discount % is shown (PriceDisplay below
-            has its own badge turned off via showDiscount to avoid duplication) */}
+            has its own badge turned off via showDiscount to avoid duplication).
+            Uses the already-numeric values above instead of the raw string
+            fields, so the percentage math is correct too. */}
         {hasDiscount && (
           <div className="absolute top-2 left-2">
             <Badge
-              label={`-${Math.round(((product.original_price - product.price) / product.original_price) * 100)}%`}
+              label={`-${Math.round(((numericOriginalPrice - numericPrice) / numericOriginalPrice) * 100)}%`}
               variant="danger"
               size="sm"
               rounded
@@ -259,35 +357,45 @@ const ProductCard = ({
         {isOutOfStock && <div className="absolute inset-0 bg-white/40" />}
 
         {/* Top-right action button — remove (X) in controlled mode, wishlist heart otherwise.
-            Default state: a small white circle with a red ring and a red X, so it stays
-            subtle until noticed. On hover, the circle fills solid red and the X turns
-            white — a clear "this will delete" signal right before the click. */}
+            Default state: a plain white circle with a muted gray icon, matching the
+            wishlist heart button's subtle look. On hover, the circle fills solid red
+            and the icon turns white — a clear "this will delete" signal right before
+            the click, without a heavy red outline at rest. */}
         {isControlledRemove ? (
+          // Plain white circle with a muted gray icon by default — matches
+          // the subtler look of the wishlist heart button below instead of
+          // standing out with a heavy red ring at rest. Only fills solid
+          // red on hover, which is a clearer "this will delete" cue than
+          // an always-on red outline.
+          // w-6 h-6: scaled down from w-8 h-8 — the larger circle looked
+          // oversized next to the rest of the card's compact overlay elements
           <button
             onClick={handleRemoveClick}
             aria-label="Remove from wishlist"
             className={cn(
-              "absolute top-2 right-2 w-7 h-7 rounded-full bg-white border-2 border-danger shadow-sm",
-              "flex items-center justify-center text-danger",
+              "absolute top-2 right-2 w-6 h-6 rounded-full bg-white shadow-sm",
+              "flex items-center justify-center text-gray-400",
               "hover:bg-danger hover:text-white hover:scale-110 active:scale-95",
               "transition-all duration-200",
             )}
           >
-            <AiOutlineClose className="w-3.5 h-3.5" strokeWidth={1} />
+            <AiOutlineClose className="w-3 h-3" strokeWidth={1.5} />
           </button>
         ) : (
+          // w-6 h-6: scaled down to match the remove button above, keeping
+          // both overlay buttons visually consistent in size
           <button
             onClick={handleWishlistToggle}
             disabled={wishlistMutation.isPending}
             className={cn(
-              "absolute top-2 right-2 w-8 h-8 rounded-full bg-white shadow-sm",
+              "absolute top-2 right-2 w-6 h-6 rounded-full bg-white shadow-sm",
               "flex items-center justify-center transition-all duration-200",
               "hover:scale-110 active:scale-95 disabled:opacity-50",
             )}
           >
             <svg
               className={cn(
-                "w-4 h-4 transition-colors duration-200",
+                "w-3 h-3 transition-colors duration-200",
                 inWishlist ? "text-red-500 fill-current" : "text-gray-400",
               )}
               fill={inWishlist ? "currentColor" : "none"}
@@ -332,26 +440,42 @@ const ProductCard = ({
           {product.name}
         </h3>
 
-        {/* showDiscount=false: the top-left badge on the image already shows
-            the discount %, so we don't repeat it here */}
+        {/* size="sm" + nowrap: keeps the sale price and (if any) strikethrough
+            original price locked to ONE line at a smaller, more compact text
+            size. This is what actually keeps every card in the grid the same
+            height — a fixed single-line row is always the same height,
+            whether or not a product has a discount, so there's no longer any
+            need to reserve extra space for a possible second line.
+            showDiscount=false: the top-left badge on the image already
+            shows the discount %, so we don't repeat it here */}
         <PriceDisplay
           price={parseFloat(product.price)}
           originalPrice={parseFloat(product.original_price)}
-          size="md"
+          size="sm"
+          nowrap
           showDiscount={false}
         />
 
-        {/* Add to Cart button */}
+        {/* Add to Cart button — three possible states:
+            1. "Out of Stock": stock is genuinely 0, nobody can buy it
+            2. "Max in Cart": stock exists, but this customer's cart
+               already holds all of it — a different label on purpose,
+               since a different customer could still buy this product
+            3. Normal "Add to Cart" */}
         <Button
           variant="primary"
           size="sm"
           fullWidth
           isLoading={addingToCart}
-          disabled={!product.in_stock || addingToCart}
+          disabled={!product.in_stock || isMaxedInCart || addingToCart}
           onClick={handleAddToCart}
           className="mt-1"
         >
-          {product.in_stock ? "Add to Cart" : "Out of Stock"}
+          {!product.in_stock
+            ? "Out of Stock"
+            : isMaxedInCart
+              ? "Max in Cart"
+              : "Add to Cart"}
         </Button>
 
         {/* Optional extra footer content (e.g. "Added on <date>" on the Wishlist page) */}

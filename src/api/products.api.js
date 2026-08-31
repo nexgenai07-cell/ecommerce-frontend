@@ -51,6 +51,30 @@ export const createProduct = (data) => {
 };
 
 // ----------------------------
+// API 31.1 - Check whether a product name is already taken (Admin only)
+// ----------------------------
+// Used by the Add/Edit Product form to show an inline "already exists"
+// error the moment the admin leaves the Name field, instead of only
+// finding out after Submit. excludeId is passed only in edit mode, so
+// a product doesn't get flagged as a duplicate of itself.
+// Response shape (confirmed with backend): { exists: boolean }
+export const checkProductNameExists = (name, excludeId) => {
+  return axiosInstance.get("/api/v1/products/check-name/", {
+    params: { name, exclude_id: excludeId },
+  });
+};
+
+// ----------------------------
+// API 31.2 - Check whether a SKU is already taken (Admin only)
+// ----------------------------
+// Same pattern as checkProductNameExists above, for the sku field.
+export const checkProductSkuExists = (sku, excludeId) => {
+  return axiosInstance.get("/api/v1/products/check-sku/", {
+    params: { sku, exclude_id: excludeId },
+  });
+};
+
+// ----------------------------
 // API - Update an existing product (Admin only)
 // ----------------------------
 // NOTE: "stock" is intentionally NOT sent through this endpoint anymore.

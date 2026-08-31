@@ -18,7 +18,7 @@ import RecentOrdersTable from "../../components/account-dashboard/RecentOrdersTa
 import WishlistPreview from "../../components/account-dashboard/WishlistPreview"; // Preview of the first 3 wishlist items with Add to Cart
 import RecentNotifications from "../../components/account-dashboard/RecentNotifications"; // Preview of the 3 most recent notifications with mark-as-read
 import ActiveTickets from "../../components/account-dashboard/ActiveTickets"; // Table of open returns and complaints — hidden when empty; paginates internally
-import { SkeletonDashboard } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the orders data is loading
+import { SkeletonAccountDashboard } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the orders data is loading — mirrors this exact page's sections
 
 const AccountDashboard = () => {
   // =============================================
@@ -167,9 +167,10 @@ const AccountDashboard = () => {
   // Other queries load silently — their sections render empty until data arrives
   if (ordersLoading) {
     return (
-      <Container className="py-8">
-        <SkeletonDashboard />{" "}
-        {/* Mimics the full dashboard layout with animated placeholder blocks */}
+      <Container className="py-6 sm:py-8">
+        <SkeletonAccountDashboard />{" "}
+        {/* Mirrors this page's real breadcrumb, header, stats cards, recent
+            orders table, wishlist/notifications grid, and tickets table */}
       </Container>
     );
   }

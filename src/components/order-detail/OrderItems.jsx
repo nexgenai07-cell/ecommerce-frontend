@@ -44,7 +44,7 @@ const OrderItems = ({ order }) => {
             <div className="w-14 h-14 rounded-xl border border-gray-100 overflow-hidden bg-gray-50 shrink-0">
               <img
                 src={
-                  item.product?.primary_image || // use the product's main image if it exists
+                  item.product_image || // API returns this as a flat field on the order item, not nested under a "product" object (that field is just the numeric product id)
                   "/placeholder-product.svg" // generic fallback if image is missing
                 }
                 alt={item.product_name} // descriptive alt for screen readers and broken image state

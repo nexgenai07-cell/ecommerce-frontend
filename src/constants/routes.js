@@ -25,6 +25,14 @@ export const ROUTES = {
   PRODUCT_DETAIL: "/products/:id",
   CART: "/cart",
   CHECKOUT: "/checkout",
+  // PAYMENT_RESULT — single shared destination for the outcome of a Stripe
+  // payment attempt. It is used as the Stripe "return_url" for card flows
+  // that require a redirect (3D Secure), and it is also the page we
+  // navigate to manually for flows that resolve without a redirect. The
+  // outcome (succeeded/failed/processing) is always determined from the
+  // Stripe PaymentIntent itself, not from the URL alone. See
+  // pages/customer/PaymentResult.jsx for the full implementation.
+  PAYMENT_RESULT: "/checkout/payment-result",
   WISHLIST: "/wishlist",
   SEARCH: "/search",
 

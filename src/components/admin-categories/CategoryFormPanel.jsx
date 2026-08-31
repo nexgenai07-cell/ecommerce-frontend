@@ -5,7 +5,13 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineCloudUpload, AiOutlineClose } from "react-icons/ai";
 
-import { createCategory, updateCategory } from "../../api/categories.api";
+import {
+  createCategory,
+  updateCategory,
+  checkCategoryNameExists,
+} from "../../api/categories.api";
+// checkCategoryNameExists — API 24.1
+import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
@@ -73,6 +79,8 @@ const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
   const {
     register,
     handleSubmit,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(categorySchema),
@@ -92,6 +100,23 @@ const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
       description: activeCategory?.description || "",
     },
   });
+
+  // Real-time "already exists" check (API 24.1) — fires on blur of the
+  // Category Name field. excludeId is only passed in edit mode, so
+  // saving a category with its own unchanged name never flags it as a
+  // duplicate of itself.
+  const { checkOnBlur: checkNameOnBlur } = useFieldAvailabilityCheck({
+    checkFn: checkCategoryNameExists,
+    fieldName: "name",
+    message: "A category with this name already exists.",
+    excludeId: isEditMode ? activeCategory.id : undefined,
+    setError,
+    clearErrors,
+  });
+
+  const nameField = register("name");
+  // Captured separately so its own onBlur can be chained with the
+  // duplicate-name check above.
 
   // --------------------------------------------------
   // SAVE MUTATION — handles both create and update
@@ -205,7 +230,11 @@ const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
           label="Category Name"
           required
           placeholder="e.g. Electronics"
-          {...register("name")}
+          {...nameField}
+          onBlur={(e) => {
+            nameField.onBlur(e); // Keep react-hook-form's own per-field validation
+            checkNameOnBlur(e.target.value); // Then run the duplicate-name check
+          }}
           error={errors.name?.message}
         />
 

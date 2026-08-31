@@ -48,8 +48,12 @@ const ProductListItem = ({ product }) => {
   const queryClient = useQueryClient();
   // Whether the current visitor is logged in
   const { isAuthenticated } = useAuth();
-  // Cart helper — updates Redux immediately so the navbar badge feels instant
-  const { handleAddItem } = useCart();
+  // Cart helper — updates Redux immediately so the navbar badge feels
+  // instant. "items" is also needed here to check how many units of THIS
+  // product are already in the cart, so the button can stop the customer
+  // before a doomed request even reaches the backend — see qtyAlreadyInCart
+  // / isMaxedInCart below.
+  const { handleAddItem, items: cartItems } = useCart();
   // Wishlist state + helpers
   const {
     items: wishlistItems,
@@ -81,12 +85,69 @@ const ProductListItem = ({ product }) => {
   // ---- Add to cart mutation ----
   const cartMutation = useMutation({
     mutationFn: () => addToCart({ product_id: product.id, quantity: 1 }),
+
+    // Runs INSTANTLY, before the "add to cart" network request even
+    // finishes — so the cart total updates right away instead of waiting
+    // on this call AND the follow-up invalidateQueries refetch below.
+    // Only applies when the product is already in the cart, since a
+    // brand-new line item needs a server-generated id we don't have yet.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data?.items) return old;
+
+        const existingItem = old.data.items.find(
+          (cartItem) => cartItem.product.id === product.id,
+        );
+        if (!existingItem) return old;
+
+        const unitPrice = parseFloat(product.price) || 0;
+        const oldSubtotal = parseFloat(old.data.subtotal) || 0;
+        const oldTotal = parseFloat(old.data.total) || 0;
+
+        const updatedItems = old.data.items.map((cartItem) =>
+          cartItem.product.id === product.id
+            ? {
+                ...cartItem,
+                quantity: cartItem.quantity + 1,
+                total_price: (unitPrice * (cartItem.quantity + 1)).toFixed(2),
+              }
+            : cartItem,
+        );
+
+        const newSubtotal = updatedItems.reduce(
+          (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
+          0,
+        );
+        const newTotal = oldTotal + (newSubtotal - oldSubtotal);
+
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: updatedItems,
+            subtotal: newSubtotal.toFixed(2),
+            total: newTotal.toFixed(2),
+          },
+        };
+      });
+
+      return { previousCart };
+    },
+
     onSuccess: () => {
       handleAddItem({ product, quantity: 1 }); // Instant Redux update for the navbar badge
       showSuccess("Added to cart!");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART }); // Refresh the real cart data
     },
-    onError: () => showError("Failed to add to cart."),
+    onError: (_err, _vars, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
+      showError("Failed to add to cart.");
+    },
   });
 
   // ---- Wishlist add/remove mutation ----
@@ -114,11 +175,31 @@ const ProductListItem = ({ product }) => {
       ? FALLBACK_IMAGE
       : product?.primary_image;
 
+  // How many units of THIS product are already sitting in the customer's
+  // cart right now (0 if it isn't in the cart at all).
+  const qtyAlreadyInCart =
+    cartItems.find((cartItem) => cartItem.product.id === product?.id)
+      ?.quantity ?? 0;
+
+  // True only when the product genuinely still has stock BUT the
+  // customer's own cart already holds every available unit. Kept separate
+  // from "Out of Stock" — a different customer could still buy this
+  // product, so it gets its own label instead of implying nobody can.
+  const isMaxedInCart =
+    !!product?.in_stock && qtyAlreadyInCart >= (product?.stock ?? 0);
+
   // Handles the "Add to Cart" button click
   const handleAddToCart = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
     if (!isAuthenticated) return navigate(ROUTES.LOGIN); // Guests must log in first
     if (!product?.in_stock) return; // Safety guard — button is disabled anyway when out of stock
+
+    // Stop here — before any network request — if the customer's cart
+    // already holds every unit this product has in stock. Without this,
+    // clicking "Add to Cart" would send a request the backend is
+    // guaranteed to reject (it independently enforces the same stock
+    // limit), surfacing as a confusing generic error toast.
+    if (isMaxedInCart) return;
 
     // Fly the image immediately — purely visual feedback, doesn't need to
     // wait for the network request to resolve.
@@ -228,16 +309,24 @@ const ProductListItem = ({ product }) => {
             )}
           </button>
 
-          {/* Add to Cart — now the shared Button component (same variant/size
-              system used everywhere else in the app) instead of a hand-styled button */}
+          {/* Add to Cart — same three states as the grid card (ProductCard):
+              "Out of Stock" (nothing left at all), "Max in Cart" (stock
+              exists but this customer already holds all of it), or the
+              normal "Add to Cart" */}
           <Button
             variant="primary"
             size="sm"
             isLoading={cartMutation.isPending}
-            disabled={!product.in_stock || cartMutation.isPending}
+            disabled={
+              !product.in_stock || isMaxedInCart || cartMutation.isPending
+            }
             onClick={handleAddToCart}
           >
-            {product.in_stock ? "Add to Cart" : "Out of Stock"}
+            {!product.in_stock
+              ? "Out of Stock"
+              : isMaxedInCart
+                ? "Max in Cart"
+                : "Add to Cart"}
           </Button>
         </div>
       </div>

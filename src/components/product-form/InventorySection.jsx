@@ -13,8 +13,20 @@ const InventorySection = ({
   onAdjustStockClick,
   onRegenerateSku, // Called when the refresh icon inside the SKU field is clicked
   isNewProduct = false,
+  onSkuBlur,
+  // Optional — when passed (by ProductAdd/ProductEdit), it's called
+  // right after react-hook-form's own onBlur on the SKU field, and
+  // triggers the "is this SKU already taken?" check (API 31.2). Left
+  // undefined here does nothing extra, so this component works exactly
+  // as before if a caller doesn't pass it.
 }) => {
   const stock = currentStock ?? 0;
+
+  const skuField = register("sku");
+  // Captured separately (instead of spreading register("sku") inline)
+  // so its own onBlur can be chained with the optional duplicate-SKU
+  // check below — same pattern used for the Name field in
+  // BasicInfoSection.jsx.
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-md hover:shadow-lg transition-shadow duration-300 p-5 sm:p-6 flex flex-col gap-4">
@@ -29,7 +41,11 @@ const InventorySection = ({
         label="SKU"
         placeholder="Auto-generated — you can edit it"
         hint="Auto-filled as you type the product name — edit freely, or click the refresh icon for a new one"
-        {...register("sku")}
+        {...skuField}
+        onBlur={(e) => {
+          skuField.onBlur(e); // Keep react-hook-form's own per-field validation
+          onSkuBlur?.(e.target.value); // Then run the optional duplicate-SKU check
+        }}
         error={errors.sku?.message}
         rightIcon={
           // rightIcon supports interactive elements (per Input's own

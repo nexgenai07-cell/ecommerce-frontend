@@ -22,7 +22,7 @@ import DeliveryAddress from "../../components/order-detail/DeliveryAddress"; // 
 import ReturnStatus from "../../components/order-detail/ReturnStatus"; // Return request card — only renders when a return exists
 import NeedHelp from "../../components/order-detail/NeedHelp"; // Contextual action buttons: track, return, cancel, AI chat
 import OrderStatusBadge from "../../components/shared/OrderStatusBadge"; // Colored status pill shown in the page heading row
-import { SkeletonDetail } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the order data is loading
+import { SkeletonOrderDetail } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the order data is loading — mirrors this exact page's header, stepper, and 2/3+1/3 grid
 import ErrorState from "../../components/ui/ErrorState"; // Error UI with a retry button shown when the API call fails
 import ConfirmModal from "../../components/ui/ConfirmModal"; // Modal dialog that asks the customer to confirm before cancelling
 
@@ -183,9 +183,10 @@ const OrderDetail = () => {
   // Show a full-page skeleton while the order data is being fetched for the first time
   if (isLoading) {
     return (
-      <Container className="py-8">
-        <SkeletonDetail />{" "}
-        {/* Mimics the layout of the page with animated placeholder blocks */}
+      <Container className="py-6 sm:py-8">
+        <SkeletonOrderDetail />{" "}
+        {/* Mirrors this page's real header, stepper, and items/payment +
+            address/help grid — not a generic placeholder */}
       </Container>
     );
   }

@@ -1,4 +1,3 @@
-// React state + lifecycle hooks
 import { useState, useEffect } from "react";
 // Reads the ?category_id= query param (used when arriving from a category link)
 import { useSearchParams, Link } from "react-router-dom";
@@ -217,7 +216,17 @@ const Products = () => {
                         // image size, and no mobile stacking. Ratings are
                         // intentionally NOT mocked — ProductListItem.jsx
                         // doesn't render them, matching ProductCard.jsx)
-                        Array.from({ length: 6 }).map((_, i) => (
+                        //
+                        // FIXED: this used to always render exactly 6 rows,
+                        // no matter how many products the current page
+                        // actually holds. Grid view correctly sizes its
+                        // skeleton to PER_PAGE (21), so list view was the
+                        // one place a customer would see 6 placeholder rows
+                        // suddenly snap to 21 real rows the moment the
+                        // request finished — a jarring page-length jump.
+                        // Using PER_PAGE here keeps both view modes
+                        // consistent with each other and with the real data.
+                        Array.from({ length: PER_PAGE }).map((_, i) => (
                           <div
                             key={i}
                             className="flex flex-col sm:flex-row gap-4 sm:gap-5 p-4 sm:p-5 bg-white rounded-2xl border border-gray-100 animate-pulse"
