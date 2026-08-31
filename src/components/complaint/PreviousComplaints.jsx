@@ -5,12 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ROUTES } from "../../constants/routes";
 // Import filter, download, and left/right arrow icons from the react-icons Ant Design icon set
-import {
-  AiOutlineFilter,
-  AiOutlineDownload,
-  AiOutlineArrowLeft,
-  AiOutlineArrowRight,
-} from "react-icons/ai";
+import { AiOutlineFilter, AiOutlineDownload } from "react-icons/ai";
 // Import a history-clock icon for the gradient header badge, from the "bs" (Bootstrap) icon set
 import { BsClockHistory } from "react-icons/bs";
 // Import the QUERY_KEYS constants object that stores standardized React Query cache key names
@@ -24,6 +19,9 @@ import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 import formatDate from "../../utils/formatDate";
 // Import a utility function "cn" used to conditionally join/merge Tailwind class names
 import cn from "../../utils/cn";
+// Import the shared numbered Pagination component used everywhere else in
+// the app — replaces the old arrow-only Prev/Next buttons below
+import Pagination from "../ui/Pagination";
 
 // Status badge colors
 // Define a lookup object mapping each complaint status to its display label and badge styling classes
@@ -251,44 +249,18 @@ const PreviousComplaints = () => {
         </div>
       )}
 
-      {/* Pagination footer */}
-      {/* Only rendered once loading has actually finished — previously this
-          rendered unconditionally, so while the table above was still
-          showing its skeleton rows, this footer would already say
-          "Showing 1-0 of 0 complaints" with both arrows disabled, which
-          didn't match anything the customer could see yet. Gated the same
-          way PreviousReturns.jsx already gates its own footer, for
-          consistency between the two components. */}
+      {/* Pagination footer — same numbered Pagination component used
+          everywhere else in the app instead of plain arrow-only Prev/Next.
+          Only rendered once loading has actually finished (kept from the
+          original gating) — Pagination itself hides when totalPages <= 1,
+          so an empty/zero-complaint state shows no footer at all. */}
       {!isLoading && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50 bg-gray-50/30">
-          {/* Text summarizing which range of complaints is currently shown out of the total count */}
-          <p className="text-xs text-gray-400">
-            {/* Calculate the starting item number for the current page, capped so it never exceeds the total complaint count */}
-            Showing{" "}
-            {Math.min((currentPage - 1) * PER_PAGE + 1, totalComplaints)}-
-            {Math.min(currentPage * PER_PAGE, totalComplaints)} of{" "}
-            {totalComplaints} complaints
-          </p>
-
-          {/* Container for the previous/next pagination arrow buttons, arranged horizontally with small gap spacing */}
-          <div className="flex items-center gap-2">
-            {/* "Previous page" button — pill-shaped, glows with the brand gradient on hover only when actually clickable */}
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-            >
-              <AiOutlineArrowLeft className="w-4 h-4" />
-            </button>
-            {/* "Next page" button — same pill/gradient treatment as the previous button */}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-            >
-              <AiOutlineArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/30">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
     </div>

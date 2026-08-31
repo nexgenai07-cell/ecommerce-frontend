@@ -1,6 +1,5 @@
 import { useState } from "react"; // useState manages the current pagination page locally
 import { useQuery } from "@tanstack/react-query"; // useQuery handles fetching, caching, and loading state
-import { AiOutlineArrowLeft, AiOutlineArrowRight } from "react-icons/ai"; // Pagination arrow icons
 import { BsClockHistory } from "react-icons/bs"; // History-clock icon for the gradient header badge
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants
 import { getReturns } from "../../api/returns.api"; // API 51 — GET /api/v1/returns/
@@ -9,6 +8,7 @@ import formatDate from "../../utils/formatDate"; // Converts ISO date string int
 import { Link } from "react-router-dom"; // Navigates to the Return Detail page when "View" is clicked
 import { ROUTES } from "../../constants/routes"; // Route path constants, used for the "View" link below
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
+import Pagination from "../ui/Pagination"; // Same numbered prev/next pagination control used everywhere else in the app — replaces the old arrow-only Prev/Next buttons below
 
 // How many returns to show per page
 const PER_PAGE = 4;
@@ -159,35 +159,16 @@ const PreviousReturns = () => {
         </div>
       )}
 
-      {/* Pagination footer — only meaningful once there's more than one page,
-          but shown consistently (Prev/Next disable themselves) to match PreviousComplaints */}
+      {/* Pagination footer — same numbered Pagination component used
+          everywhere else in the app instead of plain arrow-only Prev/Next.
+          Pagination itself already hides when totalPages <= 1. */}
       {!isLoading && totalReturns > 0 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50 bg-gray-50/30">
-          <p className="text-xs text-gray-400">
-            Showing {Math.min((currentPage - 1) * PER_PAGE + 1, totalReturns)}-
-            {Math.min(currentPage * PER_PAGE, totalReturns)} of {totalReturns}{" "}
-            returns
-          </p>
-          <div className="flex items-center gap-2">
-            {/* Previous page button — pill-shaped, gradient fill only when actually clickable */}
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-              aria-label="Previous page"
-            >
-              <AiOutlineArrowLeft className="w-4 h-4" />
-            </button>
-            {/* Next page button — same pill/gradient treatment as the previous button */}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded-full text-gray-500 hover:text-white hover:bg-linear-to-br hover:from-primary hover:to-primary-dark disabled:opacity-30 disabled:hover:bg-none disabled:hover:text-gray-500 transition-all"
-              aria-label="Next page"
-            >
-              <AiOutlineArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/30">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
     </div>

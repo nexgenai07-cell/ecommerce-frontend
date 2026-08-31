@@ -11,6 +11,10 @@ import OrderFilters, {
 import OrderCard from "../../components/order-history/OrderCard"; // Single order card — renders one row per order
 import EmptyState from "../../components/ui/EmptyState"; // Generic empty state component shown when no orders match the current filter
 import ErrorState from "../../components/ui/ErrorState"; // Reusable error-state component with a retry button — same pattern used in OrderDetail.jsx, ProductDetail.jsx, NotificationHistory.jsx
+import Pagination from "../../components/ui/Pagination"; // Same numbered prev/next pagination control used on NotificationHistory, ActiveTickets, and the admin side
+
+// How many orders to show per page — same pattern/value as NotificationHistory
+const PER_PAGE = 10;
 
 const OrderHistory = () => {
   // activeTab tracks which status filter tab is currently selected — "all" shows every order
@@ -18,6 +22,9 @@ const OrderHistory = () => {
 
   // dateRange tracks the selected date window — defaults to last 3 months
   const [dateRange, setDateRange] = useState("3months");
+
+  // currentPage tracks which page of the (filtered) orders list is showing
+  const [currentPage, setCurrentPage] = useState(1);
 
   // =============================================
   // MY ORDERS API
@@ -62,6 +69,30 @@ const OrderHistory = () => {
   // "all" means no restriction, so it shouldn't be mentioned in copy
   const hasDateFilter = dateRange !== "all";
 
+  // --------------------------------------------------
+  // PAGINATION — same numbered prev/next control used on
+  // NotificationHistory/ActiveTickets, replacing the earlier plain
+  // "show everything in one long list" behavior
+  // --------------------------------------------------
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PER_PAGE));
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * PER_PAGE,
+    currentPage * PER_PAGE,
+  );
+
+  // Whenever the status tab or date range changes, the filtered result set
+  // changes too — jump back to page 1 so we don't land on a now-empty or
+  // mismatched page (same pattern as NotificationHistory's handleTabChange)
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  };
+
+  const handleDateRangeChange = (range) => {
+    setDateRange(range);
+    setCurrentPage(1);
+  };
+
   return (
     // relative + overflow-hidden hosts the decorative ambient gradient glow
     // behind the header without it bleeding into the navbar/footer or causing
@@ -80,9 +111,9 @@ const OrderHistory = () => {
               accurate for whichever date range is currently selected        */}
           <OrderFilters
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={handleDateRangeChange}
             orders={dateFilteredOrders} // date-window-filtered list — so tab badge counts (e.g. "Cancelled (1)") match what the date dropdown currently shows, not the full unfiltered history
           />
 
@@ -191,7 +222,7 @@ const OrderHistory = () => {
           {!isLoading && !isError && filteredOrders.length > 0 && (
             <AnimatePresence mode="popLayout">
               <div className="flex flex-col gap-4">
-                {filteredOrders.map((order, index) => (
+                {paginatedOrders.map((order, index) => (
                   <OrderCard
                     key={order.order_number}
                     order={order}
@@ -200,6 +231,17 @@ const OrderHistory = () => {
                 ))}
               </div>
             </AnimatePresence>
+          )}
+
+          {/* ── Pagination — same numbered prev/next control used on
+              NotificationHistory/ActiveTickets, only shown once there's
+              more than one page of (filtered) orders                    */}
+          {!isLoading && !isError && totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           )}
         </div>
       </Container>
