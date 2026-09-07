@@ -19,7 +19,7 @@ import StatsCard from "../ui/StatsCard";
 const SocialStatsCards = () => {
   const { data: publishedResponse, isLoading: isPublishedLoading } = useQuery({
     queryKey: ["socialDashboard", "published"],
-    queryFn: () => getSocialPosts({ status: SOCIAL_POST_STATUS.PUBLISHED }),
+    queryFn: ({ signal }) => getSocialPosts({ status: SOCIAL_POST_STATUS.PUBLISHED }, signal),
   });
   const publishedPosts = extractListData(publishedResponse);
   const totalPublished =
@@ -27,7 +27,7 @@ const SocialStatsCards = () => {
 
   const { data: scheduledResponse, isLoading: isScheduledLoading } = useQuery({
     queryKey: ["socialDashboard", "scheduled"],
-    queryFn: () => getSocialPosts({ status: SOCIAL_POST_STATUS.SCHEDULED }),
+    queryFn: ({ signal }) => getSocialPosts({ status: SOCIAL_POST_STATUS.SCHEDULED }, signal),
   });
   const scheduledPosts = extractListData(scheduledResponse);
   const totalScheduled =

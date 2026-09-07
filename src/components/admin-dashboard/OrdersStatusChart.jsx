@@ -23,7 +23,7 @@ const STATUS_CONFIG = [
 const OrdersStatusChart = () => {
   const { data: ordersResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "ordersAnalytics"],
-    queryFn: () => getOrdersAnalytics({}),
+    queryFn: ({ signal }) => getOrdersAnalytics({}, signal),
     staleTime: 1000 * 60 * 2,
   });
 

@@ -147,6 +147,7 @@ const OrderHistory = lazy(() => import("./pages/customer/OrderHistory"));
 const OrderDetail = lazy(() => import("./pages/customer/OrderDetail"));
 const OrderTracking = lazy(() => import("./pages/customer/OrderTracking"));
 const ProfileSettings = lazy(() => import("./pages/customer/ProfileSettings"));
+const AddressBook = lazy(() => import("./pages/customer/AddressBook"));
 const ReturnRequest = lazy(() => import("./pages/customer/ReturnRequest"));
 const ReturnDetail = lazy(() => import("./pages/customer/ReturnDetail"));
 const ComplaintSubmit = lazy(() => import("./pages/customer/ComplaintSubmit"));
@@ -183,6 +184,7 @@ const CategoryManagement = lazy(
 const OrderManagement = lazy(() => import("./pages/admin/OrderManagement"));
 const AdminOrderDetail = lazy(() => import("./pages/admin/AdminOrderDetail"));
 const ReturnsManagement = lazy(() => import("./pages/admin/ReturnsManagement"));
+const QrPaymentQueue = lazy(() => import("./pages/admin/QrPaymentQueue"));
 const ComplaintsManagement = lazy(
   () => import("./pages/admin/ComplaintsManagement"),
 );
@@ -479,6 +481,17 @@ const AppRoutes = () => {
             />
 
             <Route
+              path={ROUTES.ACCOUNT_ADDRESSES}
+              element={
+                <ProtectedRoute>
+                  <Suspense fallback={<PageLoader />}>
+                    <AddressBook />
+                  </Suspense>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path={ROUTES.ACCOUNT_RETURNS}
               element={
                 <ProtectedRoute>
@@ -722,6 +735,17 @@ const AppRoutes = () => {
               <AdminProtectedRoute>
                 <Suspense fallback={<PageLoader />}>
                   <AdminOrderDetail />
+                </Suspense>
+              </AdminProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ADMIN_QR_PAYMENTS}
+            element={
+              <AdminProtectedRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <QrPaymentQueue />
                 </Suspense>
               </AdminProtectedRoute>
             }

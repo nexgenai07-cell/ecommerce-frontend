@@ -51,7 +51,7 @@ const PostCard = ({ post, onEdit, onDeleteRequest }) => {
 
   const { data: analyticsResponse } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POST_ANALYTICS(post.id),
-    queryFn: () => getPostAnalytics(post.id),
+    queryFn: ({ signal }) => getPostAnalytics(post.id, signal),
     enabled: isPublished,
     // Only fires for posts that have actually gone live — no point
     // calling Analytics for a post that hasn't published yet

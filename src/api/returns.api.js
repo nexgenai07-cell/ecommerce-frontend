@@ -16,8 +16,8 @@ import axiosInstance from "../lib/axiosInstance";
 // ----------------------------
 // API - Get the list of return requests
 
-export const getReturns = (params) => {
-  return axiosInstance.get("/api/v1/returns/", { params });
+export const getReturns = (params, signal) => {
+  return axiosInstance.get("/api/v1/returns/", { signal, params });
 };
 
 // ----------------------------
@@ -28,8 +28,8 @@ export const getReturns = (params) => {
 // current status, and any admin notes. Used on a return detail page,
 // for both customers (to check status) and admins (to review before
 // approving/rejecting).
-export const getReturnDetail = (id) => {
-  return axiosInstance.get(`/api/v1/returns/${id}/`);
+export const getReturnDetail = (id, signal) => {
+  return axiosInstance.get(`/api/v1/returns/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -42,6 +42,6 @@ export const getReturnDetail = (id) => {
 // Note: this uses a separate "/admin/returns/" URL path (different
 // from the customer-facing "/returns/" used in the GET endpoints above),
 // clearly separating admin-only actions from general read access.
-export const updateReturnStatus = (id, data) => {
-  return axiosInstance.put(`/api/v1/admin/returns/${id}/status/`, data);
+export const updateReturnStatus = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/admin/returns/${id}/status/`, data, { signal });
 };

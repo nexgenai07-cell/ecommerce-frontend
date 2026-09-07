@@ -12,10 +12,10 @@ const SHIPPING_OPTIONS = [
   {
     id: "standard", // Unique identifier used to track which option is currently selected
     label: "Standard Delivery", // Display name shown to the user
-    price: 0, // Numeric price value (0 means free), can be used for calculations later
-    priceLabel: "FREE", // Human-readable price text shown on the card
+    price: 299, // Numeric price value, used for calculations
+    priceLabel: "Rs. 299", // Human-readable price text shown on the card
     estimate: "Estimated: 3-5 business days", // Delivery time estimate text shown under the label
-    free: true, // Boolean flag to apply special "free" styling (green color, checkmark icon)
+    free: false, // No free-shipping tier — every method is a flat paid rate
   },
   {
     id: "express", // Unique identifier for the express shipping option

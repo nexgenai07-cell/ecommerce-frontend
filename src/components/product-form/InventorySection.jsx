@@ -9,7 +9,9 @@ import Button from "../ui/Button";
 const InventorySection = ({
   register,
   errors,
-  currentStock,
+  totalStock,
+  reservedStock,
+  availableStock,
   onAdjustStockClick,
   onRegenerateSku, // Called when the refresh icon inside the SKU field is clicked
   isNewProduct = false,
@@ -20,7 +22,9 @@ const InventorySection = ({
   // undefined here does nothing extra, so this component works exactly
   // as before if a caller doesn't pass it.
 }) => {
-  const stock = currentStock ?? 0;
+  const total = totalStock ?? 0;
+  const reserved = reservedStock ?? 0;
+  const available = availableStock ?? Math.max(total - reserved, 0);
 
   const skuField = register("sku");
   // Captured separately (instead of spreading register("sku") inline)
@@ -78,8 +82,8 @@ const InventorySection = ({
             error={errors.stock?.message}
           />
           <Badge
-            label={stock > 0 ? "In Stock" : "Out of Stock"}
-            variant={stock > 0 ? "success" : "danger"}
+            label={total > 0 ? "In Stock" : "Out of Stock"}
+            variant={total > 0 ? "success" : "danger"}
             size="sm"
             rounded
             className="self-start"
@@ -89,19 +93,31 @@ const InventorySection = ({
         // Existing product — stock is display-only here. Any change
         // goes through the Adjust Stock modal (delta-based, atomic on
         // the backend), not through this form's Save/Publish button.
+        // Reserved stock (units already committed to pending_payment
+        // orders) is broken out separately from what's actually left
+        // to sell, since the two now genuinely differ once orders are
+        // placed but not yet paid for.
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-700">
             Current Stock
           </label>
           <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5">
-            <span className="text-lg font-semibold text-gray-900">{stock}</span>
+            <span className="text-lg font-semibold text-gray-900">{total}</span>
             <Badge
-              label={stock > 0 ? "In Stock" : "Out of Stock"}
-              variant={stock > 0 ? "success" : "danger"}
+              label={available > 0 ? "In Stock" : "Out of Stock"}
+              variant={available > 0 ? "success" : "danger"}
               size="sm"
               rounded
             />
           </div>
+          {reserved > 0 && (
+            <p className="text-xs text-gray-400">
+              {reserved} reserved by pending orders &middot;{" "}
+              <span className="font-medium text-gray-600">
+                {available} available to sell
+              </span>
+            </p>
+          )}
           <Button
             type="button"
             variant="outline"

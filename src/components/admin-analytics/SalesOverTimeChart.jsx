@@ -35,12 +35,11 @@ const SalesOverTimeChart = ({ startDate, endDate }) => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ["salesReport", "chart", startDate, endDate],
-    queryFn: () =>
-      getSalesReport({
+    queryFn: ({ signal }) => getSalesReport({
         start_date: startDate,
         end_date: endDate,
         period: "daily",
-      }),
+      }, signal),
   });
 
   const points = response?.data?.data || [];

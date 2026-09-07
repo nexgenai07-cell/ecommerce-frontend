@@ -31,7 +31,7 @@ const ProductsToolbar = ({
 }) => {
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
   // API_Documentation_Final.pdf (API 11) documents this endpoint as a

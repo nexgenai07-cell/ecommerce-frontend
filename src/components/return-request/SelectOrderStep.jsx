@@ -33,7 +33,7 @@ const SelectOrderStep = ({ selectedOrder, onOrderSelect }) => {
     // Use a standardized cache key for the "my orders" query
     queryKey: QUERY_KEYS.MY_ORDERS,
     // The actual function that performs the API call to fetch the user's orders
-    queryFn: getMyOrders,
+    queryFn: ({ signal }) => getMyOrders(undefined, signal),
     // Consider the cached data fresh for 5 minutes before refetching is allowed
     staleTime: 1000 * 60 * 5,
   });

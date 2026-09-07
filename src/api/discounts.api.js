@@ -22,8 +22,8 @@ import axiosInstance from "../lib/axiosInstance";
 // client-side there instead, since the backend doesn't reliably honor
 // query params on this endpoint (confirmed via Network tab: switching
 // filters wasn't actually narrowing anything down).
-export const getDiscounts = (params) => {
-  return axiosInstance.get("/api/v1/discounts/", { params });
+export const getDiscounts = (params, signal) => {
+  return axiosInstance.get("/api/v1/discounts/", { signal, params });
 };
 
 // ----------------------------
@@ -41,8 +41,8 @@ export const getDiscounts = (params) => {
 //   switch the admin controls directly) — it is NOT related to
 //   deletion. A coupon can be is_active: false (paused, still exists,
 //   still shows up here) without ever having been deleted.
-export const createDiscount = (data) => {
-  return axiosInstance.post("/api/v1/discounts/", data);
+export const createDiscount = (data, signal) => {
+  return axiosInstance.post("/api/v1/discounts/", data, { signal });
 };
 
 // ----------------------------
@@ -53,8 +53,8 @@ export const createDiscount = (data) => {
 // instead of only finding out after Submit. excludeId is passed only
 // in edit mode, so a coupon doesn't get flagged as a duplicate of
 // itself. Response shape (confirmed with backend): { exists: boolean }
-export const checkDiscountCodeExists = (code, excludeId) => {
-  return axiosInstance.get("/api/v1/discounts/check-code/", {
+export const checkDiscountCodeExists = (code, excludeId, signal) => {
+  return axiosInstance.get("/api/v1/discounts/check-code/", { signal,
     params: { code, exclude_id: excludeId },
   });
 };
@@ -69,8 +69,8 @@ export const checkDiscountCodeExists = (code, excludeId) => {
 // UPDATED BEHAVIOR: if this coupon's internal is_delete flag is true,
 // the backend now returns a plain 404 Not Found here instead of the
 // coupon object.
-export const getDiscountById = (id) => {
-  return axiosInstance.get(`/api/v1/discounts/${id}/`);
+export const getDiscountById = (id, signal) => {
+  return axiosInstance.get(`/api/v1/discounts/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -82,8 +82,8 @@ export const getDiscountById = (id) => {
 // createDiscount's payload above). This is also how an admin flips
 // is_active back to true on a coupon they had previously paused —
 // there is no separate "un-pause" endpoint, it's just a normal edit.
-export const updateDiscount = (id, data) => {
-  return axiosInstance.put(`/api/v1/discounts/${id}/`, data);
+export const updateDiscount = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/discounts/${id}/`, data, { signal });
 };
 
 // ----------------------------
@@ -103,8 +103,8 @@ export const updateDiscount = (id, data) => {
 // call). Once a coupon is deleted via this endpoint, it disappears
 // from every list for good — the only way to get an equivalent coupon
 // back is to create a brand new one with the same code.
-export const deleteDiscount = (id) => {
-  return axiosInstance.delete(`/api/v1/discounts/${id}/`);
+export const deleteDiscount = (id, signal) => {
+  return axiosInstance.delete(`/api/v1/discounts/${id}/`, { signal });
 };
 
 // ----------------------------
@@ -125,6 +125,6 @@ export const deleteDiscount = (id) => {
 // A soft-deleted coupon (is_delete: true) is treated the same as any
 // other invalid code here — the existing "invalid coupon" error
 // response covers it, no special handling needed on the frontend.
-export const validateCoupon = (data) => {
-  return axiosInstance.post("/api/v1/discounts/validate/", data);
+export const validateCoupon = (data, signal) => {
+  return axiosInstance.post("/api/v1/discounts/validate/", data, { signal });
 };

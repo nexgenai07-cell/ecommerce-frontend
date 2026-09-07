@@ -10,8 +10,6 @@ import { AiFillBell } from "react-icons/ai";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that fetches the list of notifications from the backend
 import { getNotifications } from "../../api/notifications.api";
-// Defensive normalizer — see file for why this exists (backend/docs contract drift on the notifications endpoint)
-import extractListData from "../../utils/extractListData";
 // Import the Container layout component used to constrain and center page content with consistent padding/max-width
 import Container from "../../components/layouts/Container";
 // Import the filter tabs component (All/Unread/Orders/Promotions/System) plus the "mark all as read" button
@@ -81,58 +79,57 @@ const NotificationHistory = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // =============================================
-  // NOTIFICATIONS API
-  // API 59 — GET /api/v1/notifications/
+  // NOTIFICATIONS API — GET /api/v1/notifications/
   // =============================================
-  // Fetch the full list of notifications using React Query, also extracting the loading state
+  // This endpoint's full contract is now confirmed and specified (see
+  // notifications.api.js). `type`, `is_read`, and `page` are sent
+  // straight to the backend, so this always returns exactly ONE
+  // already-filtered page — no more downloading the entire
+  // notification history on every visit.
   const {
-    data: notificationsData,
+    data: notificationsResponse,
     isLoading,
     isError, // true if the fetch threw an error (network drop, 500, expired session, etc.) — must be handled separately from "no data"
     refetch, // passed to ErrorState so the user can retry the failed request without a full page reload
   } = useQuery({
     // Unique cache key under which this query's data is stored/retrieved
-    queryKey: QUERY_KEYS.NOTIFICATIONS,
-    // The actual async function that performs the API call to fetch notifications
-    queryFn: getNotifications,
-    // Keep this data "fresh" (won't auto-refetch on its own staleness) for only 1 minute, since notifications update frequently
+    queryKey: [...QUERY_KEYS.NOTIFICATIONS, activeTab, currentPage],
+    queryFn: ({ signal }) => getNotifications({
+        // "all" and "unread" aren't real `type` values — only order/
+        // promotion/system are, so only forward activeTab as `type`
+        // when it's actually one of those three
+        type:
+          activeTab === "all" || activeTab === "unread" ? undefined : activeTab,
+        is_read: activeTab === "unread" ? false : undefined,
+        page: currentPage,
+        page_size: PER_PAGE,
+      }, signal),
     staleTime: 1000 * 60 * 1, // 1 minute — notifications frequently update
-    // Automatically refetch this query every 2 minutes in the background, so new notifications appear without a manual refresh
     refetchInterval: 1000 * 60 * 2, // Har 2 minute pe auto refresh
   });
 
-  // Safely extract the notifications array from the API response, defaulting to an empty array if data isn't available yet
-  // API_Documentation_Final.pdf (API 59) documents a flat array, but the
-  // real response is not a plain array — backend/docs contract drift.
-  const allNotifications = extractListData(notificationsData);
+  // The current page's notifications — always exactly PER_PAGE (or
+  // fewer, on the last page) real, already-filtered rows straight from
+  // the backend.
+  const notifications = notificationsResponse?.data?.results || [];
 
-  // Unread count — used in the header subtitle so the page opens with an
-  // immediate, real-data answer to "do I have anything new?"
-  const unreadCount = allNotifications.filter((n) => !n.is_read).length;
+  // unreadCount — the CONFIRMED total unread count across the
+  // customer's ENTIRE notification history, provided directly by the
+  // backend. This is NOT computed from the currently-loaded page,
+  // which would only reflect whatever happens to be on screen right
+  // now — it's the real total, used for both the header subtitle and
+  // the "Unread" tab's badge.
+  const unreadCount = notificationsResponse?.data?.unread_count ?? 0;
 
-  // Tab ke hisaab se filter karo
-  // Filter the full notifications list based on the currently active tab: show all, only unread ones, or only ones matching a specific type
-  const filteredNotifications =
-    activeTab === "all"
-      ? allNotifications
-      : activeTab === "unread"
-        ? allNotifications.filter((n) => !n.is_read)
-        : allNotifications.filter((n) => n.type === activeTab);
-
-  // Pagination
-  // Calculate the total number of notifications matching the current filter (used for pagination math)
-  const totalResults = filteredNotifications.length;
-  // Calculate the total number of pages needed based on filtered results and how many fit per page (rounded up)
-  const totalPages = Math.ceil(totalResults / PER_PAGE);
-  // Slice the filtered notifications array down to just the items that belong on the current page
-  const paginatedNotifications = filteredNotifications.slice(
-    (currentPage - 1) * PER_PAGE,
-    currentPage * PER_PAGE,
-  );
+  // totalCount / totalPages — real numbers straight from the backend's
+  // `count` field, matching exactly what's been server-filtered by the
+  // current tab (type/is_read)
+  const totalCount = notificationsResponse?.data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PER_PAGE));
 
   // Date groups
   // Organize the current page's notifications into date-based groups (TODAY/YESTERDAY/OLDER) for grouped rendering
-  const groupedNotifications = groupByDate(paginatedNotifications);
+  const groupedNotifications = groupByDate(notifications);
 
   // Tab change pe page reset
   // Handler called whenever the active filter tab changes: switches the tab and resets pagination back to page 1, since the filtered result set has changed
@@ -190,7 +187,7 @@ const NotificationHistory = () => {
           <NotificationFilters
             activeTab={activeTab}
             onTabChange={handleTabChange}
-            notifications={allNotifications}
+            unreadCount={unreadCount}
           />
 
           {/* Loading skeleton */}
@@ -253,7 +250,7 @@ const NotificationHistory = () => {
           {/* Only show the empty state if loading has finished, there was no error, and there are no notifications matching the current filter
               Wrapped in an elevated white card (rounded-3xl + shadow-sm + border) so it
               looks properly "raised" off the page instead of floating bare, matching Wishlist */}
-          {!isLoading && !isError && filteredNotifications.length === 0 && (
+          {!isLoading && !isError && totalCount === 0 && (
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
               <EmptyState
                 variant="noNotifications"

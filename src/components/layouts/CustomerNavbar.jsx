@@ -7,6 +7,7 @@ import {
   AiOutlineSearch,
   AiOutlineHeart,
   AiOutlineShopping,
+  AiOutlineShoppingCart,
   AiOutlineBell,
   AiOutlineUser,
   AiOutlineClose,
@@ -63,7 +64,7 @@ const CustomerNavbar = () => {
   // ===== CATEGORIES — real API, used in search suggestions + mobile drawer =====
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
   // API_Documentation_Final.pdf (API 11) documents this endpoint as a
@@ -79,7 +80,7 @@ const CustomerNavbar = () => {
   // was added to Redux locally during the current session.
   const { data: wishlistSyncData } = useQuery({
     queryKey: QUERY_KEYS.WISHLIST,
-    queryFn: getWishlist,
+    queryFn: ({ signal }) => getWishlist(signal),
     enabled: isAuthenticated,
     staleTime: 1000 * 60 * 5,
   });
@@ -90,10 +91,14 @@ const CustomerNavbar = () => {
     }
   }, [wishlistSyncData]);
 
+  // Guest cart support (backend v3.0): unlike wishlist/notifications, the
+  // cart now works for logged-out visitors too (server-side guest cart via
+  // X-Cart-Session — see axiosInstance.js), so this query is NOT gated by
+  // isAuthenticated — the navbar's cart badge should reflect a guest's
+  // cart just as much as a logged-in customer's.
   const { data: cartSyncData } = useQuery({
     queryKey: QUERY_KEYS.CART,
-    queryFn: getCart,
-    enabled: isAuthenticated,
+    queryFn: ({ signal }) => getCart(signal),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -112,7 +117,7 @@ const CustomerNavbar = () => {
   // navbar badge count will update itself without any extra wiring.
   const { data: notificationsData } = useQuery({
     queryKey: QUERY_KEYS.NOTIFICATIONS,
-    queryFn: getNotifications,
+    queryFn: ({ signal }) => getNotifications(undefined, signal),
     enabled: isAuthenticated,
     staleTime: 1000 * 60, // 1 minute — frequent enough to feel "live" without spamming the API
   });
@@ -133,7 +138,8 @@ const CustomerNavbar = () => {
   // ===== SEARCH SUGGESTIONS — real API, debounced, min 2 chars =====
   const { data: searchData, isLoading: searchLoading } = useQuery({
     queryKey: ["search-suggestions", searchQuery],
-    queryFn: () => searchProducts({ q: searchQuery, limit: 4 }),
+    queryFn: ({ signal }) =>
+      searchProducts({ q: searchQuery, limit: 4 }, signal),
     enabled: searchQuery.length >= 2,
     staleTime: 1000 * 30,
   });
@@ -171,7 +177,8 @@ const CustomerNavbar = () => {
   const { data: categoryFallbackData, isLoading: categoryFallbackLoading } =
     useQuery({
       queryKey: ["search-suggestions-by-category", matchedCategory?.id],
-      queryFn: () => getProducts({ category_id: matchedCategory.id, limit: 4 }),
+      queryFn: ({ signal }) =>
+        getProducts({ category_id: matchedCategory.id, limit: 4 }, signal),
       enabled: shouldFetchCategoryFallback,
       staleTime: 1000 * 30,
     });
@@ -593,13 +600,17 @@ const CustomerNavbar = () => {
                 </AnimatePresence>
               </Link>
 
-              {/* Cart */}
+              {/* Cart — a trolley/cart glyph, matching the wheeled cart
+                  graphic shown in the add-to-cart fly-in animation
+                  (FlyToIconProvider's CartGraphic), instead of the plain
+                  shopping-bag icon used for "My Orders" elsewhere in this
+                  navbar */}
               <Link
                 to={ROUTES.CART}
                 className="relative p-2 rounded-full text-gray-600 hover:bg-primary-50 hover:text-primary transition-colors"
                 aria-label="Cart"
               >
-                <AiOutlineShopping className="w-5 h-5" />
+                <AiOutlineShoppingCart className="w-5 h-5" />
                 <AnimatePresence>
                   {cartCount > 0 && (
                     <motion.span

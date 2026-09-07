@@ -40,8 +40,9 @@ const AuditLogs = () => {
   const debouncedSearch = useDebounce(search, 400);
 
   // --------------------------------------------------
-  // MAIN LOG LIST — API 55. Filters below are OPTIMISTIC attempts —
-  // no query params are documented for this endpoint at all.
+  // MAIN LOG LIST — API 82. `page`, `entity`, `user`, and `search` are
+  // now confirmed to filter and paginate correctly on the backend, so
+  // this always returns exactly one already-filtered page of logs.
   // --------------------------------------------------
   const {
     data: logsResponse,
@@ -57,13 +58,12 @@ const AuditLogs = () => {
       debouncedSearch,
       currentPage,
     ],
-    queryFn: () =>
-      getAuditLogs({
+    queryFn: ({ signal }) => getAuditLogs({
         entity: entityFilter || undefined,
         user: userFilter || undefined,
         search: debouncedSearch || undefined,
         page: currentPage,
-      }),
+      }, signal),
   });
 
   const logs = extractListData(logsResponse);
@@ -93,20 +93,21 @@ const AuditLogs = () => {
   ];
 
   // --------------------------------------------------
-  // ACTION-TYPE COUNTS — 3 separate optimistic-filtered queries,
-  // same pattern used on Complaints/Discounts stat cards
+  // ACTION-TYPE COUNTS — 3 separate queries, same pattern used on
+  // Complaints/Discounts stat cards. `action` is now a CONFIRMED
+  // working filter param.
   // --------------------------------------------------
   const { data: createResponse } = useQuery({
     queryKey: ["auditLogs", "count", "create"],
-    queryFn: () => getAuditLogs({ action: "create" }),
+    queryFn: ({ signal }) => getAuditLogs({ action: "create" }, signal),
   });
   const { data: updateResponse } = useQuery({
     queryKey: ["auditLogs", "count", "update"],
-    queryFn: () => getAuditLogs({ action: "update" }),
+    queryFn: ({ signal }) => getAuditLogs({ action: "update" }, signal),
   });
   const { data: deleteResponse } = useQuery({
     queryKey: ["auditLogs", "count", "delete"],
-    queryFn: () => getAuditLogs({ action: "delete" }),
+    queryFn: ({ signal }) => getAuditLogs({ action: "delete" }, signal),
   });
 
   const getCount = (response) =>

@@ -84,27 +84,19 @@ const CustomerGrowth = () => {
   // date-driven mode", and the chart's own tabs are the only quick-select
   // shortcut on the page.
 
-  // Fetched here for the Top Customers table — a larger page (50) is
-  // requested and sorted by total_spent client-side, since API 61's
-  // List Customers doesn't document a server-side `ordering` param
+  // Fetched here for the Top Customers table. The backend's `ordering`
+  // param is now confirmed working, so this asks for exactly the top 5
+  // spenders directly — sorted by the backend, not the browser — since
+  // TopCustomersTable only ever displays the top 5 anyway.
   const { data: customersResponse, isLoading: isCustomersLoading } = useQuery({
     queryKey: ["customerGrowth", "topCustomers"],
     // queryKey — unique cache key for this specific query
-    queryFn: () => getCustomers({ page_size: 50 }),
-    // FLAG: page_size isn't a confirmed documented param either — same
-    // optimistic-attempt pattern used across every other admin list page
+    queryFn: ({ signal }) => getCustomers({ ordering: "-total_spent", page_size: 5 }, signal),
   });
 
-  const rawCustomers =
-    // Prefers the paginated `.results` shape, falls back to a flat array
-    customersResponse?.data?.results || customersResponse?.data || [];
-  const sortedCustomers = [...rawCustomers].sort(
-    // Copies the array before sorting — Array.sort() mutates in place,
-    // and mutating the react-query cached array directly would cause
-    // subtle bugs elsewhere in the app
-    (a, b) => (Number(b.total_spent) || 0) - (Number(a.total_spent) || 0),
-    // Highest spender first
-  );
+  const sortedCustomers = customersResponse?.data?.results || [];
+  // Already sorted, highest spender first, straight from the backend —
+  // no client-side sorting needed anymore
 
   return (
     <div className="flex flex-col gap-6">

@@ -19,8 +19,8 @@ import axiosInstance from "../lib/axiosInstance";
 // The "data" payload is expected to include:
 // - phone_number: the customer's WhatsApp number to send the message to
 // - message: the actual text content of the message
-export const sendWhatsAppMessage = (data) => {
-  return axiosInstance.post("/api/v1/whatsapp/send/", data);
+export const sendWhatsAppMessage = (data, signal) => {
+  return axiosInstance.post("/api/v1/whatsapp/send/", data, { signal });
 };
 
 // ----------------------------
@@ -32,8 +32,8 @@ export const sendWhatsAppMessage = (data) => {
 // The "params" object can include:
 // - phone_number: filter logs to only show conversation with a
 //   specific customer's phone number
-export const getWhatsAppLogs = (params) => {
-  return axiosInstance.get("/api/v1/admin/whatsapp/logs/", { params });
+export const getWhatsAppLogs = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/whatsapp/logs/", { signal, params });
 };
 
 // ----------------------------
@@ -45,6 +45,6 @@ export const getWhatsAppLogs = (params) => {
 // shows which user is currently at which STEP of the bot's
 // conversation flow (e.g. "awaiting order number", "choosing product"),
 // helping diagnose issues if the bot gets stuck or behaves unexpectedly.
-export const getWhatsAppSessions = () => {
-  return axiosInstance.get("/api/v1/admin/whatsapp/sessions/");
+export const getWhatsAppSessions = (signal) => {
+  return axiosInstance.get("/api/v1/admin/whatsapp/sessions/", { signal });
 };

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,10 +10,10 @@ import {
   AiOutlineCloseCircle,
 } from "react-icons/ai";
 // AiOutlineCheckCircle / AiOutlineCloseCircle — small icons used inside
-// the new "On Website" Yes/No badge, purely visual reinforcement
+// the "On Website" Yes/No badge, purely visual reinforcement
 
 import {
-  fetchAllProducts,
+  searchProducts,
   getLowStockProducts,
   deleteProduct,
 } from "../../api/products.api";
@@ -34,18 +34,6 @@ import ProductStatsCards from "../../components/admin-products/ProductStatsCards
 import ProductFilters from "../../components/admin-products/ProductFilters";
 
 const PAGE_SIZE = 10;
-
-const SORTERS = {
-  // No `created_at` field is present on the list payload (API 26 only
-  // returns id, name, price, stock, sku, category, primary_image,
-  // is_active, in_stock — no timestamp), so `id` order is used as a
-  // reasonable stand-in for "newest first" (higher id = created later).
-  "-created_at": (a, b) => b.id - a.id,
-  created_at: (a, b) => a.id - b.id,
-  price: (a, b) => Number(a.price) - Number(b.price),
-  "-price": (a, b) => Number(b.price) - Number(a.price),
-  name: (a, b) => (a.name || "").localeCompare(b.name || ""),
-};
 
 const ProductList = () => {
   const navigate = useNavigate();
@@ -95,7 +83,7 @@ const ProductList = () => {
   // --------------------------------------------------
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
   const categoryOptions = extractListData(categoriesResponse).map((c) => ({
@@ -104,65 +92,84 @@ const ProductList = () => {
   }));
 
   // --------------------------------------------------
-  // FULL CATALOG QUERY — fetched once, filtered on the client
+  // MAIN PRODUCT QUERY — real server-side filtering + pagination
   // --------------------------------------------------
-  // WHY client-side filtering instead of calling the search endpoint
-  // (API 27) fresh on every filter change, the way this page used to:
+  // The backend's search endpoint (/api/v1/products/search/) now
+  // correctly filters `in_stock`, matches `q` against both name and
+  // sku, and filters `category_id` server-side — so every filter here
+  // is sent straight to the backend and only ONE page of already
+  // -filtered, already-sorted results comes back. Nothing is fetched
+  // or filtered in the browser anymore.
   //
-  //  1. THE REPORTED BUG — the backend's `in_stock=false` filter does
-  //     not actually filter server-side: calling it returns the full,
-  //     unfiltered product list (its `count` came back equal to the
-  //     total product count, 88). Trusting that value made the "Out of
-  //     Stock" summary card show the entire catalog instead of the
-  //     real out-of-stock count.
-  //  2. The backend's `q` search param only matches product NAME, so
-  //     searching by an exact SKU returned zero results even when a
-  //     product with that SKU existed.
-  //  3. Combining several filters at once (search + category + status
-  //     + price, all together) needs to behave predictably, which is
-  //     simplest to guarantee with one consistent client-side pass
-  //     instead of juggling which backend query params can safely be
-  //     combined.
-  //
-  // The catalog is small enough right now (well under a thousand
-  // products) that fetching it once and filtering/sorting/paginating
-  // in the browser is fast and gives correct, predictable results. If
-  // the catalog grows much larger, this should move back to real
-  // server-side filtering once the backend's search endpoint is fixed
-  // to actually honor `in_stock` and to match against `sku` too.
-  //
-  // Uses fetchAllProducts (small pages, followed via `next`) instead of
-  // one getProducts({ page_size: 500 }) call — the single giant request
-  // was regularly taking longer than axiosInstance's 10s timeout and
-  // getting aborted mid-flight (DevTools showed it stuck on "pending"
-  // then flipping to "(canceled)"), which is why this page kept failing
-  // to load while every other admin page loaded fine.
+  // "Low Stock" is the one exception — the backend has no dedicated
+  // low-stock filter on this endpoint (only a plain in_stock boolean),
+  // so selecting it swaps the data source to the dedicated Low Stock
+  // endpoint below instead of calling this query. See the Low Stock
+  // query and `activeProducts`/`activeIsLoading` derivation further
+  // down for how the two data sources are combined into one table.
+  const isLowStockView = filters.status === "low_stock";
+
   const {
-    data: allProducts = [],
-    // Defaults to an empty array so .filter()/.length never crash before
-    // the first page comes back — fetchAllProducts already returns a
-    // plain flat array, so no extractListData() call is needed here.
-    isLoading: isLoadingAll,
-    isError: isErrorAll,
-    refetch: refetchAll,
+    data: searchResponse,
+    isLoading: isLoadingSearch,
+    isError: isErrorSearch,
+    refetch: refetchSearch,
   } = useQuery({
-    queryKey: ["adminProducts", "allProducts"],
-    // A single, stable cache key — the complete catalog is fetched once
-    // and every filter/sort/page change below operates on it locally,
-    // so no filter change should ever trigger a new network request.
-    queryFn: fetchAllProducts,
-    staleTime: 1000 * 60 * 2,
+    queryKey: [
+      "adminProducts",
+      "search",
+      debouncedSearch,
+      filters.categoryId,
+      filters.status,
+      filters.minPrice,
+      filters.maxPrice,
+      filters.ordering,
+      currentPage,
+    ],
+    queryFn: ({ signal }) =>
+      searchProducts(
+        {
+          q: debouncedSearch || undefined,
+          category_id: filters.categoryId || undefined,
+          in_stock:
+            filters.status === "in_stock"
+              ? true
+              : filters.status === "out_of_stock"
+                ? false
+                : undefined,
+          min_price: filters.minPrice || undefined,
+          max_price: filters.maxPrice || undefined,
+          ordering: filters.ordering,
+          page: currentPage,
+          page_size: PAGE_SIZE,
+        },
+        signal,
+      ),
+    // Skipped entirely while viewing the Low Stock status — that view
+    // uses its own dedicated query below instead.
+    enabled: !isLowStockView,
+    staleTime: 1000 * 30,
+    keepPreviousData: true,
   });
 
-  // Low Stock has its own dedicated, real endpoint (API 35). Its
-  // response shape only carries { id, name, stock, low_stock_threshold }
-  // — no sku/category/price/in_stock — so instead of swapping the
-  // ENTIRE table to this endpoint's data (which used to silently drop
-  // any already-selected Category/Search/Price filter, since this
-  // response has none of those fields to filter by), it's used purely
-  // as a lookup set of "which product ids are currently low on stock".
-  // That set gets folded into the single filter pass below, so Low
-  // Stock now combines correctly with every other filter.
+  const searchResults = extractListData(searchResponse);
+  const searchTotalCount = searchResponse?.data?.count ?? 0;
+
+  // --------------------------------------------------
+  // LOW STOCK QUERY — dedicated endpoint (API 38), always fetched (its
+  // count feeds the "Low Stock" stat card regardless of which status
+  // filter is currently selected), and used as the actual table data
+  // source whenever the "Low Stock" status filter is selected.
+  // --------------------------------------------------
+  // This endpoint is intentionally NOT paginated by the backend — it
+  // returns the complete list of currently low-stock products in one
+  // response, which is expected to stay a short, bounded list (it's an
+  // exception report, not the full catalog). Search/category/price are
+  // applied to this small list in the browser when combined with the
+  // Low Stock filter, which is safe here precisely because the list is
+  // always small — this is NOT the same "fetch everything" pattern
+  // used before, since the backend itself defines this as a small,
+  // complete result set by design.
   const {
     data: lowStockResponse,
     isLoading: isLoadingLowStock,
@@ -170,121 +177,81 @@ const ProductList = () => {
     refetch: refetchLowStock,
   } = useQuery({
     queryKey: QUERY_KEYS.LOW_STOCK_PRODUCTS,
-    queryFn: getLowStockProducts,
+    queryFn: ({ signal }) => getLowStockProducts(signal),
     staleTime: 1000 * 60 * 2,
   });
   const lowStockProducts = extractListData(lowStockResponse);
 
-  // Real set of product ids that are currently low on stock, per the
-  // dedicated backend endpoint (API 35) — used as a lookup below so
-  // "Low Stock" behaves like any other status filter instead of
-  // replacing the entire dataset.
-  const lowStockIds = useMemo(
-    () => new Set(lowStockProducts.map((p) => p.id)),
-    [lowStockProducts],
-  );
-
-  // --------------------------------------------------
-  // STATS — derived from the real data already fetched above, not
-  // separate network calls (see ProductStatsCards.jsx for the full
-  // explanation of the bug this fixes)
-  // --------------------------------------------------
-  const outOfStockCount = allProducts.filter((p) => !p.in_stock).length;
-  const lowStockCount = lowStockProducts.length;
-
-  // --------------------------------------------------
-  // CLIENT-SIDE FILTER + SORT
-  // --------------------------------------------------
-  const filteredProducts = useMemo(() => {
+  const lowStockFiltered = lowStockProducts.filter((product) => {
     const term = debouncedSearch.trim().toLowerCase();
-
-    const filtered = allProducts.filter((product) => {
-      const matchesSearch =
-        !term ||
-        product.name?.toLowerCase().includes(term) ||
-        product.sku?.toLowerCase().includes(term);
-      // Matches against BOTH name and SKU — this is the actual fix for
-      // "search should also work by SKU", since the backend's own `q`
-      // param only matches name.
-
-      const matchesCategory =
-        !filters.categoryId ||
-        String(product.category?.id) === String(filters.categoryId);
-
-      const matchesStatus =
-        filters.status === "out_of_stock"
-          ? !product.in_stock
-          : filters.status === "in_stock"
-            ? product.in_stock
-            : filters.status === "low_stock"
-              ? lowStockIds.has(product.id)
-              : true;
-      // "low_stock" is checked against the real low-stock id set (from
-      // API 35) in the SAME pass as every other filter — this is what
-      // makes Category + Low Stock (or Search + Low Stock, etc.)
-      // actually combine correctly, instead of Low Stock silently
-      // wiping out whatever else was selected.
-
-      const price = Number(product.price) || 0;
-      const matchesMinPrice =
-        filters.minPrice === "" || price >= Number(filters.minPrice);
-      const matchesMaxPrice =
-        filters.maxPrice === "" || price <= Number(filters.maxPrice);
-
-      // All active filters must match together — this is what makes
-      // combining, say, Category + Status + a price range work
-      // correctly at the same time, instead of only the last-applied
-      // filter taking effect.
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesStatus &&
-        matchesMinPrice &&
-        matchesMaxPrice
-      );
-    });
-
-    const sortFn = SORTERS[filters.ordering] || SORTERS["-created_at"];
-    return [...filtered].sort(sortFn);
-  }, [
-    allProducts,
-    debouncedSearch,
-    filters.categoryId,
-    filters.status,
-    filters.minPrice,
-    filters.maxPrice,
-    filters.ordering,
-    lowStockIds,
-  ]);
-
-  // --------------------------------------------------
-  // PAGINATION — client-side, over the single unified filteredProducts list
-  // --------------------------------------------------
-  const totalCount = filteredProducts.length;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
-  const pagedProducts = filteredProducts.slice(
+    const matchesSearch =
+      !term ||
+      product.name?.toLowerCase().includes(term) ||
+      product.sku?.toLowerCase().includes(term);
+    const matchesCategory =
+      !filters.categoryId ||
+      String(product.category?.id) === String(filters.categoryId);
+    return matchesSearch && matchesCategory;
+  });
+  const lowStockPaged = lowStockFiltered.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
 
-  // Both queries feed the table now (the full catalog for everything,
-  // plus the low-stock id set whenever Low Stock is selected), so wait
-  // on both rather than swapping which one the UI tracks.
-  const isLoading = isLoadingAll || isLoadingLowStock;
-  const isError = isErrorAll || isErrorLowStock;
+  // --------------------------------------------------
+  // Which data source actually feeds the table right now
+  // --------------------------------------------------
+  const activeProducts = isLowStockView ? lowStockPaged : searchResults;
+  const activeTotalCount = isLowStockView
+    ? lowStockFiltered.length
+    : searchTotalCount;
+  const activeTotalPages = Math.ceil(activeTotalCount / PAGE_SIZE) || 1;
+  const isLoading = isLowStockView
+    ? isLoadingLowStock
+    : isLoadingSearch || isLoadingLowStock;
+  // (isLoadingLowStock is included even in the normal view because the
+  // "Low Stock" stat card below always depends on it, regardless of
+  // which status filter is currently active)
+  const isError = isLowStockView ? isErrorLowStock : isErrorSearch;
   const refetch = () => {
-    refetchAll();
+    refetchSearch();
     refetchLowStock();
   };
 
   // --------------------------------------------------
+  // STATS — total/out-of-stock counts come straight from the backend's
+  // real `count` field for each filter; Low Stock's count is simply
+  // the length of the dedicated endpoint's (unpaginated) result list.
+  // --------------------------------------------------
+  const { data: outOfStockCountResponse, isLoading: isLoadingOutOfStock } =
+    useQuery({
+      queryKey: ["adminProducts", "outOfStockCount"],
+      queryFn: ({ signal }) =>
+        searchProducts({ in_stock: false, page: 1, page_size: 1 }, signal),
+      // page_size: 1 — this request only exists to read the real
+      // `count` field for the stat card, so the actual result rows
+      // aren't needed, just the total.
+      staleTime: 1000 * 30,
+    });
+  const outOfStockCount = outOfStockCountResponse?.data?.count ?? 0;
+
+  const { data: totalCountResponse, isLoading: isLoadingTotalCount } = useQuery(
+    {
+      queryKey: ["adminProducts", "totalCount"],
+      queryFn: ({ signal }) =>
+        searchProducts({ page: 1, page_size: 1 }, signal),
+      staleTime: 1000 * 30,
+    },
+  );
+  const totalCount = totalCountResponse?.data?.count ?? 0;
+  const lowStockCount = lowStockProducts.length;
+
+  // --------------------------------------------------
   // BULK DELETE — API 21, called once per selected id (no bulk endpoint
-  // exists). UPDATED: the backend now performs a real soft delete
-  // internally (an is_delete flag on each product's row, never exposed
-  // to the frontend), which is why a deleted product simply stops
-  // appearing in adminProducts/low-stock queries after this succeeds —
-  // there's no separate "hide" step to reconcile here, invalidating
-  // the queries below is enough.
+  // exists). The backend performs a real soft delete internally (an
+  // is_delete flag on each product's row, never exposed to the
+  // frontend), which is why a deleted product simply stops appearing
+  // in the search/low-stock queries after this succeeds.
   // --------------------------------------------------
   const handleBulkDelete = async () => {
     setIsDeleting(true);
@@ -362,50 +329,59 @@ const ProductList = () => {
     {
       key: "stock",
       label: "Stock",
-      render: (row) => (
-        <span
-          className={
-            row.stock === 0
-              ? "text-danger text-sm"
-              : row.stock <= 5
-                ? "text-warning text-sm"
-                : "text-gray-700 text-sm"
-          }
-        >
-          {row.stock} in stock
-        </span>
-      ),
+      render: (row) => {
+        const total = row.total_stock ?? 0;
+        const available = row.available_stock ?? total;
+        const reserved = row.reserved_stock ?? 0;
+        return (
+          <span
+            className={
+              available === 0
+                ? "text-danger text-sm"
+                : available <= 5
+                  ? "text-warning text-sm"
+                  : "text-gray-700 text-sm"
+            }
+          >
+            {total} in stock
+            {reserved > 0 && (
+              <span className="text-gray-400"> ({available} available)</span>
+            )}
+          </span>
+        );
+      },
     },
     {
       // Renamed from "status" → "stockHealth" and its label from
       // "Status" → "Stock Health", to avoid being confused with the
-      // brand-new "On Website" column below. This column has ALWAYS
-      // been about stock levels (in stock / running low / out of
-      // stock) — it never reflected the is_active publish flag, it
-      // was just ambiguously named "Status" before.
+      // "On Website" column below. This column has ALWAYS been about
+      // stock levels (in stock / running low / out of stock) — it
+      // never reflected the is_active publish flag, it was just
+      // ambiguously named "Status" before.
       key: "stockHealth",
       label: "Stock Health",
       render: (row) => {
-        const label = !row.in_stock
-          ? "Out of Stock"
-          : row.stock <= 5
-            ? "Low Stock"
-            : "In Stock";
-        const variant = !row.in_stock
-          ? "gray"
-          : row.stock <= 5
-            ? "danger"
-            : "success";
+        // Stock health always reflects what's actually left to SELL
+        // (available_stock), not the raw total, since units already
+        // reserved by pending orders aren't sellable to a new customer.
+        const available = row.available_stock ?? row.total_stock ?? 0;
+        const label =
+          available === 0
+            ? "Out of Stock"
+            : available <= 5
+              ? "Low Stock"
+              : "In Stock";
+        const variant =
+          available === 0 ? "gray" : available <= 5 ? "danger" : "success";
         return <Badge label={label} variant={variant} size="sm" rounded />;
       },
     },
     {
-      // Reflects the real is_active field from the product object
-      // (present on API 26/27/28's product payload). This is the ONLY
-      // column that answers "is this product actually visible to
-      // customers on the storefront right now?" — a product can be
-      // fully in stock and still be hidden (is_active: false, e.g.
-      // saved as a draft), which is exactly the case this column
+      // Reflects the real is_active field from the product object.
+      // This is the ONLY column that answers "is this product actually
+      // visible to customers on the storefront right now?" — a product
+      // can be fully in stock and still be hidden (is_active: false,
+      // e.g. saved as a draft), which is exactly the case this column
       // exists to surface at a glance. This is a genuine, independent
       // publish/draft toggle, completely separate from deletion — see
       // products.api.js for the full is_active vs is_delete explanation.
@@ -478,7 +454,9 @@ const ProductList = () => {
         totalCount={totalCount}
         outOfStockCount={outOfStockCount}
         lowStockCount={lowStockCount}
-        isLoading={isLoadingAll || isLoadingLowStock}
+        isLoading={
+          isLoadingTotalCount || isLoadingOutOfStock || isLoadingLowStock
+        }
       />
 
       <ProductFilters
@@ -509,7 +487,7 @@ const ProductList = () => {
 
       <DataTable
         columns={columns}
-        data={pagedProducts}
+        data={activeProducts}
         keyField="id"
         selectable
         onSelectionChange={setSelectedIds}
@@ -517,8 +495,8 @@ const ProductList = () => {
         error={isError}
         onRetry={refetch}
         currentPage={currentPage}
-        totalPages={totalPages}
-        totalResults={totalCount}
+        totalPages={activeTotalPages}
+        totalResults={activeTotalCount}
         onPageChange={setCurrentPage}
       />
 

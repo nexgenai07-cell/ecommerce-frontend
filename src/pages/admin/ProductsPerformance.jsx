@@ -81,8 +81,7 @@ const ProductsPerformance = () => {
     // or endDate changes, TanStack Query automatically refetches with
     // the new values and re-renders the page with fresh data
 
-    queryFn: () =>
-      getBestSellers({ start_date: startDate, end_date: endDate, limit: 50 }),
+    queryFn: ({ signal }) => getBestSellers({ start_date: startDate, end_date: endDate, limit: 50 }, signal),
     // queryFn -> the actual network call, passing the currently
     // selected date range plus a fixed limit of 50 products
   });

@@ -29,8 +29,8 @@ import axiosInstance from "../lib/axiosInstance";
 // customers or admins. That internal flag itself is never sent back
 // in this response, so the frontend has no way to detect "this used
 // to exist and was deleted" — it just quietly stops appearing.
-export const getCategories = () => {
-  return axiosInstance.get("/api/v1/categories/");
+export const getCategories = (signal) => {
+  return axiosInstance.get("/api/v1/categories/", { signal });
 };
 
 // ----------------------------
@@ -41,14 +41,14 @@ export const getCategories = () => {
 // image is OPTIONAL on create — most categories will still be
 // created via plain JSON, so we only pay the FormData overhead when
 // an actual File object is present.
-export const createCategory = (data) => {
+export const createCategory = (data, signal) => {
   // No image attached — send plain JSON, simplest case, no need for
   // FormData overhead
   if (!(data.image instanceof File)) {
     const { image, ...jsonPayload } = data;
     // Destructuring strips "image" out (it would only ever be
     // undefined/null here) so we never send a stray image key
-    return axiosInstance.post("/api/v1/categories/", jsonPayload);
+    return axiosInstance.post("/api/v1/categories/", jsonPayload, { signal });
   }
 
   // Image attached — must send as multipart/form-data so the file's
@@ -69,7 +69,7 @@ export const createCategory = (data) => {
   // parameter the backend can't parse the body and will silently fall back
   // to default field values (or reject the file entirely). Same pattern as
   // submitComplaint() in complaints.api.js.
-  return axiosInstance.post("/api/v1/categories/", formData, {
+  return axiosInstance.post("/api/v1/categories/", formData, { signal,
     headers: { "Content-Type": undefined },
   });
 };
@@ -82,8 +82,8 @@ export const createCategory = (data) => {
 // finding out after Submit. excludeId is passed only in edit mode, so
 // a category doesn't get flagged as a duplicate of itself.
 // Response shape (confirmed with backend): { exists: boolean }
-export const checkCategoryNameExists = (name, excludeId) => {
-  return axiosInstance.get("/api/v1/categories/check-name/", {
+export const checkCategoryNameExists = (name, excludeId, signal) => {
+  return axiosInstance.get("/api/v1/categories/check-name/", { signal,
     params: { name, exclude_id: excludeId },
   });
 };
@@ -99,8 +99,8 @@ export const checkCategoryNameExists = (name, excludeId) => {
 // true, the backend now returns a plain 404 Not Found instead of the
 // category object — there is no soft-deleted "ghost" state to render
 // here anymore, it behaves exactly like a category that never existed.
-export const getCategoryById = (id) => {
-  return axiosInstance.get(`/api/v1/categories/${id}/`);
+export const getCategoryById = (id, signal) => {
+  return axiosInstance.get(`/api/v1/categories/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -115,7 +115,7 @@ export const getCategoryById = (id) => {
 //                        so clear whatever image currently exists
 //   - undefined       -> image field was left untouched entirely,
 //                        don't send it so the existing value survives
-export const updateCategory = (id, data) => {
+export const updateCategory = (id, data, signal) => {
   // Case 1: a new image file was picked — same multipart handling as create
   if (data.image instanceof File) {
     const formData = new FormData();
@@ -123,7 +123,7 @@ export const updateCategory = (id, data) => {
     formData.append("description", data.description || "");
     formData.append("image", data.image);
 
-    return axiosInstance.put(`/api/v1/categories/${id}/`, formData, {
+    return axiosInstance.put(`/api/v1/categories/${id}/`, formData, { signal,
       headers: { "Content-Type": undefined },
       // Same boundary reasoning as createCategory() above
     });
@@ -136,14 +136,14 @@ export const updateCategory = (id, data) => {
       name: data.name,
       description: data.description || "",
       image: null,
-    });
+    }, { signal });
   }
 
   // Case 3: image untouched — plain JSON, exactly as this worked
   // before the image feature existed. Strips out an "undefined" image
   // key so it isn't sent at all.
   const { image, ...jsonPayload } = data;
-  return axiosInstance.put(`/api/v1/categories/${id}/`, jsonPayload);
+  return axiosInstance.put(`/api/v1/categories/${id}/`, jsonPayload, { signal });
 };
 
 // ----------------------------
@@ -167,6 +167,6 @@ export const updateCategory = (id, data) => {
 // A confirmation popup is still shown before calling this (see
 // CategoryManagement.jsx) since the action can no longer be undone
 // from the UI.
-export const deleteCategory = (id) => {
-  return axiosInstance.delete(`/api/v1/categories/${id}/`);
+export const deleteCategory = (id, signal) => {
+  return axiosInstance.delete(`/api/v1/categories/${id}/`, { signal });
 };

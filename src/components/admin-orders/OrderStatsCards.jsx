@@ -23,7 +23,7 @@ import StatsCard from "../ui/StatsCard";
 const OrderStatsCards = () => {
   const { data: response, isLoading } = useQuery({
     queryKey: ["adminOrders", "statusBreakdown"],
-    queryFn: () => getOrdersAnalytics({}),
+    queryFn: ({ signal }) => getOrdersAnalytics({}, signal),
     staleTime: 1000 * 60 * 2,
   });
 

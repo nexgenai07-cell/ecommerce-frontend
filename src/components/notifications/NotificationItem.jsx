@@ -1,4 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import resolveNotificationLink from "../../utils/resolveNotificationLink";
 // Import truck, tag, shield-warning, box, and check-circle icons from the react-icons Bootstrap icon set, used for different notification types
 import {
   BsTruck,
@@ -62,36 +64,41 @@ const getNotifConfig = (type) => {
   }
 };
 
-// Time formatting — relative time
-// Helper function that converts a raw timestamp into a human-friendly relative time string (e.g., "5 minutes ago", "Yesterday, 3:00 PM")
+// Formats a notification's timestamp into a display string that always
+// carries an explicit clock time, keeping every entry on the page in the
+// same visual style regardless of how long ago it happened. The wording
+// only changes based on how many calendar days separate the timestamp
+// from today:
+//   - Same day as now      -> "Today, 3:45 PM"
+//   - One calendar day ago -> "Yesterday, 3:45 PM"
+//   - Anything older       -> "Jun 15, 3:45 PM"
+// This mirrors the TODAY / YESTERDAY / OLDER grouping already used on the
+// notifications page, so the label on each card always agrees with the
+// date-group heading it appears under.
 const getRelativeTime = (timestamp) => {
-  // If no timestamp was provided, return an empty string instead of attempting to format invalid data
+  // Without a timestamp there is nothing meaningful to display.
   if (!timestamp) return "";
-  // Get the current date/time for comparison
-  const now = new Date();
-  // Convert the provided timestamp string into a Date object
-  const date = new Date(timestamp);
-  // Calculate the difference in milliseconds between now and the notification's timestamp
-  const diffMs = now - date;
-  // Convert the millisecond difference into whole minutes
-  const diffMins = Math.floor(diffMs / 60000);
-  // Convert the minute difference into whole hours
-  const diffHours = Math.floor(diffMins / 60);
-  // Convert the hour difference into whole days
-  const diffDays = Math.floor(diffHours / 24);
 
-  // If less than 60 minutes have passed, show "{N} minutes ago"
-  if (diffMins < 60) return `${diffMins} minutes ago`;
-  // If less than 24 hours have passed, show "{N} hours ago"
-  if (diffHours < 24) return `${diffHours} hours ago`;
-  // If exactly 1 day has passed, show "Yesterday, {formatted time}"
-  if (diffDays === 1) {
-    return `Yesterday, ${date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
-  }
-  // Otherwise (2+ days old), show a full formatted date and time, e.g. "Jun 15, 3:45 PM"
+  const now = new Date();
+  const date = new Date(timestamp);
+
+  // Whole days elapsed since the notification was created. Using the
+  // same day-based calculation as the page's date-grouping logic keeps
+  // the two in sync, rather than deriving the label from elapsed hours
+  // (which could label an item "hours ago" even though its group
+  // heading already says TODAY).
+  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+  // Shared time-of-day portion, e.g. "3:45 PM"
+  const timeOfDay = date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (diffDays === 0) return `Today, ${timeOfDay}`;
+  if (diffDays === 1) return `Yesterday, ${timeOfDay}`;
+
+  // Two or more days old: show the full calendar date alongside the time.
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -104,6 +111,7 @@ const getRelativeTime = (timestamp) => {
 const NotificationItem = ({ notification }) => {
   // Get access to the React Query client instance so we can manually invalidate/refresh cached queries later
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   // Compute the icon/color configuration for this notification based on its type
   const config = getNotifConfig(notification.type);
 
@@ -130,6 +138,14 @@ const NotificationItem = ({ notification }) => {
     // Only trigger the mark-as-read mutation if this notification is currently unread (avoids unnecessary API calls for already-read notifications)
     if (!notification.is_read) {
       markReadMutation.mutate();
+    }
+
+    // Deep link — takes the customer straight to the order/return/
+    // complaint this notification is actually about, instead of just
+    // marking it read and leaving them on the notifications list.
+    const link = resolveNotificationLink(notification);
+    if (link) {
+      navigate(link);
     }
   };
 

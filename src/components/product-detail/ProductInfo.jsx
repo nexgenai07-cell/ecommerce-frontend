@@ -32,7 +32,7 @@ const ProductInfo = ({ product, imageRef }) => {
   const queryClient = useQueryClient();
 
   const { isAuthenticated } = useAuth();
-  const { handleAddItem } = useCart();
+  const { handleAddItem, items: cartItems } = useCart();
 
   // flyToCart/flyToWishlist fly the main product photo into the centered
   // cart/bag graphic. flyBackToWishlistCard reverses the wishlist flight
@@ -180,10 +180,18 @@ const ProductInfo = ({ product, imageRef }) => {
   });
 
   const handleAddToCart = () => {
-    if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN);
-      return;
-    }
+    // Guest cart support (backend v3.0): adding to cart no longer requires
+    // login — the backend supports an anonymous server-side guest cart via
+    // X-Cart-Session (see axiosInstance.js). Login/registration is only
+    // enforced later, at checkout.
+
+    // Stop here — before any network request — if the customer's cart
+    // already holds every unit this product has in stock. Without this
+    // check, clicking "Add to Cart" would send a request the backend is
+    // guaranteed to reject (since it independently enforces the same
+    // stock limit), surfacing as a confusing generic error toast.
+    if (isMaxedInCart) return;
+
     // Fires immediately — the animation is purely visual feedback and
     // doesn't need to wait for the network request to resolve.
     flyToCart(imageRef?.current, getCurrentDisplayedImage());
@@ -224,10 +232,31 @@ const ProductInfo = ({ product, imageRef }) => {
 
   if (!product) return null;
 
+  const availableStock = product.available_stock ?? 0;
+  const isInStock = availableStock > 0;
   const isLowStock =
-    product.in_stock &&
+    isInStock &&
     typeof product.low_stock_threshold === "number" &&
-    product.stock <= product.low_stock_threshold;
+    availableStock <= product.low_stock_threshold;
+
+  // How many units of THIS product are already sitting in the customer's
+  // cart right now (0 if it isn't in the cart at all). Mirrors the same
+  // check used on the product cards (ProductCard.jsx) elsewhere in the app.
+  const qtyAlreadyInCart =
+    cartItems.find((cartItem) => cartItem.product.id === product.id)
+      ?.quantity ?? 0;
+
+  // True only when the product genuinely still has stock (isInStock is
+  // true) BUT the customer's own cart already holds every available unit.
+  // Kept separate from isInStock — a different customer could still buy
+  // this product, so it gets its own "Max in Cart" label rather than
+  // being lumped in with "Out of Stock", which means nobody can.
+  const isMaxedInCart = isInStock && qtyAlreadyInCart >= availableStock;
+
+  // However many units are still left for THIS customer to add, on top
+  // of whatever they've already got in their cart — never negative, and
+  // at least 1 so the QuantitySelector always has a valid max to work with.
+  const remainingStock = Math.max(availableStock - qtyAlreadyInCart, 1);
 
   return (
     <motion.div
@@ -255,7 +284,7 @@ const ProductInfo = ({ product, imageRef }) => {
             size="lg"
           />
 
-          {product.in_stock ? (
+          {isInStock ? (
             <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success bg-success-light px-3 py-1.5 rounded-full">
               <AiOutlineCheck className="w-3.5 h-3.5" />
               In Stock
@@ -282,15 +311,22 @@ const ProductInfo = ({ product, imageRef }) => {
             value={quantity}
             onChange={handleQuantityChange}
             min={1}
-            max={product.stock || 1}
-            disabled={!product.in_stock}
+            max={remainingStock}
+            disabled={!isInStock || isMaxedInCart}
             size="md"
           />
         </div>
 
-        {isLowStock && (
+        {isLowStock && !isMaxedInCart && (
           <p className="text-xs text-warning font-medium bg-warning-light px-3 py-2 rounded-lg -mt-2">
-            ⚡ Only {product.stock} left in stock — order soon!
+            ⚡ Only {availableStock} left in stock — order soon!
+          </p>
+        )}
+
+        {isMaxedInCart && (
+          <p className="text-xs text-warning font-medium bg-warning-light px-3 py-2 rounded-lg -mt-2">
+            ⚡ You already have all {availableStock} available units in your
+            cart
           </p>
         )}
 
@@ -299,9 +335,11 @@ const ProductInfo = ({ product, imageRef }) => {
         <div className="flex flex-col gap-3">
           <motion.button
             onClick={handleAddToCart}
-            disabled={!product.in_stock || addToCartMutation.isPending}
+            disabled={
+              !isInStock || isMaxedInCart || addToCartMutation.isPending
+            }
             whileTap={{ scale: 0.98 }}
-            whileHover={{ scale: product.in_stock ? 1.01 : 1 }}
+            whileHover={{ scale: isInStock && !isMaxedInCart ? 1.01 : 1 }}
             className="
               w-full flex items-center justify-center gap-2
               py-3.5 px-6 rounded-xl text-sm font-semibold
@@ -316,7 +354,7 @@ const ProductInfo = ({ product, imageRef }) => {
             ) : (
               <>
                 <AiOutlineShoppingCart className="w-4 h-4" />
-                Add to Cart
+                {isMaxedInCart ? "Max in Cart" : "Add to Cart"}
               </>
             )}
           </motion.button>

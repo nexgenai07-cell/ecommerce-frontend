@@ -25,19 +25,19 @@ const PostsByPlatformChart = () => {
   // parallel automatically since they're independent hook calls
   const facebookQuery = useQuery({
     queryKey: ["socialDashboard", "platformCount", "facebook"],
-    queryFn: () => getSocialPosts({ platform: "facebook" }),
+    queryFn: ({ signal }) => getSocialPosts({ platform: "facebook" }, signal),
   });
   const instagramQuery = useQuery({
     queryKey: ["socialDashboard", "platformCount", "instagram"],
-    queryFn: () => getSocialPosts({ platform: "instagram" }),
+    queryFn: ({ signal }) => getSocialPosts({ platform: "instagram" }, signal),
   });
   const twitterQuery = useQuery({
     queryKey: ["socialDashboard", "platformCount", "twitter"],
-    queryFn: () => getSocialPosts({ platform: "twitter" }),
+    queryFn: ({ signal }) => getSocialPosts({ platform: "twitter" }, signal),
   });
   const tiktokQuery = useQuery({
     queryKey: ["socialDashboard", "platformCount", "tiktok"],
-    queryFn: () => getSocialPosts({ platform: "tiktok" }),
+    queryFn: ({ signal }) => getSocialPosts({ platform: "tiktok" }, signal),
   });
 
   const queries = [facebookQuery, instagramQuery, twitterQuery, tiktokQuery];

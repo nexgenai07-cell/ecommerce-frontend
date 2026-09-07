@@ -153,7 +153,7 @@ const Footer = () => {
   // =============================================
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES, // unique cache key so react-query knows how to cache/reuse this data
-    queryFn: getCategories, // the actual function that hits the backend API
+    queryFn: ({ signal }) => getCategories(signal), // the actual function that hits the backend API
     staleTime: 1000 * 60 * 10, // data is considered "fresh" for 10 minutes before refetching
   });
 

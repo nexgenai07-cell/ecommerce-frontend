@@ -306,9 +306,12 @@ const CartItem = ({ item, onRemove }) => {
     removeMutation.mutate();
   };
 
-  // True only when between 1 and 5 units remain in stock (inclusive).
+  // True only when between 1 and 5 units remain AVAILABLE to purchase
+  // (inclusive) — i.e. total_stock minus whatever's already reserved by
+  // other pending orders, not the raw total_stock figure.
   // Used to conditionally show the orange "low stock" warning message.
-  const isLowStock = item.product.stock <= 5 && item.product.stock > 0;
+  const isLowStock =
+    item.product.available_stock <= 5 && item.product.available_stock > 0;
 
   // ----------------------------------------------------------------------------
   // RENDER
@@ -373,7 +376,7 @@ const CartItem = ({ item, onRemove }) => {
           <div className="flex items-center gap-1.5">
             <BsExclamationTriangle className="w-3 h-3 text-warning shrink-0" />
             <p className="text-xs text-warning font-medium">
-              Only {item.product.stock} left in stock
+              Only {item.product.available_stock} left in stock
             </p>
           </div>
         )}
@@ -395,7 +398,7 @@ const CartItem = ({ item, onRemove }) => {
             value={quantity}
             onChange={handleQuantityChange}
             min={1}
-            max={item.product.stock || 99}
+            max={item.product.available_stock || 99}
             disabled={updateMutation.isPending}
             size="sm"
             showMaxHint

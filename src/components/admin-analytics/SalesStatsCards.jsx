@@ -51,14 +51,13 @@ const SalesStatsCards = ({ startDate, endDate }) => {
     queryKey: ["salesReport", "current", startDate, endDate],
     // queryKey -> uniquely identifies this request so React Query knows
     // when to refetch (whenever startDate/endDate change)
-    queryFn: () =>
-      getSalesReport({
+    queryFn: ({ signal }) => getSalesReport({
         start_date: startDate,
         end_date: endDate,
         period: "daily",
         // period: "daily" -> ask the API for one data point per day so
         // the totals below are accurate for any custom range
-      }),
+      }, signal),
   });
 
   // Previous period — same length, immediately before the current one
@@ -70,12 +69,11 @@ const SalesStatsCards = ({ startDate, endDate }) => {
       previousRange.startDate,
       previousRange.endDate,
     ],
-    queryFn: () =>
-      getSalesReport({
+    queryFn: ({ signal }) => getSalesReport({
         start_date: previousRange.startDate,
         end_date: previousRange.endDate,
         period: "daily",
-      }),
+      }, signal),
   });
 
   const currentPoints = currentResponse?.data?.data || [];

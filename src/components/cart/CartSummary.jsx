@@ -96,16 +96,27 @@ const CartSummary = ({ cart }) => {
   // This will be undefined/null when no coupon has been applied yet.
   const appliedCoupon = cart?.coupon;
 
-  // Shipping is free either when the subtotal already meets the Rs. 5000
-  // threshold, OR when the cart is completely empty (subtotal === 0).
-  const shippingFree = subtotal >= 5000 || subtotal === 0;
-
-  // If shipping isn't free, charge a flat Rs. 299 fee; otherwise charge 0.
-  const shippingCost = shippingFree ? 0 : 299;
+  // Flat shipping rate everywhere in the app — no free-shipping threshold.
+  // This mirrors the Standard Delivery rate selected on the Checkout page
+  // (Checkout.jsx's SHIPPING_COSTS.standard), so the estimate shown here
+  // on the Cart page always matches what the customer will actually see
+  // and pay at Checkout. The cart being completely empty is still shown
+  // as Rs. 0 shipping, since there's nothing to ship.
+  const shippingCost = subtotal === 0 ? 0 : 299;
 
   // --------------------------------------------------------------------------
   // MUTATION: Apply Coupon
   // Sends the typed coupon code to the backend to validate and apply it.
+  //
+  // The backend's response already contains the fully recalculated cart
+  // (items, subtotal, discount_amount, total, coupon) — the same shape as
+  // GET /api/v1/cart/. So instead of just marking the cart query stale and
+  // waiting for a separate refetch to land, we write that response straight
+  // into the React Query cache in onSuccess. That's what makes the price
+  // breakdown and the "applied coupon" badge update at the exact moment the
+  // success toast appears, instead of a beat later. onSettled still
+  // invalidates in the background afterwards, purely to reconcile with the
+  // server in case anything else changed the cart concurrently.
   // --------------------------------------------------------------------------
   const applyCouponMutation = useMutation({
     // mutationFn is the actual function that performs the API call.
@@ -118,11 +129,38 @@ const CartSummary = ({ cart }) => {
       showSuccess(
         `Coupon applied! You saved ${formatPrice(response.data.discount_amount)}`,
       );
+      // The code that was actually submitted — used as a fallback below.
+      const submittedCode = couponCode.trim();
       // Clear the input box now that the coupon has been successfully applied.
       setCouponCode("");
-      // Tell React Query the cart data is stale so it re-fetches the updated
-      // cart (now including the new discount/coupon) from the server.
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      // Write the updated cart straight into the cache so every component
+      // reading QUERY_KEYS.CART (including this one) re-renders immediately
+      // with the new discount/coupon, without waiting on a fresh GET request.
+      //
+      // Some backend responses only send back `discount_amount` and don't
+      // include the nested `coupon` object itself — if we relied on
+      // response.data alone in that case, `appliedCoupon` would stay
+      // null/undefined and the green "applied" badge wouldn't show up
+      // until the onSettled refetch below finally lands a moment later.
+      // Synthesizing a coupon object here (from what we already know:
+      // the code just submitted + the discount the server confirmed)
+      // guarantees the badge appears in the very same instant as the toast,
+      // regardless of whether the backend included the full object or not.
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) =>
+        old?.data
+          ? {
+              ...old,
+              data: {
+                ...old.data,
+                ...response.data,
+                coupon: response.data.coupon ?? {
+                  code: submittedCode,
+                  discount_amount: response.data.discount_amount,
+                },
+              },
+            }
+          : old,
+      );
     },
 
     // Runs only if the API call fails (invalid code, expired code, etc.).
@@ -136,28 +174,74 @@ const CartSummary = ({ cart }) => {
       // Show a red toast with whichever message we ended up with.
       showError(message);
     },
+
+    // Runs after either onSuccess or onError. Refetches the cart in the
+    // background to true up with the server — this never blocks or delays
+    // anything the user sees, since the cache was already updated above.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+    },
   });
 
   // --------------------------------------------------------------------------
   // MUTATION: Remove Coupon
   // Removes whatever coupon is currently applied to this cart.
+  //
+  // This one updates the cache optimistically in onMutate: the coupon badge
+  // disappears and the total recalculates the instant the "X" is clicked,
+  // before the DELETE request even resolves. onError rolls the cache back
+  // to the snapshot taken here if the request actually fails.
   // --------------------------------------------------------------------------
   const removeCouponMutation = useMutation({
     // mutationFn directly references the removeCoupon API function.
-    mutationFn: removeCoupon,
+    mutationFn: () => removeCoupon(),
+
+    // Fires immediately, before the network request is even sent.
+    onMutate: async () => {
+      // Stop any in-flight cart refetch from overwriting the optimistic
+      // value we're about to write.
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+
+      // Snapshot the current cache so we can restore it if the request fails.
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            coupon: null,
+            discount_amount: 0,
+            // Without a discount, the total (pre-shipping) is just the subtotal.
+            total: old.data.subtotal,
+          },
+        };
+      });
+
+      return { previousCart };
+    },
 
     // Runs only if the removal succeeds.
     onSuccess: () => {
       // Show a green toast confirming the coupon was removed.
       showSuccess("Coupon removed");
-      // Refresh the cart cache so prices go back to their non-discounted values.
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
 
-    // Runs only if the removal fails.
-    onError: () => {
+    // Runs only if the removal fails — puts the cache back the way it was
+    // before the optimistic update in onMutate.
+    onError: (error, variables, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
       // Show a red toast telling the user the removal failed.
       showError("Failed to remove coupon. Please try again.");
+    },
+
+    // Refetches in the background afterwards so the cache matches the
+    // server exactly, regardless of whether the request succeeded or failed.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
   });
 
@@ -214,12 +298,12 @@ const CartSummary = ({ cart }) => {
         <div className="flex items-center justify-between">
           {/* Label on the left */}
           <p className="text-sm text-gray-500">Shipping</p>
-          {/* Value color changes based on whether shipping is free or not */}
+          {/* Value color changes based on whether shipping is free (empty cart) or not */}
           <p
-            className={`text-sm font-medium ${shippingFree ? "text-success" : "text-gray-800"}`}
+            className={`text-sm font-medium ${shippingCost === 0 ? "text-success" : "text-gray-800"}`}
           >
             {/* Shows the word "Free" in green, or the actual fee in gray */}
-            {shippingFree ? "Free" : formatPrice(shippingCost)}
+            {shippingCost === 0 ? "Free" : formatPrice(shippingCost)}
           </p>
         </div>
 
@@ -230,9 +314,9 @@ const CartSummary = ({ cart }) => {
         <div className="flex items-center justify-between">
           {/* "Total" label, bold and dark */}
           <p className="text-base font-bold text-gray-900">Total</p>
-          {/* Final total value: base total + shipping cost (0 if free) */}
+          {/* Final total value: base total + shipping cost */}
           <p className="text-xl font-bold text-gray-900">
-            {formatPrice(total + (shippingFree ? 0 : shippingCost))}
+            {formatPrice(total + shippingCost)}
           </p>
         </div>
       </div>

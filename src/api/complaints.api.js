@@ -3,8 +3,11 @@
 // ============================================================
 // This file contains ALL API calls related to the Complaints module.
 // It covers endpoints needed by BOTH customers (submitting a
-// complaint, viewing their own complaints) AND admins (viewing all
-// complaints, updating their status, and responding to them).
+// complaint, viewing their own complaints, replying) AND admins
+// (viewing all complaints, updating status, replying). A complaint is
+// a running message thread between the customer and any admin —
+// there is no longer a single admin "response" field; see
+// getComplaintMessages()/postComplaintMessage() below.
 //
 // These functions are designed to be used as query/mutation functions
 // inside TanStack Query (React Query) hooks throughout the app.
@@ -19,11 +22,11 @@ import axiosInstance from "../lib/axiosInstance";
 // Used when a customer wants to raise a complaint about something
 // (an order, payment, product, or delivery issue).
 
-export const submitComplaint = (data) => {
+export const submitComplaint = (data, signal) => {
   // No file attached — send plain JSON, simplest case, no need for FormData overhead
   if (!data.attachment) {
     const { attachment, ...jsonPayload } = data;
-    return axiosInstance.post("/api/v1/complaints/", jsonPayload);
+    return axiosInstance.post("/api/v1/complaints/", jsonPayload, { signal });
   }
 
   // File attached — must send as multipart/form-data
@@ -45,6 +48,7 @@ export const submitComplaint = (data) => {
   // parameter the backend can't parse the body and will silently fall back
   // to default field values (or, as seen here, reject the file entirely).
   return axiosInstance.post("/api/v1/complaints/", formData, {
+    signal,
     headers: { "Content-Type": undefined },
   });
 };
@@ -57,9 +61,17 @@ export const submitComplaint = (data) => {
 // while an admin will get ALL complaints from every customer.
 // This role-based filtering is handled on the backend based on the
 // authenticated user's token/role.
-
-export const getComplaints = (params) => {
-  return axiosInstance.get("/api/v1/complaints/", { params });
+//
+// CONFIRMED WORKING SERVER-SIDE (as of the backend's latest fix):
+//   - status   -> filters by the complaint's status field
+//   - search   -> matches complaint reference number and/or message text
+//   - priority -> filters by "normal"/"urgent", combines correctly
+//                 with status and search in the same request
+//   - page     -> standard pagination
+// These previously did not filter at all (every request silently
+// returned the same unfiltered page) — this is now fixed.
+export const getComplaints = (params, signal) => {
+  return axiosInstance.get("/api/v1/complaints/", { signal, params });
 };
 
 // ----------------------------
@@ -70,8 +82,8 @@ export const getComplaints = (params) => {
 // response that has been added. Used on a complaint detail page,
 // for both customers (to see if there's a reply) and admins
 // (to review before responding).
-export const getComplaintDetail = (id) => {
-  return axiosInstance.get(`/api/v1/complaints/${id}/`);
+export const getComplaintDetail = (id, signal) => {
+  return axiosInstance.get(`/api/v1/complaints/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -82,19 +94,40 @@ export const getComplaintDetail = (id) => {
 // The "data" payload is expected to include:
 // - status: the new status to set, one of: "open", "in_progress",
 //   "resolved", or "closed" (matching the COMPLAINT_STATUS constants)
-export const updateComplaintStatus = (id, data) => {
-  return axiosInstance.put(`/api/v1/admin/complaints/${id}/status/`, data);
+export const updateComplaintStatus = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/admin/complaints/${id}/status/`, data, {
+    signal,
+  });
 };
 
 // ----------------------------
-// API - Respond to a complaint (Admin only)
+// API - Get a complaint's full message thread
 // ----------------------------
-// Allows admins to write and submit a reply/response to a customer's
-// complaint. The "data" payload is expected to include:
-// - response: the actual text of the admin's reply to the customer
-// Note: this is a SEPARATE action from updateComplaintStatus —
-// an admin might respond to a complaint without necessarily changing
-// its status in the same request, or vice versa.
-export const respondToComplaint = (id, data) => {
-  return axiosInstance.put(`/api/v1/admin/complaints/${id}/respond/`, data);
+// Replaces the old single admin "response" field entirely — a
+// complaint is now a running back-and-forth thread between the
+// customer and any admin, in chronological order. Response shape:
+// { results: [ { id, sender: "customer" | "admin", message,
+// created_at } ] }
+export const getComplaintMessages = (id, signal) => {
+  return axiosInstance.get(`/api/v1/complaints/${id}/messages/`, { signal });
+};
+
+// ----------------------------
+// API - Post a new message on a complaint's thread
+// ----------------------------
+// Allowed for the complaint's own customer OR any admin — the backend
+// figures out which side is posting from the auth token, so "sender"
+// is never sent from here. The "data" payload is just:
+// - message: the text of this reply
+//
+// IMPORTANT: posting a message NEVER changes the complaint's status,
+// in either direction — status only ever changes via the separate
+// updateComplaintStatus() call below, and only an admin can call that.
+// Each new message also triggers exactly one notification to the
+// OTHER party (reference_type: "complaint"), handled entirely
+// server-side — nothing extra to do here for that.
+export const postComplaintMessage = (id, data, signal) => {
+  return axiosInstance.post(`/api/v1/complaints/${id}/messages/`, data, {
+    signal,
+  });
 };

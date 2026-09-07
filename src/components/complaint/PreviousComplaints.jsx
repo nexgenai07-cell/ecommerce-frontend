@@ -65,7 +65,7 @@ const PreviousComplaints = () => {
     // Unique cache key under which this query's data is stored/retrieved
     queryKey: QUERY_KEYS.COMPLAINTS,
     // The actual async function that performs the API call to fetch complaints
-    queryFn: getComplaints,
+    queryFn: ({ signal }) => getComplaints(undefined, signal),
     // Keep this data "fresh" (won't auto-refetch) for 2 minutes (2 * 60 * 1000 ms) to avoid unnecessary network calls
     staleTime: 1000 * 60 * 2,
   });

@@ -1,202 +1,110 @@
-// Delivery Address section of the Checkout form
-// Collects full name, street address, city, province, and postal code
-// Province field is a dropdown with all Pakistani provinces and territories
-// Has a checkbox to save the address for future orders
-// This is a controlled form section — all state lives in the parent's React Hook Form instance
+// ============================================================
+// DELIVERY ADDRESS SECTION — CHECKOUT
+// ============================================================
+// Previously this section collected a full manual address (name,
+// street, city, province, postal code) directly on the checkout
+// form. Delivery addresses now live in the customer's Address Book
+// (see api/addresses.api.js + pages/customer/AddressBook.jsx), so
+// this section instead lets the customer PICK one of their saved
+// addresses — or add a new one on the spot without leaving checkout.
+// Whichever address is selected is passed back up to the Checkout
+// page as an id, to be sent as "address_id" in the checkout request.
 
-// register — React Hook Form's register function, connects each input to the form state
-// errors — validation errors object from React Hook Form, used to show field-level error messages
-const AddressForm = ({ register, errors }) => {
-  // All Pakistani provinces and territories shown in the province dropdown
-  // Defined inside the component — small static list so no need to move it outside
-  const PROVINCES = [
-    "Punjab",
-    "Sindh",
-    "Khyber Pakhtunkhwa",
-    "Balochistan",
-    "Azad Kashmir",
-    "Gilgit-Baltistan",
-    "Islamabad",
-  ];
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { HiOutlinePlus } from "react-icons/hi2";
+import { QUERY_KEYS } from "../../constants/queryKeys";
+import { getAddresses } from "../../api/addresses.api";
+import extractListData from "../../utils/extractListData";
+import AddressCard from "../address-book/AddressCard";
+import AddressFormModal from "../address-book/AddressFormModal";
+import { Skeleton } from "../ui/Skeleton";
+
+// selectedAddressId / onSelectAddress — controlled from the Checkout
+// page, since the choice needs to be read from there when the order
+// is submitted. error — validation message shown when the customer
+// tries to continue without picking an address.
+const AddressForm = ({ selectedAddressId, onSelectAddress, error }) => {
+  const [addModalOpen, setAddModalOpen] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: QUERY_KEYS.ADDRESSES,
+    queryFn: ({ signal }) => getAddresses(signal),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const addresses = extractListData(data);
+
+  // The moment the saved addresses load, default to whichever one is
+  // marked is_default — matching the same fallback rule the backend
+  // itself applies when no address_id is sent at all. The customer
+  // can still change this selection freely afterwards.
+  useEffect(() => {
+    if (selectedAddressId || addresses.length === 0) return;
+    const defaultAddress = addresses.find((a) => a.is_default);
+    onSelectAddress((defaultAddress || addresses[0]).id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addresses]);
 
   return (
-    // White card matching the style of all other checkout section cards
     <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col gap-5">
-      {/* Section heading — tells the user this card is for their delivery address */}
-      <h2 className="text-lg font-bold text-gray-900">Delivery Address</h2>
-
-      {/* ─── Full Name ─── */}
-      {/* Full-width field — takes the whole row on its own */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="fullName" className="text-sm font-medium text-gray-700">
-          Full Name
-        </label>
-        <input
-          id="fullName"
-          type="text"
-          placeholder="John Doe"
-          autoComplete="name"
-          // autoComplete="name" lets browsers autofill the user's saved full name
-          {...register("fullName")}
-          // Registers this field with React Hook Form for validation and value tracking
-          className={`
-            w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-            placeholder:text-gray-300 text-gray-900
-            focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-            transition-all
-            ${
-              errors?.fullName
-                ? "border-danger focus:ring-danger"
-                : // Red border and red focus ring when validation fails
-                  "border-gray-200"
-              // Normal grey border when valid or untouched
-            }
-          `}
-        />
-        {/* Error message only appears when React Hook Form reports a fullName error */}
-        {errors?.fullName && (
-          <p className="text-xs text-danger">{errors.fullName.message}</p>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-gray-900">Delivery Address</h2>
+        <button
+          type="button"
+          onClick={() => setAddModalOpen(true)}
+          className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+        >
+          <HiOutlinePlus className="w-4 h-4" />
+          Add New Address
+        </button>
       </div>
 
-      {/* ─── Street Address ─── */}
-      {/* Full-width field for house number and street name */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="street" className="text-sm font-medium text-gray-700">
-          Street Address
-        </label>
-        <input
-          id="street"
-          type="text"
-          placeholder="House #, Street name"
-          autoComplete="street-address"
-          // autoComplete="street-address" enables browser autofill for saved addresses
-          {...register("street")}
-          className={`
-            w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-            placeholder:text-gray-300 text-gray-900
-            focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-            transition-all
-            ${errors?.street ? "border-danger focus:ring-danger" : "border-gray-200"}
-          `}
-        />
-        {errors?.street && (
-          <p className="text-xs text-danger">{errors.street.message}</p>
-        )}
-      </div>
-
-      {/* ─── City + Province + Postal Code Row ─── */}
-      {/* 3-column grid on sm+ screens, stacks to single column on mobile */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* City input */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="city" className="text-sm font-medium text-gray-700">
-            City
-          </label>
-          <input
-            id="city"
-            type="text"
-            placeholder="Lahore"
-            // Placeholder shows a common Pakistani city as an example
-            autoComplete="address-level2"
-            // address-level2 is the standard autoComplete value for city fields
-            {...register("city")}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              placeholder:text-gray-300 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors?.city ? "border-danger focus:ring-danger" : "border-gray-200"}
-            `}
-          />
-          {errors?.city && (
-            <p className="text-xs text-danger">{errors.city.message}</p>
-          )}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-2xl" />
+          ))}
         </div>
-
-        {/* Province dropdown */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="province"
-            className="text-sm font-medium text-gray-700"
+      ) : addresses.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <p className="text-sm text-gray-500">
+            You don't have any saved addresses yet.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAddModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors"
           >
-            Province
-          </label>
-          {/* Native select for simplicity — easier to use on mobile than a custom dropdown */}
-          {/* appearance-none removes the browser's default dropdown arrow styling */}
-          <select
-            id="province"
-            {...register("province")}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              text-gray-900 cursor-pointer appearance-none
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors?.province ? "border-danger focus:ring-danger" : "border-gray-200"}
-            `}
-          >
-            {/* Default empty option prompts the user to make a selection */}
-            <option value="">Select Province</option>
-            {/* Render one option per province in the PROVINCES array */}
-            {PROVINCES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          {errors?.province && (
-            <p className="text-xs text-danger">{errors.province.message}</p>
-          )}
+            Add Your First Address
+          </button>
         </div>
-
-        {/* Postal Code input */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="postalCode"
-            className="text-sm font-medium text-gray-700"
-          >
-            Postal Code
-          </label>
-          <input
-            id="postalCode"
-            type="text"
-            // type="text" instead of type="number" to allow leading zeros in postal codes
-            placeholder="54000"
-            // 54000 is Lahore's postal code — gives the user a familiar example
-            autoComplete="postal-code"
-            {...register("postalCode")}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              placeholder:text-gray-300 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors?.postalCode ? "border-danger focus:ring-danger" : "border-gray-200"}
-            `}
-          />
-          {errors?.postalCode && (
-            <p className="text-xs text-danger">{errors.postalCode.message}</p>
-          )}
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {addresses.map((address) => (
+            <AddressCard
+              key={address.id}
+              address={address}
+              selectable
+              selected={selectedAddressId === address.id}
+              onSelect={() => onSelectAddress(address.id)}
+            />
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* ─── Save Address Checkbox ─── */}
-      {/* Wrapped in a label so clicking the text also toggles the checkbox */}
-      {/* select-none prevents the label text from being accidentally highlighted on click */}
-      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          {...register("saveAddress")}
-          // Registers the checkbox — its value will be true or false in the form data
-          className="w-4 h-4 rounded accent-primary cursor-pointer"
-          // accent-primary colors the checkbox with the brand color when checked
-        />
-        <span className="text-sm text-gray-600">
-          Save address for future purchases
-        </span>
-      </label>
+      {error && <p className="text-xs text-danger">{error}</p>}
+
+      {/* Lets the customer save a brand-new address without leaving
+          checkout — the new address is selected immediately once
+          saved, via the onSaved callback below. */}
+      <AddressFormModal
+        isOpen={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSaved={(newAddress) => onSelectAddress(newAddress.id)}
+      />
     </div>
   );
 };
 
-// Export so the Checkout page can import this as a form section
 export default AddressForm;

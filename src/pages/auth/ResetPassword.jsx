@@ -83,7 +83,7 @@ const ResetPassword = () => {
   });
 
   const resetMutation = useMutation({
-    mutationFn: resetPassword,
+    mutationFn: (variables) => resetPassword(variables),
 
     onSuccess: () => {
       setResetSuccess(true);

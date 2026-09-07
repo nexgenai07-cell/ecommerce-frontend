@@ -142,7 +142,7 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
   // Fetch categories once and cache them for 10 minutes — this list rarely changes
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
   // Normalize whatever shape the backend returned into a plain array

@@ -72,7 +72,7 @@ const describeLog = (log) => {
 const ActivityLogWidget = () => {
   const { data: logsResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "auditLogs"],
-    queryFn: getAuditLogs,
+    queryFn: ({ signal }) => getAuditLogs(undefined, signal),
     staleTime: 1000 * 60 * 2,
   });
 

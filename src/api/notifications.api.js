@@ -15,25 +15,56 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API - Get all notifications for the logged-in user
+// API - Get notifications for the logged-in user
 // ----------------------------
-// Fetches the full list of notifications belonging to whichever
-// user is currently logged in. Used in TWO places:
+// Fetches ONE PAGE of the current user's notifications. Used in TWO
+// places:
 // 1. The bell icon dropdown in the navbar (showing recent notifications)
 // 2. A dedicated "Notifications" page showing the complete history
-export const getNotifications = () => {
-  return axiosInstance.get("/api/v1/notifications/");
+//
+// This endpoint was previously entirely undocumented. Its exact
+// contract has now been specified and confirmed implemented:
+//
+// Query params (all optional):
+//   - page     -> standard pagination
+//   - type     -> "order" | "promotion" | "system"
+//   - is_read  -> true / false
+//
+// Confirmed response shape:
+//   {
+//     count, next, previous,
+//     unread_count,   <- the customer's TOTAL unread count across
+//                         their ENTIRE notification history, not just
+//                         this page. Used for the "Unread (N)" tab
+//                         badge and the page subtitle, since neither
+//                         can be correctly computed on the frontend
+//                         once only one page is ever loaded at a time.
+//     results: [
+//       { id, title, message, type, is_read, created_at,
+//         reference_type, reference_id }
+//     ]
+//   }
+//
+// reference_type ("order" | "return" | "complaint" | null) and
+// reference_id (the real order_number / return id / complaint id, as
+// a string, or null) let the UI deep-link straight to whatever this
+// notification is actually about — see utils/resolveNotificationLink.js.
+// Every automatic notification (order/return status change, complaint
+// reply) always populates both; a general/manual notification may
+// leave them null.
+export const getNotifications = (params, signal) => {
+  return axiosInstance.get("/api/v1/notifications/", { signal, params });
 };
 
 // ----------------------------
 // API  - Get full details of a specific notification
 // ----------------------------
 // Fetches everything about one specific notification, identified
-// by its ID — likely including the full message, type, timestamp,
-// and read/unread status. Used when a user clicks on a notification
-// to view its complete content.
-export const getNotificationDetail = (id) => {
-  return axiosInstance.get(`/api/v1/notifications/${id}/`);
+// by its ID — the same shape as one item in getNotifications()'s
+// `results` array (reference_type/reference_id included). Used when a
+// user clicks on a notification to view its complete content.
+export const getNotificationDetail = (id, signal) => {
+  return axiosInstance.get(`/api/v1/notifications/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -44,10 +75,30 @@ export const getNotificationDetail = (id) => {
 // typically called AUTOMATICALLY in the background the moment a
 // user opens/clicks on a notification — so the unread badge count
 // decreases without the user having to do anything extra.
-export const markNotificationRead = (id) => {
-  return axiosInstance.put(`/api/v1/notifications/${id}/read/`);
+export const markNotificationRead = (id, signal) => {
+  return axiosInstance.put(`/api/v1/notifications/${id}/read/`, undefined, {
+    signal,
+  });
   // No "data" argument passed since marking as read doesn't require
   // sending a request body — the notification ID in the URL is enough
+};
+
+// ----------------------------
+// API — Mark ALL of the current user's notifications as read
+// ----------------------------
+// NEW ENDPOINT — did not exist before. The "Mark all as read" button
+// used to fire one individual markNotificationRead() PUT request PER
+// unread notification, all at once (20+ simultaneous requests for one
+// click, with no clean way to recover from a partial failure). This
+// single bulk endpoint replaces that entirely.
+//
+// No request body — applies to all of the logged-in user's own
+// unread notifications only.
+// Response: { marked_count: number }
+export const markAllNotificationsRead = (signal) => {
+  return axiosInstance.post("/api/v1/notifications/mark-all-read/", undefined, {
+    signal,
+  });
 };
 
 // ----------------------------
@@ -60,10 +111,18 @@ export const markNotificationRead = (id) => {
 // - message: the actual notification content
 // - type: what kind of notification this is (e.g. info, warning, promo)
 // - sent_via: the delivery channel (e.g. in-app, email, SMS, WhatsApp)
+// - reference_type: optional — "order" | "return" | "complaint" | null,
+//   lets this manual notification deep-link somewhere too, exactly
+//   like the automatic ones do
+// - reference_id: optional — the order_number / return id / complaint
+//   id this notification refers to, as a string
+//
+// Both reference fields default to null when omitted entirely — this
+// endpoint works exactly as before if the admin doesn't set them.
 //
 // IMPORTANT BEHAVIOR: if "user" is sent as null, the backend treats
 // this as a BROADCAST — meaning the notification gets sent to
 // EVERY user in the system, not just one specific person.
-export const sendNotification = (data) => {
-  return axiosInstance.post("/api/v1/notifications/send/", data);
+export const sendNotification = (data, signal) => {
+  return axiosInstance.post("/api/v1/notifications/send/", data, { signal });
 };

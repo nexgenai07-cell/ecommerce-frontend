@@ -98,7 +98,8 @@ const ChatProvider = ({ children }) => {
 
   // Creates a brand-new chat session on the backend for the current role.
   const startSessionMutation = useMutation({
-    mutationFn: role === "admin" ? startAdminChatSession : startChatSession,
+    mutationFn: () =>
+      role === "admin" ? startAdminChatSession() : startChatSession(),
   });
   // Fetches the full message history for one specific session_key.
   const historyMutation = useMutation({
@@ -106,11 +107,12 @@ const ChatProvider = ({ children }) => {
   });
   // Fetches the list of the current user's past chat sessions.
   const sessionsListMutation = useMutation({
-    mutationFn: role === "admin" ? listAdminChatSessions : listChatSessions,
+    mutationFn: () =>
+      role === "admin" ? listAdminChatSessions() : listChatSessions(),
   });
   // Permanently deletes one saved chat session.
   const deleteSessionMutation = useMutation({
-    mutationFn: deleteChatSession,
+    mutationFn: (variables) => deleteChatSession(variables),
   });
   // Sends (or clears, when rating is null) a thumbs-up/down rating on
   // one specific AI message.

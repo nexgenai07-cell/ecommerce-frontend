@@ -17,12 +17,11 @@ import EmptyState from "../ui/EmptyState";
 const RevenueByPeriodChart = ({ startDate, endDate }) => {
   const { data: response, isLoading } = useQuery({
     queryKey: ["revenueReport", "weekly", startDate, endDate],
-    queryFn: () =>
-      getRevenueReport({
+    queryFn: ({ signal }) => getRevenueReport({
         start_date: startDate,
         end_date: endDate,
         period: "weekly",
-      }),
+      }, signal),
   });
 
   const points = response?.data?.data || [];

@@ -11,6 +11,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 // Zod library used to define and validate the shape/rules of form data
 import { z } from "zod";
+import {
+  EMAIL_REGEX,
+  EMAIL_INVALID_MESSAGE,
+} from "../../utils/emailValidation";
 // Framer Motion's "motion" component used to animate sections sliding/fading in
 import { motion, AnimatePresence } from "framer-motion";
 // Stripe.js loader — dynamically loads Stripe using the publishable_key returned
@@ -19,19 +23,31 @@ import { loadStripe } from "@stripe/stripe-js";
 // Elements — the provider component that gives Stripe context (clientSecret,
 // appearance, etc.) to PaymentElement/useStripe/useElements down the tree
 import { Elements } from "@stripe/react-stripe-js";
-// API function to fetch the current user's cart data from the backend
-import { getCart } from "../../api/cart.api";
-// API function to submit the checkout request and place the order, and to
-// fetch an existing order's details (needed for the resume-payment flow)
-import { checkout, getOrderDetail } from "../../api/orders.api";
+// API function to fetch the current user's cart data, and to add items
+// back to it — used by the Cancel Order flow below to restore the cart
+// (per API_Documentation v3.0: Cancel Order / API 58 only restores
+// product STOCK and processes a refund — it does NOT touch the
+// customer's cart, so the frontend has to rebuild it manually)
+import { getCart, addToCart } from "../../api/cart.api";
+// API function to submit the checkout request and place the order, to
+// fetch an existing order's details (needed for the resume-payment flow),
+// and to cancel a pending order (used by the "Cancel Order" action below —
+// same endpoint OrderDetail.jsx already uses for this)
+import { checkout, getOrderDetail, cancelOrder } from "../../api/orders.api";
 // API function to create a Stripe Payment Intent for an existing order (API 69)
 import { createPaymentIntent } from "../../api/payments.api";
 // Custom hook providing authentication state (isAuthenticated flag and logged-in user info)
 import useAuth from "../../hooks/useAuth";
 // Custom hook providing cart-related actions, here specifically used to clear cart from Redux store
 import useCart from "../../hooks/useCart";
-// Toast notification helper to display error messages to the user
-import { showError } from "../../components/ui/Toast";
+// Toast notification helpers to display success/error messages to the user
+import { showSuccess, showError } from "../../components/ui/Toast";
+// Confirmation dialog + its form controls — same components OrderDetail.jsx
+// uses for its own "Cancel Order" modal, reused here for consistency
+import Modal from "../../components/ui/Modal";
+import Select from "../../components/ui/Select";
+import Textarea from "../../components/ui/Textarea";
+import Button from "../../components/ui/Button";
 // Centralized route path constants (e.g. login, products, order detail pages)
 import { ROUTES } from "../../constants/routes";
 // Centralized React Query key constants used for caching/invalidating specific queries
@@ -48,6 +64,11 @@ import AddressForm from "../../components/checkout/AddressForm";
 import ShippingMethod from "../../components/checkout/ShippingMethod";
 // Sub-component rendering the Stripe Payment Element + "Pay Now" button
 import PaymentMethod from "../../components/checkout/PaymentMethod";
+// Lets the customer pick Card (Stripe) vs QR Payment before placing the order
+import PaymentMethodSelector from "../../components/checkout/PaymentMethodSelector";
+// Shown instead of PaymentMethod once a QR order is placed — QR code + proof upload
+import QrPaymentPanel from "../../components/checkout/QrPaymentPanel";
+import { PAYMENT_METHOD } from "../../constants/statusTypes";
 // Sub-component showing the order summary sidebar with cart items, totals, and place order button
 import CheckoutOrderSummary from "../../components/checkout/CheckoutOrderSummary";
 // Reusable empty state component shown when there's nothing to display (e.g. empty cart)
@@ -71,7 +92,7 @@ const checkoutSchema = z.object({
     .string()
     .trim()
     .min(1, "Email required")
-    .email("Invalid email")
+    .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
     .max(255, "Email is too long"),
   // Phone field — must not be empty and must match Pakistani phone number pattern (+92 or 0 followed by 10 digits)
   phone: z
@@ -80,40 +101,14 @@ const checkoutSchema = z.object({
     .min(1, "Phone required")
     .regex(/^(\+92|0)[0-9]{10}$/, "Invalid Pakistani phone number"),
 
-  // Address
-  // Full name — required, and must be at least 3 characters long
-  fullName: z
-    .string()
-    .trim()
-    .min(1, "Full name required")
-    .min(3, "Min 3 characters")
-    .max(50, "Name must be less than 50 characters"),
-  // Street address — required, with a sane minimum so a single character
-  // can't pass as a "complete" address
-  street: z
-    .string()
-    .trim()
-    .min(1, "Street address required")
-    .min(5, "Please enter a complete street address")
-    .max(150, "Address is too long"),
-  // City — required field
-  city: z
-    .string()
-    .trim()
-    .min(1, "City required")
-    .max(60, "City name is too long")
-    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters"),
-  // Province — required field
-  province: z.string().trim().min(1, "Province required"),
-  // Postal code — required, numeric, and capped at a maximum of 10 characters
-  postalCode: z
-    .string()
-    .trim()
-    .min(1, "Postal code required")
-    .max(10)
-    .regex(/^\d+$/, "Postal code can only contain numbers"),
-  // Optional checkbox to save this address for future use — not mandatory
-  saveAddress: z.boolean().optional(),
+  // NOTE: the delivery address itself is intentionally NOT part of this
+  // schema anymore. It used to be five raw text fields (fullName, street,
+  // city, province, postalCode) typed directly into this form. Delivery
+  // addresses now live in the customer's Address Book instead — the
+  // customer picks one (or adds a new one inline) via AddressForm.jsx,
+  // and the chosen address's id is tracked separately as
+  // "selectedAddressId" state below, then validated on submit and sent
+  // to the backend as "address_id".
 
   // Shipping
   // Shipping method — required, user must select one (standard/express)
@@ -121,9 +116,12 @@ const checkoutSchema = z.object({
 });
 
 // Shipping cost config
-// Simple lookup object mapping shipping method ids to their respective cost in currency units
+// Simple lookup object mapping shipping method ids to their respective cost in currency units.
+// Flat rates — no free-shipping threshold. Whatever the customer selects
+// here is the single source of truth for shipping cost everywhere else
+// in the app (Cart page estimate, Checkout total, and the saved order).
 const SHIPPING_COSTS = {
-  standard: 0, // Standard delivery is free
+  standard: 299, // Standard delivery — flat Rs. 299, always (no free threshold)
   express: 999, // Express shipping costs 999
 };
 
@@ -308,8 +306,28 @@ const Checkout = () => {
   // CHECKOUT STEP STATE
   // "details"  -> filling contact/address/shipping, order not created yet
   // "payment"  -> order created (pending_payment), Stripe Payment Element shown
+  //               (only reached when paymentMethod === "stripe")
+  // "qr"       -> order created (pending_payment), QR code + proof upload
+  //               shown instead (only reached when paymentMethod === "qr")
   // =============================================
   const [step, setStep] = useState("details");
+  // Which payment method the customer picked on the details step — sent
+  // as "payment_method" on the Checkout request, and decides whether
+  // "payment" (Stripe) or "qr" (QR) step is shown next.
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHOD.STRIPE);
+  // qr_image_url / payment_reference — only present in the Checkout
+  // response when payment_method: "qr" was sent; passed straight into
+  // QrPaymentPanel on the "qr" step.
+  const [qrPaymentDetails, setQrPaymentDetails] = useState(null);
+  // Which saved Address Book entry the customer has picked for this
+  // order — sent to the backend as "address_id" on checkout. Kept as
+  // its own piece of state rather than a react-hook-form field, since
+  // it is chosen by clicking a card (AddressForm.jsx) rather than
+  // typed into an input.
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  // Shown under the address picker if the customer tries to continue
+  // to payment without having selected (or added) an address.
+  const [addressError, setAddressError] = useState("");
   // The order created by the Checkout API — needed to build the redirect URL
   // and to display on the payment step
   const [orderNumber, setOrderNumber] = useState(null);
@@ -328,6 +346,23 @@ const Checkout = () => {
   // that actually matter right before the cart gets cleared, and use that
   // frozen snapshot instead of the live cart once we're on the payment step.
   const [orderSnapshot, setOrderSnapshot] = useState(null);
+
+  // =============================================
+  // CANCEL ORDER (payment / qr steps)
+  // Once the order is placed it sits as "pending_payment" while the
+  // customer is on the "payment" (Stripe) or "qr" step — at that point
+  // there was previously NO way to back out: going back just showed an
+  // empty cart (it was already cleared when the order was created), with
+  // no way to undo it. This lets the customer cancel that pending order
+  // and sends them back to a normal Cart page instead of stranding them.
+  // =============================================
+  // showCancelModal controls whether the cancel confirmation dialog is visible
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  // Optional reason picked from the dropdown — purely for the customer's
+  // own context, exactly like the same dropdown on the Order Detail page.
+  const [cancelReason, setCancelReason] = useState("");
+  // Free-text field shown only when "other" is selected above.
+  const [cancelReasonOther, setCancelReasonOther] = useState("");
 
   // Login check
   // Side effect that runs whenever isAuthenticated or navigate changes
@@ -348,7 +383,7 @@ const Checkout = () => {
   // Fetching the user's current cart data using React Query
   const { data: cartData, isLoading: cartLoading } = useQuery({
     queryKey: QUERY_KEYS.CART, // Cache key used to identify and later invalidate this specific query
-    queryFn: getCart, // Function that performs the actual API call to fetch cart data
+    queryFn: ({ signal }) => getCart(signal), // Function that performs the actual API call to fetch cart data
     enabled: isAuthenticated, // Only run this query if the user is authenticated (prevents unnecessary calls for logged-out users)
     staleTime: 1000 * 60 * 2, // Data is considered "fresh" for 2 minutes before React Query refetches it again
   });
@@ -386,12 +421,6 @@ const Checkout = () => {
       // Pre-filling form fields with existing user data where available, otherwise empty strings/defaults
       email: user?.email || "",
       phone: user?.phone || "",
-      fullName: user?.name || "",
-      street: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      saveAddress: false,
       shippingMethod: "standard", // Default shipping method pre-selected as standard delivery
     },
   });
@@ -413,8 +442,14 @@ const Checkout = () => {
   // Once we're on the payment step, show the frozen orderSnapshot instead of
   // the live (now-cleared) cart, so the sidebar keeps reflecting what the
   // customer actually agreed to pay while Stripe collects payment.
+  // Also applies to the "qr" step (Easypaisa/JazzCash) — that flow clears
+  // the cart the exact same way right after the order is placed, so it
+  // needs the same frozen snapshot instead of falling back to the (now
+  // empty) live cart, which was showing Rs. 0 there.
   const displayCart =
-    step === "payment" && orderSnapshot ? orderSnapshot : cart;
+    (step === "payment" || step === "qr") && orderSnapshot
+      ? orderSnapshot
+      : cart;
   const displaySubtotal = parseFloat(displayCart?.subtotal || 0);
   const displayDiscount = parseFloat(displayCart?.discount_amount || 0);
   const displayTotal = displaySubtotal - displayDiscount + shippingCost;
@@ -513,7 +548,7 @@ const Checkout = () => {
   // the whole resumed payment step.
   const { data: resumeOrderData } = useQuery({
     queryKey: QUERY_KEYS.ORDER_DETAIL(resumeOrderNumber),
-    queryFn: () => getOrderDetail(resumeOrderNumber),
+    queryFn: ({ signal }) => getOrderDetail(resumeOrderNumber, signal),
     enabled: !!resumeOrderNumber,
     staleTime: 1000 * 60 * 2,
   });
@@ -573,22 +608,26 @@ const Checkout = () => {
   // =============================================
   // Mutation hook to handle the actual order placement API call
   const checkoutMutation = useMutation({
-    // Function that transforms form data into the API's expected payload format and sends the request.
-    // Per API 55 (Checkout) in the docs, the backend wants shipping_address,
-    // city, postal_code, and phone as SEPARATE fields — not one combined
-    // string. Sending everything squashed into shipping_address means the
-    // backend never receives a `city` value, and shipping_address + city are
-    // the two fields it 400s on if both are missing. That was the checkout
-    // failure. coupon_code also isn't part of this endpoint's accepted
-    // fields at all — the coupon is already applied to the cart earlier
-    // (API 50), so it doesn't need to be resent here.
+    // The delivery address is no longer sent as raw shipping_address/
+    // city/postal_code fields — the backend now resolves it from the
+    // Address Book instead: "address_id" tells it exactly which saved
+    // address to ship to. If this were ever omitted, the backend falls
+    // back to whichever saved address is currently marked as default,
+    // but this app always sends it explicitly since AddressForm.jsx
+    // requires a selection before the customer can reach this point.
+    // coupon_code isn't part of this endpoint's accepted fields at all
+    // — the coupon is already applied to the cart earlier (API 50), so
+    // it doesn't need to be resent here.
     mutationFn: (data) =>
       checkout({
-        shipping_address: `${data.fullName}, ${data.street}`,
-        city: data.city,
-        postal_code: data.postalCode,
+        address_id: selectedAddressId,
+        payment_method: paymentMethod,
+        // The shipping method the customer picked on this page (standard/
+        // express) — without sending this, the backend was falling back
+        // to its own default (free/standard) shipping regardless of what
+        // was actually selected and shown in the on-screen total.
+        shipping_method: data.shippingMethod,
         phone: data.phone,
-        save_address: !!data.saveAddress,
         notes: "", // Empty notes field sent by default — no order notes feature implemented yet
       }),
 
@@ -613,6 +652,18 @@ const Checkout = () => {
       // Cart query invalidate
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
 
+      if (paymentMethod === PAYMENT_METHOD.QR) {
+        // QR orders never touch Stripe at all — qr_image_url and
+        // payment_reference come straight back on this same checkout
+        // response, so the customer can pay and upload proof right away.
+        setQrPaymentDetails({
+          qrImageUrl: response.data.qr_image_url,
+          paymentReference: response.data.payment_reference,
+        });
+        setStep("qr");
+        return;
+      }
+
       // Turant Stripe Payment Intent create karo isi naye order ke liye
       createIntentMutation.mutate(newOrderNumber);
     },
@@ -629,8 +680,88 @@ const Checkout = () => {
     },
   });
 
-  // Form submit — Step 1 (details -> creates order + payment intent)
+  // =============================================
+  // CANCEL ORDER MUTATION
+  // Same cancelOrder() API call OrderDetail.jsx already uses (API 58).
+  // Per API_Documentation v3.0: this endpoint restores the order's
+  // deducted STOCK and refunds the payment if one was made — it does
+  // NOT restore the customer's cart at all, so that has to be rebuilt
+  // on the frontend right after.
+  //
+  // This is only reliably possible here because orderSnapshot (set in
+  // checkoutMutation.onSuccess, BEFORE the cart was cleared) still holds
+  // each item's real product.id, straight from the live cart response
+  // (Get Cart / API 45 always includes it). Get Order Detail (API 57) —
+  // used to rebuild orderSnapshot on the "resume" flow instead — does
+  // NOT include a product id on its items, only product_name/product_image/
+  // price/quantity, so items restored via THAT path can't be re-added to
+  // the cart automatically; those are filtered out below rather than
+  // silently sent with an undefined product_id.
+  // =============================================
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const reason =
+        cancelReason === "other" ? cancelReasonOther.trim() : cancelReason;
+      await cancelOrder(orderNumber, reason ? { reason } : undefined);
+
+      // Re-add whichever items we still have a real product id for.
+      const restorableItems = (orderSnapshot?.items || []).filter(
+        (item) => item?.product?.id,
+      );
+      await Promise.allSettled(
+        restorableItems.map((item) =>
+          addToCart({
+            product_id: item.product.id,
+            quantity: item.quantity,
+          }),
+        ),
+      );
+
+      // Report back whether every item that was in the order actually
+      // had a product id to restore with, so onSuccess can tell the
+      // customer honestly if anything couldn't be brought back.
+      const totalItems = orderSnapshot?.items?.length || 0;
+      return { fullyRestored: restorableItems.length === totalItems };
+    },
+
+    onSuccess: ({ fullyRestored }) => {
+      showSuccess(
+        fullyRestored
+          ? "Order cancelled. Your cart is waiting for you."
+          : "Order cancelled. Some items couldn't be restored to your cart automatically — you may need to re-add them.",
+      );
+      setShowCancelModal(false);
+
+      // The items were just re-added above, but that happened outside
+      // React Query's own cache — refetch so the Cart page shows them.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
+
+      // Send the customer back to a normal Cart page rather than leaving
+      // them on this now-dead checkout session.
+      navigate(ROUTES.CART);
+    },
+
+    onError: (error) => {
+      showError(
+        error?.response?.data?.message ||
+          "Failed to cancel order. Please try again.",
+      );
+    },
+  });
+
+  // Form submit — Step 1 (details -> creates order + payment intent).
+  // react-hook-form's own validation only covers email/phone/shipping
+  // method now — the delivery address is picked separately (see
+  // selectedAddressId state), so it needs its own check here before
+  // the order is actually placed.
   const onSubmit = (data) => {
+    if (!selectedAddressId) {
+      setAddressError("Please select or add a delivery address.");
+      return;
+    }
+    setAddressError("");
     checkoutMutation.mutate(data);
   };
 
@@ -744,7 +875,14 @@ const Checkout = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: 0.05 }}
                   >
-                    <AddressForm register={register} errors={errors} />
+                    <AddressForm
+                      selectedAddressId={selectedAddressId}
+                      onSelectAddress={(id) => {
+                        setSelectedAddressId(id);
+                        setAddressError("");
+                      }}
+                      error={addressError}
+                    />
                   </motion.div>
 
                   {/* Shipping Method */}
@@ -757,6 +895,18 @@ const Checkout = () => {
                       value={watchedShipping}
                       onChange={(val) => setValue("shippingMethod", val)}
                       error={errors?.shippingMethod?.message}
+                    />
+                  </motion.div>
+
+                  {/* Payment Method — Card (Stripe) or QR */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.12 }}
+                  >
+                    <PaymentMethodSelector
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
                     />
                   </motion.div>
 
@@ -781,6 +931,43 @@ const Checkout = () => {
                     </button>
                   </div>
                 </motion.form>
+              ) : step === "qr" ? (
+                <motion.div
+                  key="qr-step"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex flex-col gap-5"
+                >
+                  {/* Order created confirmation banner */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <p className="text-sm text-gray-400">Order Number</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {orderNumber}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+                        Pending Payment
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCancelModal(true)}
+                        className="text-sm font-semibold text-danger hover:text-red-600 transition-colors"
+                      >
+                        Cancel Order
+                      </button>
+                    </div>
+                  </div>
+
+                  <QrPaymentPanel
+                    orderNumber={orderNumber}
+                    qrImageUrl={qrPaymentDetails?.qrImageUrl}
+                    paymentReference={qrPaymentDetails?.paymentReference}
+                  />
+                </motion.div>
               ) : (
                 <motion.div
                   key="payment-step"
@@ -798,9 +985,18 @@ const Checkout = () => {
                         {orderNumber}
                       </p>
                     </div>
-                    <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
-                      Pending Payment
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+                        Pending Payment
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCancelModal(true)}
+                        className="text-sm font-semibold text-danger hover:text-red-600 transition-colors"
+                      >
+                        Cancel Order
+                      </button>
+                    </div>
                   </div>
 
                   {/* Stripe Payment Element — only renders once we actually have a clientSecret */}
@@ -842,6 +1038,70 @@ const Checkout = () => {
           </div>
         </div>
       </Container>
+
+      {/* ── Cancel order confirmation modal ─────────────────────────────────────
+          Only reachable from the "payment"/"qr" steps (see Cancel Order button
+          above) — mirrors the same confirmation dialog used on the Order
+          Detail page. The reason dropdown is entirely optional. */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Cancel Order?"
+        size="sm"
+        closeOnBackdrop={!cancelMutation.isPending}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Are you sure you want to cancel order {orderNumber}? Your cart will
+            be waiting for you afterwards, but this action cannot be undone.
+          </p>
+
+          <Select
+            label="Reason (optional)"
+            placeholder="Select a reason"
+            options={[
+              { value: "changed_mind", label: "Changed my mind" },
+              {
+                value: "better_price",
+                label: "Found a better price elsewhere",
+              },
+              { value: "ordered_by_mistake", label: "Ordered by mistake" },
+              {
+                value: "payment_issue",
+                label: "Having trouble paying",
+              },
+              { value: "other", label: "Other" },
+            ]}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+
+          {cancelReason === "other" && (
+            <Textarea
+              placeholder="Tell us a bit more (optional)"
+              value={cancelReasonOther}
+              onChange={(e) => setCancelReasonOther(e.target.value)}
+            />
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <Button
+              variant="secondary"
+              onClick={() => setShowCancelModal(false)}
+              disabled={cancelMutation.isPending}
+            >
+              Keep Order
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => cancelMutation.mutate()}
+              isLoading={cancelMutation.isPending}
+            >
+              Yes, Cancel Order
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

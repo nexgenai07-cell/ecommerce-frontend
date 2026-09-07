@@ -116,7 +116,7 @@ const ComplaintForm = ({ onSuccess }) => {
     // Unique cache key under which this query's data is stored/retrieved
     queryKey: QUERY_KEYS.MY_ORDERS,
     // The actual async function that performs the API call to fetch the orders
-    queryFn: getMyOrders,
+    queryFn: ({ signal }) => getMyOrders(undefined, signal),
     // Keep this data "fresh" (won't auto-refetch) for 5 minutes (5 * 60 * 1000 ms) to avoid unnecessary network calls
     staleTime: 1000 * 60 * 5,
   });

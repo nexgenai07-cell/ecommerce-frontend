@@ -62,6 +62,7 @@ export const ROUTES = {
   ACCOUNT_ORDER_TRACKING: "/account/orders/:id/tracking",
   ACCOUNT_WISHLIST: "/account/wishlist",
   ACCOUNT_PROFILE: "/account/profile",
+  ACCOUNT_ADDRESSES: "/account/addresses",
   ACCOUNT_RETURNS: "/account/returns",
   ACCOUNT_RETURN_DETAIL: "/account/returns/:id",
   ACCOUNT_COMPLAINTS: "/account/complaints",
@@ -82,6 +83,7 @@ export const ROUTES = {
   // Order management
   ADMIN_ORDERS: "/admin/orders",
   ADMIN_ORDER_DETAIL: "/admin/orders/:id",
+  ADMIN_QR_PAYMENTS: "/admin/payments/qr",
 
   // Returns & complaints management
   ADMIN_RETURNS: "/admin/returns",

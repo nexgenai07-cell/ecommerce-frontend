@@ -37,7 +37,7 @@ const CalendarDaySidebar = ({ selectedDate, postsForDay }) => {
   const analyticsQueries = useQueries({
     queries: publishedPosts.map((post) => ({
       queryKey: QUERY_KEYS.SOCIAL_POST_ANALYTICS(post.id),
-      queryFn: () => getPostAnalytics(post.id),
+      queryFn: ({ signal }) => getPostAnalytics(post.id, signal),
     })),
   });
 

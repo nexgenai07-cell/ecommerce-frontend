@@ -94,7 +94,10 @@ const TrackingOrderSummary = ({ order }) => {
                 {/* Product thumbnail image, falling back to a placeholder image path if no primary_image is set */}
                 <img
                   src={
-                    item.product?.primary_image || "/placeholder-product.svg"
+                    // The order detail API returns the product's image as a
+                    // flat "product_image" field directly on the order item
+                    // — there is no nested "product" object to read it from.
+                    item.product_image || "/placeholder-product.svg"
                   }
                   alt={item.product_name}
                   className="w-full h-full object-cover"

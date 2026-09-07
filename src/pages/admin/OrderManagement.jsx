@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -11,20 +11,19 @@ import {
   AiOutlineSortAscending,
   AiOutlinePhone,
 } from "react-icons/ai";
-// AiOutlinePhone — used on the new "Phone Number" advanced filter field
+// AiOutlinePhone — used on the "Phone Number" advanced filter field
 // react-icons — every small icon used across the redesigned header,
 // filter card, and table actions comes from this single icon set so
 // the whole page keeps one consistent visual language.
 
 import { getAdminOrders, filterAdminOrders } from "../../api/orders.api";
 // getAdminOrders    — API 47: GET /api/v1/admin/orders/ (no filters active)
-// filterAdminOrders — API 48: GET /api/v1/admin/orders/filter/ (status/date/search/page)
+// filterAdminOrders — API 48: GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
+// Both now correctly forward `page`, and `ordering` is confirmed
+// working on the filter endpoint (see the backend fix notes below).
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — API 77. FLAG: doc only confirms "sales"/"revenue" as
-// example `type` values — "orders" is used here as a reasonable guess
-// for a generic reporting endpoint; confirm the exact accepted type
-// string with the backend team before relying on this in production.
+// exportReport — `type: "orders"` is now a confirmed accepted value
 
 import { ROUTES } from "../../constants/routes";
 import { ORDER_STATUS } from "../../constants/statusTypes";
@@ -41,8 +40,6 @@ import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already used
 // on every other admin screen (Products, Categories, Dashboard, etc).
-// Added here so the Orders page finally matches the rest of the panel
-// instead of using its own plain <h1>.
 import OrderStatsCards from "../../components/admin-orders/OrderStatsCards";
 
 // --------------------------------------------------
@@ -61,13 +58,13 @@ const STATUS_TABS = [
 ];
 
 // --------------------------------------------------
-// SORT OPTIONS — purely a CLIENT-SIDE re-ordering of whatever page of
-// orders is currently loaded. There is no documented "ordering" query
-// param on API 47/48, so this does NOT re-query the backend — it just
-// re-sorts the rows already on screen by date, amount, or order number,
-// which is exactly the "date pr / number pr" filtering richness that
-// was asked for, without inventing a backend parameter that doesn't
-// exist in the API docs.
+// SORT OPTIONS — sent straight to the backend as the `ordering` query
+// param. "-created_at" / "created_at" and "-total_amount" /
+// "total_amount" are CONFIRMED working server-side. The order-number
+// options are sent through optimistically (not part of the confirmed
+// list) — if the backend doesn't recognize this specific field name,
+// it will simply have no effect rather than error, but this one
+// specifically hasn't been verified with a real example yet.
 // --------------------------------------------------
 const SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
@@ -77,21 +74,6 @@ const SORT_OPTIONS = [
   { value: "order_number", label: "Order Number: A-Z" },
   { value: "-order_number", label: "Order Number: Z-A" },
 ];
-
-// Maps each SORT_OPTIONS value to an actual comparator function used by
-// Array.prototype.sort() below.
-const SORTERS = {
-  "-created_at": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-  "-total_amount": (a, b) =>
-    (Number(b.total_amount) || 0) - (Number(a.total_amount) || 0),
-  total_amount: (a, b) =>
-    (Number(a.total_amount) || 0) - (Number(b.total_amount) || 0),
-  order_number: (a, b) =>
-    (a.order_number || "").localeCompare(b.order_number || ""),
-  "-order_number": (a, b) =>
-    (b.order_number || "").localeCompare(a.order_number || ""),
-};
 
 const PAGE_SIZE = 10;
 
@@ -104,18 +86,20 @@ const OrderManagement = () => {
   // activeStatus — which status pill is currently selected ("" = All).
 
   const [search, setSearch] = useState("");
-  // search — raw text typed into the search box BEFORE debouncing.
-  // Matches against order number OR customer name, per API 48's docs
-  // ("search: search by customer name, order number, etc.").
+  // search — raw text typed into the main search box BEFORE debouncing.
+  // Matches against order number, customer name, AND phone number —
+  // all three are now confirmed to be matched server-side by this one
+  // field.
 
   const [phoneSearch, setPhoneSearch] = useState("");
-  // phoneSearch — filters by the customer's phone number. There is NO
-  // documented "phone" query param on API 47/48 (only status, search,
-  // start_date, end_date, page), and the docs never confirm that the
-  // generic "search" param actually matches against phone. So — same
-  // pattern as the CLIENT-SIDE sort below — this is applied locally on
-  // whatever page of orders is currently loaded, matching against
-  // row.customer.phone. It does NOT trigger a new network request.
+  // phoneSearch — the dedicated "Phone Number" advanced-filter field.
+  // The backend confirmed that its ONE generic `search` param now
+  // matches phone number too (there's no separate `phone` param) — so
+  // this field's value is sent through AS the `search` param whenever
+  // it has a value, taking priority over whatever's typed in the main
+  // search box above. The two fields are kept visually separate (this
+  // wasn't asked to change), they both just feed the same backend
+  // parameter under the hood.
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   // showAdvancedFilters — toggles the Date Range + Sort By row open/closed
@@ -127,44 +111,42 @@ const OrderManagement = () => {
   // start_date / end_date query params.
 
   const [sortBy, setSortBy] = useState("-created_at");
-  // sortBy — CLIENT-SIDE only (see SORT_OPTIONS comment above).
-  // Defaults to "Newest First" so the page's default order never changes.
+  // sortBy — sent straight to the backend as `ordering` (see SORT_OPTIONS
+  // comment above). Defaults to "Newest First".
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
+  const debouncedPhoneSearch = useDebounce(phoneSearch, 400);
   // Waits 400ms after the admin stops typing before actually firing a
   // network request — prevents a new API call on every keystroke.
 
-  const hasActiveFilters =
-    !!activeStatus || !!debouncedSearch || !!startDate || !!endDate;
-  // hasActiveFilters — true the moment ANY BACKEND filter is active
-  // (status/search/dates). This ONLY decides which endpoint gets called
-  // (API 47 vs API 48) — phone is intentionally excluded since it's
-  // never sent to the server.
+  // The dedicated phone field takes priority over the main search box
+  // when both happen to have a value, since it's the more specific,
+  // intentional filter.
+  const effectiveSearch = debouncedPhoneSearch || debouncedSearch;
 
-  const hasAnyFilterActive = hasActiveFilters || !!phoneSearch;
-  // hasAnyFilterActive — same as above PLUS the client-side phone filter.
-  // Used only for UI purposes (showing the "Clear all" button) so it
-  // still appears even when phone is the only thing the admin typed.
+  const hasActiveFilters =
+    !!activeStatus || !!effectiveSearch || !!startDate || !!endDate;
+  // hasActiveFilters — true the moment ANY filter is active. Decides
+  // which endpoint gets called (API 47 vs API 48) — the plain list
+  // endpoint is only used when browsing with zero filters.
 
   const activeFilterCount = [
     activeStatus,
     debouncedSearch,
     startDate,
     endDate,
-    phoneSearch,
+    debouncedPhoneSearch,
   ].filter(Boolean).length;
-  // activeFilterCount — same real filters (now including phone), counted
-  // for the little numbered badge next to the "Filters" heading (matches
-  // the pattern already used on the Categories page's filter card).
+  // activeFilterCount — feeds the little numbered badge next to the
+  // "Filters" heading.
 
   // --------------------------------------------------
-  // ORDERS LIST — uses the plain list endpoint when nothing is
-  // filtered, and the dedicated filter endpoint the moment ANY filter
-  // (status tab, search, or date range) is active — matching exactly
-  // how API 47 vs API 48 are documented to be used.
+  // ORDERS LIST — real server-side filtering, search (including phone),
+  // sorting, and pagination. Only ONE already-filtered, already-sorted
+  // page of orders is ever fetched.
   // --------------------------------------------------
   const {
     data: ordersResponse,
@@ -177,96 +159,50 @@ const OrderManagement = () => {
       "list",
       {
         activeStatus,
-        search: debouncedSearch,
+        search: effectiveSearch,
         startDate,
         endDate,
+        sortBy,
         page: currentPage,
       },
     ],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!hasActiveFilters) {
-        return getAdminOrders();
+        return getAdminOrders({ ordering: sortBy, page: currentPage }, signal);
       }
       return filterAdminOrders({
         status: activeStatus || undefined,
-        search: debouncedSearch || undefined,
+        search: effectiveSearch || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        ordering: sortBy,
         page: currentPage,
-      });
+      }, signal);
     },
+    keepPreviousData: true,
   });
 
-  const orders = extractListData(ordersResponse);
-  const totalCount = ordersResponse?.data?.count ?? orders.length;
+  const visibleOrders = extractListData(ordersResponse);
+  const totalCount = ordersResponse?.data?.count ?? visibleOrders.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+  // `visibleOrders` is now always exactly one real, already-filtered,
+  // already-sorted page straight from the backend — no more client-side
+  // re-filtering or re-sorting on top of it. The old safety-net
+  // client-side search/phone/sort pass has been removed: it existed
+  // specifically because the backend used to silently ignore these
+  // params, which is now fixed and confirmed.
 
-  // visibleOrders — the CURRENT page's rows after applying THREE
-  // client-side-only refinements: order-number/customer-name search,
-  // phone number filtering, then sorting. None of these ever fire a new
-  // network request — they only re-filter/re-order whatever page of
-  // orders is already sitting in memory. useMemo avoids redoing this
-  // work on every render — only when the underlying orders array, the
-  // search/phone text, or the chosen sort actually changes.
-  //
-  // WHY THE SEARCH BOX ALSO FILTERS HERE (not just via the backend):
-  // debouncedSearch is still sent to the server as the "search" query
-  // param on API 48 (filterAdminOrders), exactly as before. But this
-  // same API doc flags elsewhere (see API 27/Search Products) that this
-  // backend has a real, confirmed history of query params being
-  // silently ignored server-side. Filtering AGAIN here, client-side,
-  // on the same order_number/customer.name fields the backend is
-  // supposed to match, means the search box now visibly works for the
-  // admin the instant they type — the current page narrows down right
-  // away — regardless of whether the backend's own "search" filtering
-  // is actually implemented correctly. If the backend already filtered
-  // correctly, this second pass is redundant but harmless (matches the
-  // same rows again); if it didn't, this is what actually fixes it.
-  const visibleOrders = useMemo(() => {
-    // Step 1 — order number / customer name search (client-side safety
-    // net described above).
-    const normalizedSearchQuery = debouncedSearch.trim().toLowerCase();
-    const searched = normalizedSearchQuery
-      ? orders.filter((row) => {
-          const orderNumberMatch = (row.order_number || "")
-            .toLowerCase()
-            .includes(normalizedSearchQuery);
-          const customerNameMatch = (row.customer?.name || "")
-            .toLowerCase()
-            .includes(normalizedSearchQuery);
-          return orderNumberMatch || customerNameMatch;
-        })
-      : orders;
+  const hasAnyFilterActive = hasActiveFilters;
 
-    // Step 2 — phone filter. Normalizes both sides (strips spaces/dashes,
-    // lowercases) so "0300-1234567" still matches a typed "03001234567".
-    const normalizedPhoneQuery = phoneSearch
-      .replace(/[\s-]/g, "")
-      .toLowerCase();
-    const phoneFiltered = normalizedPhoneQuery
-      ? searched.filter((row) => {
-          const rowPhone = (row.customer?.phone || "")
-            .replace(/[\s-]/g, "")
-            .toLowerCase();
-          return rowPhone.includes(normalizedPhoneQuery);
-        })
-      : searched;
-
-    // Step 3 — client-side sort, applied on top of the (possibly
-    // search/phone-filtered) list from Steps 1-2.
-    const sorter = SORTERS[sortBy];
-    if (!sorter) return phoneFiltered;
-    return [...phoneFiltered].sort(sorter);
-    // Spreads into a new array first — never mutates the array React
-    // Query owns, which could cause subtle re-render bugs.
-  }, [orders, debouncedSearch, phoneSearch, sortBy]);
+  // Whenever any filter or sort changes, jump back to page 1 — staying
+  // on, say, page 3 of a now-much-smaller filtered result set would
+  // otherwise show an empty page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeStatus, effectiveSearch, startDate, endDate, sortBy]);
 
   const handleTabChange = (statusKey) => {
     setActiveStatus(statusKey);
-    setCurrentPage(1);
-    // Any time the status filter changes, jump back to page 1 — staying
-    // on e.g. page 3 of a now-much-smaller filtered result set would
-    // otherwise show an empty page.
   };
 
   const handleClearFilters = () => {
@@ -276,14 +212,11 @@ const OrderManagement = () => {
     setStartDate("");
     setEndDate("");
     setSortBy("-created_at");
-    setCurrentPage(1);
     // Resets every filter AND the sort back to its default in one click
-    // — mirrors the "Clear all" behaviour already used on the Categories
-    // admin page.
   };
 
   // --------------------------------------------------
-  // EXPORT — API 77, downloads the returned blob as a real .csv file
+  // EXPORT — downloads the returned blob as a real .csv file
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -311,10 +244,6 @@ const OrderManagement = () => {
     }
   };
 
-  // columns — DataTable column config, unchanged in structure from
-  // before; only the visual styling inside each render() got small
-  // polish touches (e.g. slightly bolder order id) to match the more
-  // premium look of the rest of the redesigned page.
   const columns = [
     {
       key: "order_number",
@@ -329,8 +258,6 @@ const OrderManagement = () => {
       render: (row) => (
         <div>
           <p className="text-sm text-gray-900">{row.customer?.name || "—"}</p>
-          {/* Phone shown instead of email — API 47's customer object
-              only includes name + phone, not email (see flag notes) */}
           <p className="text-xs text-gray-400">{row.customer?.phone || ""}</p>
         </div>
       ),
@@ -381,36 +308,23 @@ const OrderManagement = () => {
     <div className="flex flex-col gap-6">
       {/* ================================================================
           PAGE HEADER — shared gradient-badge header, same component used
-          on every other admin page. Rendered FIRST, exactly as asked,
-          before the stats cards below it.
+          on every other admin page.
           ================================================================ */}
       <PageHeader icon={<AiOutlineShoppingCart />} title="Orders" />
       {/* Note: the mockup's "+ Create Order" button is NOT included —
           there is no documented API for an admin to manually create an
           order on a customer's behalf; Checkout (API 52) is a
-          customer-only, cart-based flow. See flag notes above. */}
+          customer-only, cart-based flow. */}
 
       {/* ================================================================
-          STATS CARDS — rendered right under the header, second on the
-          page. OrderStatsCards already ships with a permanent resting
-          shadow + hover lift (see StatsCard.jsx), so the cards already
-          read as "raised" off the gray page background.
+          STATS CARDS
           ================================================================ */}
       <OrderStatsCards />
 
       {/* ================================================================
-          FILTERS CARD — completely redesigned. Same visual language as
-          the Categories admin page's filter card (rounded-2xl, soft
-          shadow, gray header strip with icon + live count + Clear all),
-          but built specifically for Orders: status pills, a combined
-          order-number/customer-name search, a date range, and a
-          client-side sort — everything needed to slice the order list
-          from multiple angles at once.
+          FILTERS CARD
           ================================================================ */}
       <div className="bg-white rounded-2xl border border-white shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)] overflow-hidden">
-        {/* Header strip — icon badge + "Filters" label + live active count
-            on the left, "Clear all" on the right (only when something is
-            actually active). */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
           <div className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
@@ -447,16 +361,7 @@ const OrderManagement = () => {
           </div>
         </div>
 
-        {/* Body — status pills on their own scrollable row, then the
-            search box, then the collapsible advanced (date + sort) row. */}
         <div className="p-5 flex flex-col gap-4">
-          {/* Status pills — horizontally scrollable on narrow screens.
-              "scrollbar-hide" (already defined project-wide in index.css)
-              hides the scrollbar itself while keeping scrolling fully
-              working, which is exactly the "scroll bar nichay a rahi thi
-              usay hide karo" fix requested — the row can still be swiped
-              on mobile, it just no longer shows a visible scrollbar
-              underneath it. */}
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
             {STATUS_TABS.map((tab) => (
               <button
@@ -473,18 +378,13 @@ const OrderManagement = () => {
             ))}
           </div>
 
-          {/* Primary search + advanced-filters toggle — sits on its own
-              row so it stays comfortably usable even on small screens. */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1">
               <Input
                 placeholder="Search by order number or customer name..."
                 leftIcon={<AiOutlineSearch className="w-4 h-4" />}
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <Button
@@ -498,29 +398,19 @@ const OrderManagement = () => {
             </Button>
           </div>
 
-          {/* Advanced row — date range (hits the backend via API 48),
-              a phone number field (client-side, see visibleOrders above),
-              and a client-side sort dropdown. Toggled by the button above
-              so the filter card stays compact by default. */}
           {showAdvancedFilters && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 border-t border-gray-100">
               <Input
                 label="Start Date"
                 type="date"
                 value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setStartDate(e.target.value)}
               />
               <Input
                 label="End Date"
                 type="date"
                 value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setEndDate(e.target.value)}
               />
               <Input
                 label="Phone Number"
@@ -542,9 +432,7 @@ const OrderManagement = () => {
       </div>
 
       {/* ================================================================
-          ORDERS TABLE — wrapped in its own soft-shadow card so it reads
-          as an elevated surface too, matching the rest of the redesigned
-          page instead of sitting flat against the gray background.
+          ORDERS TABLE
           ================================================================ */}
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)]">
         <DataTable

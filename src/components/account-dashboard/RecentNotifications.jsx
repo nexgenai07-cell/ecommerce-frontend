@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"; // useMutation handles mark-as-read API calls; useQueryClient invalidates notification cache after each success
+import { useNavigate } from "react-router-dom"; // Navigates to the referenced order/return/complaint on click
 import { BsTruck, BsTag, BsShieldExclamation } from "react-icons/bs"; // Truck for order notifications, Tag for sales/promotions, Shield for system/security alerts
 import { AiOutlineCheck } from "react-icons/ai"; // Checkmark icon shown inside the "Mark all as read" button
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
 import { markNotificationRead } from "../../api/notifications.api"; // API function that marks a single notification as read by its id
+import resolveNotificationLink from "../../utils/resolveNotificationLink"; // Maps reference_type/reference_id to the actual account page
 import { showError } from "../ui/Toast"; // Error toast helper — gives feedback if the mark-as-read call fails
 import cn from "../../utils/cn"; // Utility that merges Tailwind class names conditionally without conflicts
 
@@ -23,6 +25,7 @@ const getNotifIcon = (type) => {
 const RecentNotifications = ({ notifications, unreadCount }) => {
   // queryClient lets us manually invalidate the notifications cache after marking as read
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Slice only the first 3 notifications — dashboard preview shows a summary, not the full list
   const recentItems = notifications.slice(0, 3);
@@ -103,9 +106,11 @@ const RecentNotifications = ({ notifications, unreadCount }) => {
             // bg-primary-50/30 tints unread rows so they stand out from read ones
             <div
               key={notif.id} // stable unique key for React's reconciler
-              onClick={() =>
-                !notif.is_read && markReadMutation.mutate(notif.id)
-              } // no-op if already read
+              onClick={() => {
+                if (!notif.is_read) markReadMutation.mutate(notif.id);
+                const link = resolveNotificationLink(notif);
+                if (link) navigate(link);
+              }} // marks as read (if needed) and deep-links to the referenced order/return/complaint
               className={cn(
                 "relative overflow-hidden flex items-start gap-3 px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors",
                 !notif.is_read && "bg-primary-50/30", // light tint on the entire row for unread notifications

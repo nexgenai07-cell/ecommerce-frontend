@@ -11,8 +11,7 @@ const ProductPerformanceStatsCards = ({ startDate, endDate }) => {
   // not so large that it pretends to cover the entire catalog
   const { data: response, isLoading } = useQuery({
     queryKey: ["productsPerformance", "bestSellers", startDate, endDate],
-    queryFn: () =>
-      getBestSellers({ start_date: startDate, end_date: endDate, limit: 50 }),
+    queryFn: ({ signal }) => getBestSellers({ start_date: startDate, end_date: endDate, limit: 50 }, signal),
   });
 
   const products = response?.data || [];

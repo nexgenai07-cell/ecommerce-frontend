@@ -35,13 +35,12 @@ const RevenueHeatmap = () => {
   const { data: response, isLoading } = useQuery({
     queryKey: ["salesReport", "heatmap", startDate, endDate],
     // queryKey -> unique cache key for this specific 6-month request
-    queryFn: () =>
-      getSalesReport({
+    queryFn: ({ signal }) => getSalesReport({
         start_date: startDate,
         end_date: endDate,
         period: "daily",
         // period: "daily" -> one data point per calendar day
-      }),
+      }, signal),
     staleTime: 1000 * 60 * 10,
     // staleTime -> keeps this data "fresh" for 10 minutes so switching
     // tabs/pages doesn't trigger a wasteful refetch of this heavy 6-month query

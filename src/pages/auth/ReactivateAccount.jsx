@@ -3,6 +3,10 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  EMAIL_REGEX,
+  EMAIL_INVALID_MESSAGE,
+} from "../../utils/emailValidation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   AiOutlineMail,
@@ -27,7 +31,7 @@ const requestSchema = z.object({
     .string()
     .trim()
     .min(1, "Email is required")
-    .email("Please enter a valid email address")
+    .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
     .max(255, "Email is too long"),
 });
 
@@ -71,7 +75,7 @@ const ReactivateAccount = () => {
   // =============================================
   const confirmQuery = useQuery({
     queryKey: ["confirmReactivation", token],
-    queryFn: () => confirmAccountReactivation({ token }),
+    queryFn: ({ signal }) => confirmAccountReactivation({ token }, signal),
     enabled: !!token,
     retry: false,
     refetchOnWindowFocus: false,
@@ -106,7 +110,7 @@ const ReactivateAccount = () => {
   });
 
   const requestMutation = useMutation({
-    mutationFn: requestAccountReactivation,
+    mutationFn: (variables) => requestAccountReactivation(variables),
 
     onSuccess: (_, variables) => {
       setSubmittedEmail(variables.email);

@@ -31,8 +31,8 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
   const adjustMutation = useMutation({
     mutationFn: (payload) => adjustProductStock(productId, payload),
     onSuccess: (response) => {
-      const newStock = response?.data?.stock;
-      showSuccess(`Stock updated. New quantity: ${newStock}.`);
+      const newStock = response?.data?.total_stock ?? response?.data?.stock;
+      showSuccess(`Stock updated. New total quantity: ${newStock}.`);
 
       // Refresh every place that displays stock, so the admin sees the
       // real, authoritative number everywhere immediately.
@@ -97,7 +97,7 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
     >
       <div className="flex flex-col gap-4">
         <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Current stock:{" "}
+          Current total stock:{" "}
           <span className="font-semibold text-gray-900">{currentStock}</span>
         </div>
 

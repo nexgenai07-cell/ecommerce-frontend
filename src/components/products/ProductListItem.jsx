@@ -186,13 +186,15 @@ const ProductListItem = ({ product }) => {
   // from "Out of Stock" — a different customer could still buy this
   // product, so it gets its own label instead of implying nobody can.
   const isMaxedInCart =
-    !!product?.in_stock && qtyAlreadyInCart >= (product?.stock ?? 0);
+    (product?.available_stock ?? 0) > 0 &&
+    qtyAlreadyInCart >= (product?.available_stock ?? 0);
 
   // Handles the "Add to Cart" button click
   const handleAddToCart = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
-    if (!isAuthenticated) return navigate(ROUTES.LOGIN); // Guests must log in first
-    if (!product?.in_stock) return; // Safety guard — button is disabled anyway when out of stock
+    // Guest cart support (backend v3.0): adding to cart no longer requires
+    // login — see axiosInstance.js's X-Cart-Session guest cart handling.
+    if ((product?.available_stock ?? 0) <= 0) return; // Safety guard — button is disabled anyway when out of stock
 
     // Stop here — before any network request — if the customer's cart
     // already holds every unit this product has in stock. Without this,
@@ -228,6 +230,9 @@ const ProductListItem = ({ product }) => {
   // If somehow no product data was passed in, render nothing rather than crash
   if (!product) return null;
 
+  const availableStock = product.available_stock ?? 0;
+  const isInStock = availableStock > 0;
+
   return (
     // The entire row is a single Link — clicking anywhere (except the two
     // action buttons, which call preventDefault) opens the product detail page
@@ -246,7 +251,7 @@ const ProductListItem = ({ product }) => {
         />
         {/* Out of stock overlay — reuses the same Badge component ProductCard uses,
             instead of a hand-written span, so both views match exactly */}
-        {!product.in_stock && (
+        {!isInStock && (
           <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
             <Badge label="Out of Stock" variant="gray" size="md" rounded />
           </div>
@@ -270,15 +275,15 @@ const ProductListItem = ({ product }) => {
         {/* Stock status dot + label */}
         <div className="flex items-center gap-1.5">
           <span
-            className={`w-1.5 h-1.5 rounded-full ${product.in_stock ? "bg-success" : "bg-danger"}`}
+            className={`w-1.5 h-1.5 rounded-full ${isInStock ? "bg-success" : "bg-danger"}`}
           />
           <span
-            className={`text-xs font-semibold ${product.in_stock ? "text-success" : "text-danger"}`}
+            className={`text-xs font-semibold ${isInStock ? "text-success" : "text-danger"}`}
           >
-            {product.in_stock
-              ? product.stock <= 5
-                ? `Low Stock (${product.stock})`
-                : `In Stock (${product.stock})`
+            {isInStock
+              ? availableStock <= 5
+                ? `Low Stock (${availableStock})`
+                : `In Stock (${availableStock})`
               : "Out of Stock"}
           </span>
         </div>
@@ -317,12 +322,10 @@ const ProductListItem = ({ product }) => {
             variant="primary"
             size="sm"
             isLoading={cartMutation.isPending}
-            disabled={
-              !product.in_stock || isMaxedInCart || cartMutation.isPending
-            }
+            disabled={!isInStock || isMaxedInCart || cartMutation.isPending}
             onClick={handleAddToCart}
           >
-            {!product.in_stock
+            {!isInStock
               ? "Out of Stock"
               : isMaxedInCart
                 ? "Max in Cart"

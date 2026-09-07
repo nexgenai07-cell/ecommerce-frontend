@@ -45,7 +45,7 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
   const { data: customersResponse } = useQuery({
     queryKey: ["customerGrowth", "totalCustomers"],
     // queryKey — unique cache key for this specific query
-    queryFn: () => getCustomers({}),
+    queryFn: ({ signal }) => getCustomers({}, signal),
     // queryFn — the actual network call executed by React Query
     staleTime: 1000 * 60 * 5,
     // staleTime — keeps this cached for 5 minutes before refetching,
@@ -62,15 +62,14 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
     queryKey: ["customerGrowth", "newInRange", startDate, endDate],
     // queryKey includes startDate/endDate — changing the date range
     // triggers a fresh fetch and its own separate cache entry
-    queryFn: () =>
-      getCustomerGrowth({
+    queryFn: ({ signal }) => getCustomerGrowth({
         start_date: startDate,
         // start_date — beginning of the selected date range
         end_date: endDate,
         // end_date — end of the selected date range
         period: "monthly",
         // period — groups the returned data points by month
-      }),
+      }, signal),
   });
   const growthPoints = growthResponse?.data || [];
   // growthPoints — falls back to an empty array while loading, so
@@ -86,7 +85,7 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
   // aggregate fields on the Dashboard Summary endpoint
   const { data: summaryResponse } = useQuery({
     queryKey: ["customerGrowth", "dashboardSummary"],
-    queryFn: getDashboardSummary,
+    queryFn: ({ signal }) => getDashboardSummary(signal),
     staleTime: 1000 * 60 * 5,
     // staleTime — 5-minute cache, same reasoning as totalCustomers above
   });

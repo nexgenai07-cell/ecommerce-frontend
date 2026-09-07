@@ -22,7 +22,7 @@ const ProfileSettings = () => {
   // =============================================
   const { data: profileData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.MY_PROFILE,
-    queryFn: getMyProfile,
+    queryFn: ({ signal }) => getMyProfile(signal),
     staleTime: 1000 * 60 * 5, // 5 minute cache
   });
 

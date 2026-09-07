@@ -12,7 +12,7 @@ import EmptyState from "../ui/EmptyState";
 const TopSellingProducts = () => {
   const { data: bestSellersResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "bestSellers"],
-    queryFn: () => getBestSellers({ limit: 5 }),
+    queryFn: ({ signal }) => getBestSellers({ limit: 5 }, signal),
     // limit: 5 — matches API 86's own documented default
     staleTime: 1000 * 60 * 5,
   });

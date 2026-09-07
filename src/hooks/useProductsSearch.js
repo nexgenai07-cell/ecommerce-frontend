@@ -4,26 +4,22 @@ import { searchProducts } from "../api/products.api";
 // Yehi single source of truth hai — page size sirf yahan se change hoga
 export const UI_PAGE_SIZE = 21;
 
-// sortBy value ko ek comparator function mein convert karta hai, taake
-// multi-category merge ke baad combined list ko sahi order mein rakha
-// ja sake (backend se aane wala order sirf per-category guaranteed hai,
-// combined list ka nahi)
-const comparatorFor = (sortBy) => {
-  switch (sortBy) {
-    case "price":
-      return (a, b) => parseFloat(a.price) - parseFloat(b.price);
-    case "-price":
-      return (a, b) => parseFloat(b.price) - parseFloat(a.price);
-    case "-created_at":
-    default:
-      return (a, b) => {
-        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return dateB - dateA; // newest first
-      };
-  }
-};
-
+// --------------------------------------------------
+// BACKEND FIX CONFIRMED: `category_id` now accepts MULTIPLE values in
+// a single request (comma-separated, e.g. "category_id=5,8"), and
+// returns the correctly combined, correctly counted, correctly
+// ordered result set for "products in ANY of these categories" —
+// server-side.
+//
+// This means the old two-path design (an efficient single-page fetch
+// for 0-1 categories, vs. a separate "fetch every page for every
+// selected category, then merge/dedupe/sort/slice in the browser" path
+// for 2+ categories) is no longer needed. ONE simple, efficient path
+// now handles 0, 1, or many selected categories identically — this
+// hook just joins whatever categories are selected into one
+// comma-separated string and sends a single request per backend page,
+// exactly like a normal single-category search did before.
+// --------------------------------------------------
 const useProductsSearch = ({ filters, sortBy, uiPage }) => {
   const queryClient = useQueryClient();
 
@@ -35,111 +31,65 @@ const useProductsSearch = ({ filters, sortBy, uiPage }) => {
     ordering: sortBy || undefined,
   };
 
+  const selectedCategories = filters.categories || [];
+  // categoryIdParam — joins every selected category into one
+  // comma-separated string (e.g. "5,8"). undefined when nothing is
+  // selected, so no category_id param is sent at all — matching the
+  // "browse everything" behavior when no category filter is active.
+  const categoryIdParam =
+    selectedCategories.length > 0 ? selectedCategories.join(",") : undefined;
+
   return useQuery({
     queryKey: ["products-list", filters, sortBy, uiPage, UI_PAGE_SIZE],
     queryFn: async () => {
-      // Ek backend page fetch karta hai, apni khud ki cache key ke sath
-      // (categoryId + params + page ke hisaab se) — taake wahi page
-      // dobara request na ho jab UI navigate kare
-      const fetchBackendPage = (categoryId, backendPage) => {
+      // Fetches ONE backend page, with its own cache key (category
+      // selection + params + page), so the exact same page is never
+      // re-requested while the admin navigates back and forth.
+      const fetchBackendPage = (backendPage) => {
         const params = {
           ...baseParams,
-          category_id: categoryId,
+          category_id: categoryIdParam,
           page: backendPage,
         };
         return queryClient.fetchQuery({
           queryKey: ["products-backend-page", params],
-          queryFn: () => searchProducts(params).then((res) => res.data),
+          queryFn: ({ signal }) => searchProducts(params, signal).then((res) => res.data),
           staleTime: 1000 * 60 * 3,
         });
       };
 
-      // Ek category ka POORA result set fetch karta hai (saare backend
-      // pages), multi-category merge ke liye zaroori hai
-      const fetchAllForCategory = async (categoryId) => {
-        const first = await fetchBackendPage(categoryId, 1);
-        const backendPageSize = first.results.length || 1;
-        const totalCount = first.count;
-        const totalBackendPages = Math.max(
-          1,
-          Math.ceil(totalCount / backendPageSize),
-        );
+      // Only fetches exactly as many backend pages as this UI page
+      // actually needs — never the entire matching result set, no
+      // matter how many categories are selected at once.
+      const first = await fetchBackendPage(1);
+      const backendPageSize = first.results.length || UI_PAGE_SIZE;
+      const totalCount = first.count;
 
-        if (totalBackendPages <= 1) return first.results;
+      const startIndex = (uiPage - 1) * UI_PAGE_SIZE;
+      const endIndex = Math.min(startIndex + UI_PAGE_SIZE, totalCount) - 1;
 
-        const restPages = await Promise.all(
-          Array.from({ length: totalBackendPages - 1 }, (_, i) =>
-            fetchBackendPage(categoryId, i + 2),
-          ),
-        );
-        return [first.results, ...restPages.map((r) => r.results)].flat();
-      };
-
-      const selectedCategories = filters.categories || [];
-
-      // ===== CASE A — 0 ya 1 category selected =====
-      // Efficient: sirf jitne backend pages is UI page ke liye chahiye
-      // utne hi fetch hote hain, poora dataset fetch nahi karna padta
-      if (selectedCategories.length <= 1) {
-        const categoryId = selectedCategories[0];
-        const first = await fetchBackendPage(categoryId, 1);
-        const backendPageSize = first.results.length || UI_PAGE_SIZE;
-        const totalCount = first.count;
-
-        const startIndex = (uiPage - 1) * UI_PAGE_SIZE;
-        const endIndex = Math.min(startIndex + UI_PAGE_SIZE, totalCount) - 1;
-
-        if (totalCount === 0 || endIndex < startIndex) {
-          return { results: [], count: totalCount };
-        }
-
-        const backendPageStart = Math.floor(startIndex / backendPageSize) + 1;
-        const backendPageEnd = Math.floor(endIndex / backendPageSize) + 1;
-
-        const neededPages = [];
-        for (let p = backendPageStart; p <= backendPageEnd; p++)
-          neededPages.push(p);
-
-        const pageResponses = await Promise.all(
-          neededPages.map((p) =>
-            p === 1 ? Promise.resolve(first) : fetchBackendPage(categoryId, p),
-          ),
-        );
-
-        const combined = pageResponses.flatMap((r) => r.results);
-        const offset = startIndex - (backendPageStart - 1) * backendPageSize;
-
-        return {
-          results: combined.slice(offset, offset + UI_PAGE_SIZE),
-          count: totalCount,
-        };
+      if (totalCount === 0 || endIndex < startIndex) {
+        return { results: [], count: totalCount };
       }
 
-      // ===== CASE B — 2+ categories selected =====
-      // Backend multiple category_ids ek sath OR karke filter karna
-      // support nahi karta, is liye har category ka poora set fetch
-      // karke, duplicates hata ke, client-side combine + sort + slice
-      // karte hain. (Note: bade catalog ke liye ye zyada requests
-      // lagayega — ideal fix backend mein category_id list support
-      // add karna hoga.)
-      const perCategoryResults = await Promise.all(
-        selectedCategories.map((id) => fetchAllForCategory(id)),
+      const backendPageStart = Math.floor(startIndex / backendPageSize) + 1;
+      const backendPageEnd = Math.floor(endIndex / backendPageSize) + 1;
+
+      const neededPages = [];
+      for (let p = backendPageStart; p <= backendPageEnd; p++)
+        neededPages.push(p);
+
+      const pageResponses = await Promise.all(
+        neededPages.map((p) =>
+          p === 1 ? Promise.resolve(first) : fetchBackendPage(p),
+        ),
       );
 
-      const seen = new Set();
-      const combined = perCategoryResults.flat().filter((product) => {
-        if (seen.has(product.id)) return false;
-        seen.add(product.id);
-        return true;
-      });
-
-      combined.sort(comparatorFor(sortBy));
-
-      const totalCount = combined.length;
-      const startIndex = (uiPage - 1) * UI_PAGE_SIZE;
+      const combined = pageResponses.flatMap((r) => r.results);
+      const offset = startIndex - (backendPageStart - 1) * backendPageSize;
 
       return {
-        results: combined.slice(startIndex, startIndex + UI_PAGE_SIZE),
+        results: combined.slice(offset, offset + UI_PAGE_SIZE),
         count: totalCount,
       };
     },

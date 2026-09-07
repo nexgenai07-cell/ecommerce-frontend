@@ -45,7 +45,7 @@ const ChatInput = ({
   // returned file_id/url as the pending attachment once it succeeds.
   // --------------------------------------------------
   const uploadMutation = useMutation({
-    mutationFn: uploadChatFile,
+    mutationFn: (variables) => uploadChatFile(variables),
     onSuccess: (response, file) => {
       setAttachment({
         file_id: response.data.file_id,

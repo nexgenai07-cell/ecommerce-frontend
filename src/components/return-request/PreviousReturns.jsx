@@ -25,7 +25,7 @@ const PreviousReturns = () => {
   // so this table refreshes automatically right after a new return is submitted.
   const { data: returnsData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.RETURNS,
-    queryFn: getReturns,
+    queryFn: ({ signal }) => getReturns(undefined, signal),
     staleTime: 1000 * 60 * 5,
   });
 

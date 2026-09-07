@@ -65,7 +65,7 @@ const ReturnDetail = () => {
   } = useQuery({
     // Unique cache key that includes the return ID so each return's detail is cached independently
     queryKey: QUERY_KEYS.RETURN_DETAIL(id),
-    queryFn: () => getReturnDetail(id),
+    queryFn: ({ signal }) => getReturnDetail(id, signal),
     // Only run this query once an ID is actually present in the URL
     enabled: !!id,
     staleTime: 1000 * 60 * 2,

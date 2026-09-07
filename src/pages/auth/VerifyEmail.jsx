@@ -37,7 +37,7 @@ const VerifyEmail = () => {
   // =============================================
   const verifyQuery = useQuery({
     queryKey: ["verifyEmail", token],
-    queryFn: () => verifyEmail(token),
+    queryFn: ({ signal }) => verifyEmail(token, signal),
     enabled: !!token,
     retry: false,
     refetchOnWindowFocus: false,

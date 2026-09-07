@@ -37,10 +37,12 @@ import ExportReportCard from "../../components/admin-export/ExportReportCard";
 // dropped entirely, not just its PDF button: there's no
 // category-revenue data anywhere in the schema for the backend to
 // even generate that report from.
+// All 6 `type` values below (sales, orders, revenue, products,
+// customers, inventory) are now CONFIRMED accepted by the export
+// endpoint.
 const REPORT_TYPES = [
   {
     type: "sales",
-    // CONFIRMED real — the one example value the API doc actually gives
     title: "Sales Report",
     description:
       "Daily/weekly/monthly sales totals from the Sales Report data.",

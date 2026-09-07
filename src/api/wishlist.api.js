@@ -25,11 +25,11 @@ import axiosInstance from "../lib/axiosInstance";
 // (e.g. to show filled/empty heart icons on product cards).
 //
 // Backend now returns the documented nested shape directly
-// (product: { id, name, price, primary_image, in_stock, stock, category })
-// — matching Cart's pattern, so no frontend-side normalization is
-// needed anymore.
-export const getWishlist = () => {
-  return axiosInstance.get("/api/v1/wishlist/");
+// (product: { id, name, price, primary_image, total_stock,
+// reserved_stock, available_stock, category }) — matching Cart's
+// pattern, so no frontend-side normalization is needed anymore.
+export const getWishlist = (signal) => {
+  return axiosInstance.get("/api/v1/wishlist/", { signal });
 };
 
 // ----------------------------
@@ -40,8 +40,8 @@ export const getWishlist = () => {
 // product to their wishlist. The "data" payload is expected to
 // contain:
 // - product_id: which product to add to the wishlist
-export const addToWishlist = (data) => {
-  return axiosInstance.post("/api/v1/wishlist/add/", data);
+export const addToWishlist = (data, signal) => {
+  return axiosInstance.post("/api/v1/wishlist/add/", data, { signal });
 };
 
 // ----------------------------
@@ -51,6 +51,6 @@ export const addToWishlist = (data) => {
 // product is already saved), indicating they want to remove it from
 // their wishlist. "itemId" identifies which specific wishlist entry
 // to delete (this is the wishlist ITEM's id, not the product's id).
-export const removeFromWishlist = (itemId) => {
-  return axiosInstance.delete(`/api/v1/wishlist/remove/${itemId}/`);
+export const removeFromWishlist = (itemId, signal) => {
+  return axiosInstance.delete(`/api/v1/wishlist/remove/${itemId}/`, { signal });
 };

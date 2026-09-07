@@ -27,13 +27,13 @@ const PostAnalytics = () => {
 
   const { data: postResponse, isLoading: isPostLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POST_DETAIL(id),
-    queryFn: () => getSocialPostById(id),
+    queryFn: ({ signal }) => getSocialPostById(id, signal),
   });
   const post = postResponse?.data;
 
   const { data: analyticsResponse, isLoading: isAnalyticsLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POST_ANALYTICS(id),
-    queryFn: () => getPostAnalytics(id),
+    queryFn: ({ signal }) => getPostAnalytics(id, signal),
   });
   const analytics = analyticsResponse?.data;
 

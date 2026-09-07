@@ -32,7 +32,7 @@ const ConnectedAccountsRow = () => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_ACCOUNTS,
-    queryFn: getSocialAccounts,
+    queryFn: ({ signal }) => getSocialAccounts(signal),
     staleTime: 1000 * 60 * 5,
   });
 

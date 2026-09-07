@@ -11,14 +11,27 @@ import OrderStatusBadge from "../shared/OrderStatusBadge"; // Reusable colored b
 const OrderCard = ({ order, index = 0 }) => {
   // index defaults to 0 so the card still works when rendered outside a list
 
-  // Safely read the items array — falls back to empty array if order.items is undefined
+  // Safely read the items array — falls back to empty array if order.items is undefined.
+  // The backend caps this array at the first 3 items (for the thumbnail
+  // preview only), so it should never be treated as the order's real item count.
   const items = order.items || [];
 
-  // Slice only the first 3 items to use as visible image thumbnails
+  // The order's real total item count, as reported by the backend's
+  // dedicated item_count field. This is independent of how many entries
+  // are actually present in the items array above, so it stays accurate
+  // even for orders with more than 3 items.
+  const totalItemCount = order.item_count ?? items.length;
+
+  // Thumbnails to render — items is already capped at 3 by the backend,
+  // but slicing here keeps this safe even if that ever changes.
   const previewImages = items.slice(0, 3);
 
-  // If there are more than 3 items, calculate how many are hidden so we can show a "+X more" box
-  const remainingCount = items.length > 3 ? items.length - 3 : 0;
+  // How many items exist beyond the ones actually shown as thumbnails —
+  // driven by the real total count, not by the capped items array.
+  const remainingCount =
+    totalItemCount > previewImages.length
+      ? totalItemCount - previewImages.length
+      : 0;
 
   // Track Order button is shown for orders that are still in motion (not yet delivered or cancelled)
   const canTrack = [
@@ -96,10 +109,12 @@ const OrderCard = ({ order, index = 0 }) => {
             >
               <img
                 src={
-                  item.product?.primary_image || // use the product's main image if available
-                  "/placeholder-product.svg" // fall back to a generic placeholder if image is missing
+                  // The product image is returned as a flat "product_image"
+                  // field directly on the order item (see Order Detail /
+                  // Order Items), not nested under a "product" object.
+                  item.product_image || "/placeholder-product.svg" // fall back to a generic placeholder if image is missing
                 }
-                alt={item.product_name || item.product?.name} // descriptive alt text for accessibility
+                alt={item.product_name} // descriptive alt text for accessibility
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" // fill the box, crop rather than stretch, subtle zoom on hover
               />
             </div>
@@ -117,8 +132,8 @@ const OrderCard = ({ order, index = 0 }) => {
             </div>
           )}
 
-          {/* Empty state thumbnail — shown when the order has no items at all */}
-          {items.length === 0 && (
+          {/* Empty state thumbnail — shown when the order genuinely has no items at all */}
+          {totalItemCount === 0 && (
             <div className="w-16 h-16 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center">
               <p className="text-xs text-gray-300">No image</p>
             </div>
@@ -131,10 +146,12 @@ const OrderCard = ({ order, index = 0 }) => {
         <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-gray-50">
           {/* Item count + total price */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Item count sentence — falls back to 1 if items array is empty */}
+            {/* Item count sentence — reflects the order's real total item
+                count (item_count), not the capped preview array, so this
+                stays correct even when the order has more than 3 items */}
             <p className="text-sm text-gray-500">
-              {items.length || 1} {(items.length || 1) === 1 ? "item" : "items"}{" "}
-              totaling
+              {totalItemCount || 1}{" "}
+              {(totalItemCount || 1) === 1 ? "item" : "items"} totaling
             </p>
 
             {/* Total order price — bold and in brand primary-dark color to draw attention */}

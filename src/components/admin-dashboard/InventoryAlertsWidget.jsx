@@ -5,7 +5,8 @@ import { BsBoxSeam } from "react-icons/bs";
 
 import { getInventoryAlerts } from "../../api/analytics.api";
 // getInventoryAlerts — API 89: GET /api/v1/analytics/inventory/alerts/
-// returns [{ product_id, name, stock, low_stock_threshold }]
+// returns [{ product_id, name, total_stock, reserved_stock,
+// available_stock, low_stock_threshold }]
 
 import { ROUTES } from "../../constants/routes";
 import extractListData from "../../utils/extractListData";
@@ -15,13 +16,16 @@ import Button from "../ui/Button";
 
 // Builds the varying description text ("Only 2 left in stock" /
 // "8 units remaining" / "Out of stock"), derived entirely from the
-// real stock + threshold numbers the API returns — no hardcoded/fake copy.
+// real available_stock + threshold numbers the API returns — no
+// hardcoded/fake copy. available_stock (not total_stock) is what's
+// actually left to sell to a new customer right now.
 const getStockMessage = (item) => {
-  if (item.stock === 0) return "Out of stock";
-  if (item.stock <= item.low_stock_threshold) {
-    return `Only ${item.stock} left in stock`;
+  const available = item.available_stock ?? 0;
+  if (available === 0) return "Out of stock";
+  if (available <= item.low_stock_threshold) {
+    return `Only ${available} left in stock`;
   }
-  return `${item.stock} units remaining`;
+  return `${available} units remaining`;
 };
 
 const InventoryAlertsWidget = () => {
@@ -29,7 +33,7 @@ const InventoryAlertsWidget = () => {
 
   const { data: alertsResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "inventoryAlerts"],
-    queryFn: getInventoryAlerts,
+    queryFn: ({ signal }) => getInventoryAlerts(signal),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -84,7 +88,7 @@ const InventoryAlertsWidget = () => {
                   {item.name}
                 </p>
                 <p
-                  className={`text-xs ${item.stock === 0 ? "text-danger" : "text-warning"}`}
+                  className={`text-xs ${(item.available_stock ?? 0) === 0 ? "text-danger" : "text-warning"}`}
                 >
                   {getStockMessage(item)}
                 </p>

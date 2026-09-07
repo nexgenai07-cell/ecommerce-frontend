@@ -54,16 +54,22 @@ const CheckoutOrderSummary = ({
   // APPLY COUPON
   // API 37 — POST /api/v1/cart/apply-coupon/
   // =============================================
-  // Mutation hook to handle applying a coupon code to the cart
+  // The response already carries the fully recalculated cart (items,
+  // subtotal, discount_amount, total, coupon) — same shape as GET
+  // /api/v1/cart/. Writing it directly into the QUERY_KEYS.CART cache in
+  // onSuccess means the parent Checkout page's cart query updates (and this
+  // sidebar re-renders with the new discount) at the same moment the success
+  // toast shows, instead of waiting on a separate refetch to land afterwards.
   const applyCouponMutation = useMutation({
     // The actual API call function — sends the trimmed coupon code to the backend
     mutationFn: () => applyCoupon({ code: couponCode.trim() }),
     // Runs when the coupon is successfully applied
-    onSuccess: () => {
+    onSuccess: (response) => {
       showSuccess("Coupon applied!"); // Show a success toast notification to the user
       setCouponCode(""); // Clear the input field after successful application
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
-      // Invalidate the cart query so React Query refetches updated cart data (with new discount/coupon applied)
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) =>
+        old?.data ? { ...old, data: { ...old.data, ...response.data } } : old,
+      );
     },
     // Runs if the coupon application API call fails
     onError: (error) => {
@@ -72,23 +78,64 @@ const CheckoutOrderSummary = ({
         // Show the specific error message from the server if available, otherwise show a generic fallback message
       );
     },
+    // Refetches in the background afterwards purely to reconcile with the
+    // server; the cache is already correct by the time this runs.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+    },
   });
 
   // =============================================
   // REMOVE COUPON
   // API 38
   // =============================================
-  // Mutation hook to handle removing an already applied coupon from the cart
+  // Updates the cache optimistically in onMutate, so the coupon badge and
+  // the total recalculate the instant the "X" is clicked, before the DELETE
+  // request resolves. onError restores the snapshot taken here if the
+  // request actually fails.
   const removeCouponMutation = useMutation({
-    mutationFn: removeCoupon, // Directly using the removeCoupon API function as the mutation function
+    mutationFn: () => removeCoupon(), // Directly using the removeCoupon API function as the mutation function
+
+    // Fires immediately, before the network request is even sent.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
+
+      const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+
+      queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            coupon: null,
+            discount_amount: 0,
+            total: old.data.subtotal,
+          },
+        };
+      });
+
+      return { previousCart };
+    },
+
     // Runs when coupon removal succeeds
     onSuccess: () => {
       showSuccess("Coupon removed"); // Notify user that coupon was successfully removed
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
-      // Refresh cart data so totals update without the coupon discount
     },
-    // Runs if coupon removal fails — shows a generic error toast
-    onError: () => showError("Failed to remove coupon."),
+
+    // Runs if coupon removal fails — restores the pre-removal cache snapshot
+    onError: (error, variables, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
+      }
+      showError("Failed to remove coupon.");
+    },
+
+    // Refetches in the background afterwards so the cache matches the
+    // server exactly, regardless of whether the request succeeded or failed.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+    },
   });
 
   return (

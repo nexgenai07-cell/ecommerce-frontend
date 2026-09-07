@@ -27,22 +27,56 @@ const OrderHistory = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // =============================================
-  // MY ORDERS API
-  // API 43 — GET /api/v1/orders/
+  // MY ORDERS API — GET /api/v1/orders/
   // =============================================
-
+  // BACKEND FIX CONFIRMED: this endpoint's pagination has now been
+  // explicitly confirmed by the backend team. This fetches page 1
+  // first, then — if the response indicates there are more pages —
+  // fetches every remaining page IN PARALLEL, so the customer's
+  // COMPLETE order history is always shown, no matter how many orders
+  // they've placed. Older orders can never silently become invisible.
+  // A single customer's own order count is naturally small/bounded
+  // (unlike the admin catalog), so fetching every page here is safe
+  // and not the "download everything" anti-pattern fixed elsewhere.
   const {
     data: ordersData,
     isLoading,
     isError, // true if the request itself failed (network drop, 500, expired session) — must be handled separately from "zero orders"
     refetch, // passed to ErrorState so the customer can retry without a full page reload
   } = useQuery({
-    queryKey: QUERY_KEYS.MY_ORDERS,
-    queryFn: getMyOrders,
+    queryKey: QUERY_KEYS.MY_ORDERS_FULL,
+    queryFn: async ({ signal }) => {
+      const firstResponse = await getMyOrders({ page: 1 }, signal);
+      const firstResults = firstResponse?.data?.results || [];
+      const totalCount = firstResponse?.data?.count ?? firstResults.length;
+
+      // If the backend genuinely returns everything in one response
+      // (no real pagination), totalCount will equal firstResults.length
+      // and this loop simply does nothing extra — safe either way.
+      const pageSize = firstResults.length || 1;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+      if (totalPages <= 1) {
+        return firstResults;
+      }
+
+      const remainingPageNumbers = Array.from(
+        { length: totalPages - 1 },
+        (_, index) => index + 2,
+      );
+      const remainingResponses = await Promise.all(
+        remainingPageNumbers.map((page) => getMyOrders({ page }, signal)),
+      );
+      const remainingResults = remainingResponses.flatMap(
+        (response) => response?.data?.results || [],
+      );
+
+      return [...firstResults, ...remainingResults];
+    },
     staleTime: 1000 * 60 * 2,
   });
 
-  const allOrders = ordersData?.data?.results || [];
+  const allOrders = ordersData || [];
 
   // Date-window filtering is applied FIRST, before the status tab — this is
   // the set both the tab counts AND the final list are derived from, so a

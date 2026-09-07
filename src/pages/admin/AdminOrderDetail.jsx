@@ -23,7 +23,7 @@ import {
 // updateOrderStatus — API 49: PUT /api/v1/admin/orders/{order_number}/status/
 
 import { ROUTES } from "../../constants/routes";
-import { ORDER_STATUS } from "../../constants/statusTypes";
+import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
@@ -82,6 +82,18 @@ const AdminOrderDetail = () => {
   const [trackingNumber, setTrackingNumber] = useState("");
   // The tracking number currently typed inside the modal's input
 
+  // Required whenever the admin sets status to "cancelled" — the
+  // backend includes this exact string in the customer's cancellation
+  // notification.
+  const [cancellationReason, setCancellationReason] = useState("");
+  // Required ONLY when cancelling a QR-paid order — the backend
+  // rejects the request with a 400 if this is missing in that case.
+  // refund_method itself is always "manual" for QR (no live gateway
+  // exists to refund automatically), so there's nothing to pick there.
+  const [refundTransactionReference, setRefundTransactionReference] =
+    useState("");
+  const [statusFormError, setStatusFormError] = useState("");
+
   // --------------------------------------------------
   // ORDER DETAIL — now uses the NEW admin-only endpoint, fixed after
   // real testing found the old shared customer endpoint returning a
@@ -89,7 +101,7 @@ const AdminOrderDetail = () => {
   // --------------------------------------------------
   const { data: orderResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
-    queryFn: () => getAdminOrderDetail(orderNumber),
+    queryFn: ({ signal }) => getAdminOrderDetail(orderNumber, signal),
   });
 
   const order = orderResponse?.data;
@@ -100,7 +112,7 @@ const AdminOrderDetail = () => {
   // --------------------------------------------------
   const { data: trackResponse } = useQuery({
     queryKey: ["orderTracking", orderNumber],
-    queryFn: () => trackOrder(orderNumber),
+    queryFn: ({ signal }) => trackOrder(orderNumber, signal),
     enabled: !!order,
     // Only fires once the main order detail has successfully loaded —
     // no point tracking an order that doesn't exist
@@ -113,6 +125,13 @@ const AdminOrderDetail = () => {
   // --------------------------------------------------
   // UPDATE STATUS MUTATION — API 49
   // --------------------------------------------------
+  const isCancelling = newStatus === ORDER_STATUS.CANCELLED;
+  const isQrOrder = order?.payment?.method === PAYMENT_METHOD.QR;
+  // The manual refund fields only apply when BOTH are true — cancelling
+  // AND the order was paid via QR (Stripe cancellations keep working
+  // exactly as before, with an automatic refund and no extra fields).
+  const requiresManualRefundProof = isCancelling && isQrOrder;
+
   const updateStatusMutation = useMutation({
     mutationFn: () =>
       updateOrderStatus(orderNumber, {
@@ -120,6 +139,11 @@ const AdminOrderDetail = () => {
         tracking_number: trackingNumber || undefined,
         // undefined (not empty string) so an untouched tracking field
         // doesn't wipe out an existing tracking number on the backend
+        cancellation_reason: isCancelling ? cancellationReason : undefined,
+        ...(requiresManualRefundProof && {
+          refund_method: "manual",
+          refund_transaction_reference: refundTransactionReference,
+        }),
       }),
     onSuccess: () => {
       showSuccess("Order status updated.");
@@ -145,11 +169,29 @@ const AdminOrderDetail = () => {
     // a specific error message field
   });
 
+  const handleSaveStatus = () => {
+    if (isCancelling && !cancellationReason.trim()) {
+      setStatusFormError("A cancellation reason is required.");
+      return;
+    }
+    if (requiresManualRefundProof && !refundTransactionReference.trim()) {
+      setStatusFormError(
+        "A refund transaction reference is required for QR-paid orders.",
+      );
+      return;
+    }
+    setStatusFormError("");
+    updateStatusMutation.mutate();
+  };
+
   const openStatusModal = () => {
     setNewStatus(order?.status || "");
     // Pre-fills the dropdown with the order's CURRENT status, so the
     // admin sees where it already stands instead of a blank field
     setTrackingNumber(order?.tracking_number || "");
+    setCancellationReason("");
+    setRefundTransactionReference("");
+    setStatusFormError("");
     setIsStatusModalOpen(true);
   };
 
@@ -416,7 +458,10 @@ const AdminOrderDetail = () => {
             label="New Status"
             options={STATUS_OPTIONS}
             value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
+            onChange={(e) => {
+              setNewStatus(e.target.value);
+              setStatusFormError("");
+            }}
           />
           <Input
             label="Tracking Number"
@@ -425,6 +470,47 @@ const AdminOrderDetail = () => {
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
           />
+
+          {isCancelling && (
+            <Input
+              label="Cancellation Reason"
+              required
+              placeholder="e.g. Out of stock, customer requested"
+              value={cancellationReason}
+              onChange={(e) => {
+                setCancellationReason(e.target.value);
+                setStatusFormError("");
+              }}
+              hint="Included in the customer's cancellation notification"
+            />
+          )}
+
+          {requiresManualRefundProof && (
+            <div className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-light/40 p-4">
+              <p className="text-xs text-warning font-medium">
+                This order was paid via QR — refunds aren't automatic. Confirm
+                the manual refund has been sent, then log the reference below.
+              </p>
+              <div className="text-sm text-gray-600">
+                Refund Method: <span className="font-semibold">Manual</span>
+              </div>
+              <Input
+                label="Refund Transaction Reference"
+                required
+                placeholder="e.g. Easypaisa transaction ID for the refund"
+                value={refundTransactionReference}
+                onChange={(e) => {
+                  setRefundTransactionReference(e.target.value);
+                  setStatusFormError("");
+                }}
+              />
+            </div>
+          )}
+
+          {statusFormError && (
+            <p className="text-xs text-danger">{statusFormError}</p>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button
               variant="secondary"
@@ -434,7 +520,7 @@ const AdminOrderDetail = () => {
             </Button>
             <Button
               variant="primary"
-              onClick={() => updateStatusMutation.mutate()}
+              onClick={handleSaveStatus}
               isLoading={updateStatusMutation.isPending}
             >
               Save

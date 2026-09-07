@@ -104,35 +104,54 @@ const ProductCard = ({
     mutationFn: () => addToCart({ product_id: product.id, quantity: 1 }),
 
     // Runs INSTANTLY, before the "add to cart" network request even
-    // finishes — so the cart total updates right away instead of waiting
-    // on this call AND the follow-up invalidateQueries refetch below.
-    // Only applies when the product is already in the cart, since a
-    // brand-new line item needs a server-generated id we don't have yet.
+    // finishes — so the cart (and the Cart page, if the user jumps there
+    // right away) reflects the change immediately instead of waiting on
+    // this call AND the follow-up invalidateQueries refetch below.
+    // Handles BOTH cases: bumping the quantity of an item already in the
+    // cart, and inserting a brand-new line item (using a temporary
+    // client-side id — it's swapped for the real server data by the
+    // invalidateQueries refetch in onSuccess).
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
       const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
+      const unitPrice = parseFloat(product.price) || 0;
 
       queryClient.setQueryData(QUERY_KEYS.CART, (old) => {
-        if (!old?.data?.items) return old;
+        // No cart cached yet at all (e.g. very first add of the session) —
+        // nothing to optimistically merge into, let the refetch handle it.
+        if (!old?.data) return old;
 
-        const existingItem = old.data.items.find(
+        const items = old.data.items || [];
+        const existingItem = items.find(
           (cartItem) => cartItem.product.id === product.id,
         );
-        if (!existingItem) return old;
 
-        const unitPrice = parseFloat(product.price) || 0;
         const oldSubtotal = parseFloat(old.data.subtotal) || 0;
         const oldTotal = parseFloat(old.data.total) || 0;
 
-        const updatedItems = old.data.items.map((cartItem) =>
-          cartItem.product.id === product.id
-            ? {
-                ...cartItem,
-                quantity: cartItem.quantity + 1,
-                total_price: (unitPrice * (cartItem.quantity + 1)).toFixed(2),
-              }
-            : cartItem,
-        );
+        const updatedItems = existingItem
+          ? items.map((cartItem) =>
+              cartItem.product.id === product.id
+                ? {
+                    ...cartItem,
+                    quantity: cartItem.quantity + 1,
+                    total_price: (unitPrice * (cartItem.quantity + 1)).toFixed(
+                      2,
+                    ),
+                  }
+                : cartItem,
+            )
+          : [
+              ...items,
+              // Temporary optimistic line item — real id/fields arrive
+              // moments later via the invalidateQueries refetch below.
+              {
+                id: `temp-${product.id}`,
+                product,
+                quantity: 1,
+                total_price: unitPrice.toFixed(2),
+              },
+            ];
 
         const newSubtotal = updatedItems.reduce(
           (sum, cartItem) => sum + parseFloat(cartItem.total_price || 0),
@@ -151,13 +170,17 @@ const ProductCard = ({
         };
       });
 
+      // Instant Redux update too (navbar cart badge, etc.) — no reason to
+      // wait for the network round-trip for this either.
+      handleAddItem({ product, quantity: 1 });
+
       return { previousCart };
     },
 
     onSuccess: () => {
-      handleAddItem({ product, quantity: 1 });
       showSuccess("Added to cart");
-      // Refresh the real cart cache so the Cart page / navbar count stay accurate
+      // Reconcile with the real backend data (real item id, exact totals,
+      // tax/discount recalculation, etc.) now that the request has landed.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
     onError: (_err, _vars, context) => {
@@ -239,12 +262,11 @@ const ProductCard = ({
   const handleAddToCart = (e) => {
     e.stopPropagation(); // Prevent the click from also triggering card navigation
 
-    if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN);
-      return;
-    }
-
-    if (!product?.in_stock) return;
+    // Guest cart support (backend v3.0): adding to cart no longer requires
+    // login — GET/POST /api/v1/cart/... all work for anonymous visitors via
+    // a server-side guest session (see axiosInstance.js's X-Cart-Session
+    // header). Login/registration is only enforced later, at checkout.
+    if (isOutOfStock) return;
 
     // Stop here — before any network request — if the customer's cart
     // already holds every unit this product has in stock. Without this
@@ -273,8 +295,8 @@ const ProductCard = ({
   // STOCK STATUS PILL — replaces the old separate "Low Stock" / "Out of Stock"
   // badges with a single, always-present overlay so every card looks identical
   // ─────────────────────────────────────────
-  const stock = product.stock ?? 0;
-  const isOutOfStock = !product.in_stock || stock <= 0;
+  const stock = product.available_stock ?? 0;
+  const isOutOfStock = stock <= 0;
   const isLowStock = !isOutOfStock && stock <= 5;
 
   const stockStatus = isOutOfStock
@@ -467,11 +489,11 @@ const ProductCard = ({
           size="sm"
           fullWidth
           isLoading={addingToCart}
-          disabled={!product.in_stock || isMaxedInCart || addingToCart}
+          disabled={isOutOfStock || isMaxedInCart || addingToCart}
           onClick={handleAddToCart}
           className="mt-1"
         >
-          {!product.in_stock
+          {isOutOfStock
             ? "Out of Stock"
             : isMaxedInCart
               ? "Max in Cart"

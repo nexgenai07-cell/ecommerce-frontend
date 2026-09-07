@@ -26,7 +26,7 @@ const TrendingSection = () => {
   // =============================================
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES, // Cache key used by react-query to store/retrieve this request's result
-    queryFn: getCategories, // Function that actually performs the API call
+    queryFn: ({ signal }) => getCategories(signal), // Function that actually performs the API call
     staleTime: 1000 * 60 * 10, // fresh for 10 minutes
   });
 
@@ -43,12 +43,11 @@ const TrendingSection = () => {
   // =============================================
   const { data: productsData, isLoading } = useQuery({
     queryKey: [...QUERY_KEYS.PRODUCTS, "trending", activeCategory], // Unique cache key per selected category
-    queryFn: () =>
-      searchProducts({
+    queryFn: ({ signal }) => searchProducts({
         category_id: activeCategory || undefined, // omit entirely if no category selected
         ordering: "-created_at", // newest first
         page: 1,
-      }),
+      }, signal),
     staleTime: 1000 * 60 * 5,
   });
 

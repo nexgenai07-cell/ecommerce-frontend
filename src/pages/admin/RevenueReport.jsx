@@ -6,9 +6,7 @@ import { useState } from "react";
 import { AiOutlineDownload, AiOutlineDollarCircle } from "react-icons/ai";
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — API 90, `type: "revenue"` is an ASSUMPTION here (only
-// "sales" is explicitly confirmed as an example in the doc) — verify
-// with the backend team.
+// exportReport — `type: "revenue"` is now a CONFIRMED accepted value
 
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";

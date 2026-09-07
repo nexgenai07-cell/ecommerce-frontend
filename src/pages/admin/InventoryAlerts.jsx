@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 // smooth-scroll down to it
 
 import { useNavigate } from "react-router-dom";
-// useNavigate — client-side navigation for "Restock" and "Create New"
+// useNavigate — client-side navigation for "Restock"
 
 import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches server data automatically
@@ -20,16 +20,21 @@ import {
   // "Inventory Alerts" in the admin sidebar
 } from "react-icons/ai";
 
-import { fetchAllProducts } from "../../api/products.api";
-// fetchAllProducts — NEW helper that loops through every page of
-// API 16 and returns one complete, flat array of every product in the
-// catalog. This is what makes the fix below possible: filtering and
-// pagination now happen against the REAL, complete list instead of
-// just whatever single server page happened to be loaded.
+import { searchProducts } from "../../api/products.api";
+// searchProducts — the backend now correctly filters `in_stock`
+// server-side and matches `q` against both name and sku, so the
+// default ("All") view and the "Out of Stock" tab both use this with
+// real pagination — no more downloading the entire catalog.
 
 import { getInventoryAlerts } from "../../api/analytics.api";
-// getInventoryAlerts — API 74, the source for exactly which products
-// are flagged and what their real threshold is
+// getInventoryAlerts — the dedicated "products needing attention"
+// endpoint. This is intentionally a small, bounded exception list by
+// design (the backend's own comment confirms it takes no params and
+// "just returns whatever is currently flagged"), so using its result
+// directly — without pagination — is correct here, not a repeat of
+// the old "fetch everything" problem. It's the data source for the
+// "Low Stock" tab, and for cross-referencing which products are
+// flagged at all.
 
 import { getCategories } from "../../api/categories.api";
 import { exportReport } from "../../api/analytics.api";
@@ -54,12 +59,6 @@ import PageHeader from "../../components/shared/PageHeader";
 import InventoryStatsCards from "../../components/admin-inventory/InventoryStatsCards";
 import InventoryAlertBanner from "../../components/admin-inventory/InventoryAlertBanner";
 
-// --------------------------------------------------
-// STATUS TABS — filtering is now done ENTIRELY on the frontend, over
-// the complete product list (see fetchAllProducts above), so every
-// tab's result set and count is always the real, correct total —
-// never just whatever happened to be on the currently loaded server page.
-// --------------------------------------------------
 const STATUS_TABS = [
   { key: "", label: "All" },
   { key: "out_of_stock", label: "Out of Stock" },
@@ -68,13 +67,10 @@ const STATUS_TABS = [
 ];
 
 const PAGE_SIZE = 12;
-// PAGE_SIZE — how many products are shown per page. Pagination is now
-// done entirely on the frontend (see pageProducts below), since we
-// hold the complete, already-filtered list in memory.
 
 const InventoryAlerts = () => {
   const navigate = useNavigate();
-  // navigate — used by the Restock and Create New buttons
+  // navigate — used by the Restock button
 
   const [activeTabs, setActiveTabs] = useState([]);
   // activeTabs — an ARRAY of currently selected status filters
@@ -90,7 +86,7 @@ const InventoryAlerts = () => {
   // search — raw text typed into the filter box BEFORE debouncing
 
   const [currentPage, setCurrentPage] = useState(1);
-  // currentPage — which page of the (already filtered) list is being viewed
+  // currentPage — which page of the current view is being shown
 
   const [isExporting, setIsExporting] = useState(false);
   // isExporting — true while the CSV export download is in progress
@@ -101,39 +97,39 @@ const InventoryAlerts = () => {
 
   const debouncedSearch = useDebounce(search, 400);
   // Waits 400ms after the admin stops typing before actually filtering
-  // — avoids re-filtering the whole list on every single keystroke
+  // — avoids re-filtering/re-fetching on every single keystroke
 
   // --------------------------------------------------
-  // INVENTORY ALERTS — API 74. This is the ONLY source that tells us
-  // exactly which products are flagged and their real threshold.
-  // Built once into a lookup map keyed by product_id, so every row in
-  // the table below can cheaply check "is THIS specific product
-  // flagged, and if so what's its real min-stock threshold?"
+  // INVENTORY ALERTS — the small, bounded "needs attention" list.
+  // Built into a lookup map keyed by product_id (for the "Healthy"
+  // cross-reference below), and used directly as the table's data
+  // source whenever "Out of Stock" and/or "Low Stock" is selected.
   // --------------------------------------------------
   const { data: alertsResponse } = useQuery({
     queryKey: ["inventoryAlerts", "map"],
-    queryFn: getInventoryAlerts,
+    queryFn: ({ signal }) => getInventoryAlerts(signal),
     staleTime: 1000 * 60 * 2,
-    // staleTime — keeps this cached for 2 minutes before refetching
   });
   const alerts = extractListData(alertsResponse);
   const alertsByProductId = {};
   alerts.forEach((alert) => {
     alertsByProductId[alert.product_id] = alert;
-    // Keys the lookup map by product_id for O(1) access per row
   });
 
-  const outOfStockCount = alerts.filter((a) => a.stock === 0).length;
-  const lowStockCount = alerts.filter((a) => a.stock > 0).length;
+  const outOfStockCount = alerts.filter(
+    (a) => (a.available_stock ?? 0) === 0,
+  ).length;
+  const lowStockCount = alerts.filter(
+    (a) => (a.available_stock ?? 0) > 0,
+  ).length;
 
   // --------------------------------------------------
   // CATEGORIES — for the filter dropdown
   // --------------------------------------------------
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
-    // staleTime — categories rarely change, cached for 10 minutes
   });
   const categoryOptions = [
     { value: "", label: "All Categories" },
@@ -144,141 +140,195 @@ const InventoryAlerts = () => {
   ];
 
   // --------------------------------------------------
-  // FULL PRODUCT CATALOG — fetched ONCE, completely, using the new
-  // fetchAllProducts helper. Every filter below (search, category,
-  // status tab) and the pagination further down operate on this
-  // complete list, entirely on the frontend — this is the actual fix
-  // for the broken tab/pagination interaction.
+  // WHICH VIEW IS ACTIVE
   // --------------------------------------------------
-  const {
-    data: allProducts = [],
-    // Defaults to an empty array so .filter()/.slice() never crash
-    // before the first response arrives
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["inventoryAlerts", "allProducts"],
-    // A single, stable cache key — the complete catalog is fetched
-    // once and then filtered locally, so no filter change should ever
-    // trigger a new network request
-    queryFn: fetchAllProducts,
-  });
+  // BACKEND FIX CONFIRMED: searchProducts now accepts a `status`
+  // filter ("out_of_stock" | "low_stock" | "healthy"), combined
+  // correctly with every other filter. This replaces the old approach
+  // entirely — including the previous "Healthy" client-side
+  // cross-reference workaround, which is no longer needed.
+  //
+  // Only SINGLE status values were confirmed — sending multiple
+  // statuses in one request was not part of the confirmed contract.
+  // So:
+  //   - 0 or 1 status tab selected -> ONE real, server-paginated
+  //     request. Fully scalable no matter how large the catalog grows.
+  //   - 2+ status tabs selected -> fetch each selected status's
+  //     complete matching set separately, in parallel (each fetch is
+  //     itself already server-filtered to just that status — a
+  //     naturally small, bounded subset, not the entire catalog), then
+  //     combine and paginate client-side.
+  // --------------------------------------------------
+  const singleStatus = activeTabs.length === 1 ? activeTabs[0] : undefined;
+  const isSingleOrAllView = activeTabs.length <= 1;
+  const needsMultiStatusMerge = activeTabs.length > 1;
 
-  // getProductStatus — resolves a product down to exactly one of the
-  // three status keys used by the tabs, using the REAL
-  // alertsByProductId map built above
-  const getProductStatus = (product) => {
-    const alert = alertsByProductId[product.id];
-    if (!alert) return "healthy";
-    return alert.stock === 0 ? "out_of_stock" : "low_stock";
+  // Single status (or "All") view — one real server-paginated request
+  const {
+    data: serverResponse,
+    isLoading: isLoadingServer,
+    isError: isErrorServer,
+    refetch: refetchServer,
+  } = useQuery({
+    queryKey: [
+      "inventoryAlerts",
+      "server",
+      debouncedSearch,
+      categoryId,
+      singleStatus,
+      currentPage,
+    ],
+    queryFn: ({ signal }) =>
+      searchProducts(
+        {
+          q: debouncedSearch || undefined,
+          category_id: categoryId || undefined,
+          status: singleStatus,
+          page: currentPage,
+          page_size: PAGE_SIZE,
+        },
+        signal,
+      ),
+    enabled: isSingleOrAllView,
+    staleTime: 1000 * 30,
+    keepPreviousData: true,
+  });
+  const serverResults = extractListData(serverResponse);
+  const serverTotalCount = serverResponse?.data?.count ?? 0;
+
+  // Multi-status view — fetches each selected status's COMPLETE
+  // matching set (already server-filtered to that one status) in
+  // parallel, then combines them for client-side pagination. Each
+  // individual fetch here follows the same safe "page 1 first, then
+  // remaining pages in parallel" pattern used elsewhere in this
+  // project for bounded, exception-style lists.
+  const { data: mergedResponse, isLoading: isLoadingMerged } = useQuery({
+    queryKey: [
+      "inventoryAlerts",
+      "multiStatus",
+      debouncedSearch,
+      categoryId,
+      activeTabs,
+    ],
+    queryFn: async ({ signal }) => {
+      const fetchAllForStatus = async (status) => {
+        const first = await searchProducts(
+          {
+            q: debouncedSearch || undefined,
+            category_id: categoryId || undefined,
+            status,
+            page: 1,
+            page_size: 100,
+          },
+          signal,
+        );
+        const firstResults = extractListData(first);
+        const totalCount = first?.data?.count ?? firstResults.length;
+        const pageSize = firstResults.length || 1;
+        const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
+
+        const remainingPages = Array.from(
+          { length: Math.max(totalPages - 1, 0) },
+          (_, index) => index + 2,
+        );
+        const remaining = await Promise.all(
+          remainingPages.map((page) =>
+            searchProducts(
+              {
+                q: debouncedSearch || undefined,
+                category_id: categoryId || undefined,
+                status,
+                page,
+                page_size: 100,
+              },
+              signal,
+            ),
+          ),
+        );
+        return [
+          ...firstResults,
+          ...remaining.flatMap((r) => extractListData(r)),
+        ];
+      };
+
+      const perStatusResults = await Promise.all(
+        activeTabs.map(fetchAllForStatus),
+      );
+      return perStatusResults.flat();
+    },
+    enabled: needsMultiStatusMerge,
+    staleTime: 1000 * 30,
+  });
+  const mergedProducts = mergedResponse || [];
+
+  // --------------------------------------------------
+  // FINAL DATA + PAGINATION for the current view
+  // --------------------------------------------------
+  let activeProducts = [];
+  let activeTotalCount = 0;
+  let activeIsLoading = false;
+  let activeIsError = false;
+
+  if (needsMultiStatusMerge) {
+    activeTotalCount = mergedProducts.length;
+    activeProducts = mergedProducts.slice(
+      (currentPage - 1) * PAGE_SIZE,
+      currentPage * PAGE_SIZE,
+    );
+    activeIsLoading = isLoadingMerged;
+    activeIsError = false;
+  } else {
+    activeProducts = serverResults;
+    activeTotalCount = serverTotalCount;
+    activeIsLoading = isLoadingServer;
+    activeIsError = isErrorServer;
+  }
+
+  const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / PAGE_SIZE));
+
+  const refetch = () => {
+    refetchServer();
   };
 
-  // --------------------------------------------------
-  // CLIENT-SIDE FILTERING — search, category, AND status tabs are all
-  // applied together, in one pass, over the COMPLETE product list.
-  // Status filtering is now MULTI-SELECT: a product passes if its
-  // status is included ANYWHERE in the activeTabs array, so selecting
-  // both "Out of Stock" and "Low Stock" shows both groups together,
-  // collectively — not just whichever one was clicked last.
-  // --------------------------------------------------
-  const filteredProducts = allProducts.filter((product) => {
-    // Search filter — matches against product name or SKU,
-    // case-insensitively, only once the debounce delay has settled
-    if (debouncedSearch) {
-      const query = debouncedSearch.toLowerCase();
-      const nameMatch = (product.name || "").toLowerCase().includes(query);
-      const skuMatch = (product.sku || "").toLowerCase().includes(query);
-      if (!nameMatch && !skuMatch) return false;
-    }
-
-    // Category filter — compares the product's real nested category
-    // id against the selected dropdown value
-    if (categoryId && String(product.category?.id) !== categoryId) {
-      return false;
-    }
-
-    // Status tabs filter — empty activeTabs means "All" (no status
-    // filtering at all). Otherwise the product must match ONE of the
-    // selected tab keys — this is what makes multiple tabs combine
-    // collectively instead of only the last click taking effect.
-    if (activeTabs.length > 0) {
-      return activeTabs.includes(getProductStatus(product));
-    }
-
-    return true;
-  });
-
-  const totalCount = filteredProducts.length;
-  // totalCount — the REAL total of products matching the current
-  // search + category + tab combination, across the whole catalog
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  // At least 1 page even when totalCount is 0, so pagination never
-  // shows "page 0 of 0"
-
-  // Slices out just the current page's worth of rows from the fully
-  // filtered list — this is the frontend equivalent of backend
-  // pagination, but now correctly scoped to the REAL filtered total
-  const pageProducts = filteredProducts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
-
-  // Whenever the search term, category, or status tab changes, jump
-  // back to page 1 — staying on, say, page 3 of a brand-new filtered
-  // list would either show nothing or the wrong rows
+  // Whenever the search term, category, or status tabs change, jump
+  // back to page 1
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch, categoryId, activeTabs]);
 
   const handleExport = async () => {
     setIsExporting(true);
-    // Shows the loading spinner on the Export button immediately
     try {
       const response = await exportReport({ type: "inventory" });
-      // FLAG: "inventory" as the `type` value is an assumption, same
-      // pattern as every other export button in this admin panel
       const blobUrl = URL.createObjectURL(response.data);
-      // Creates a temporary in-browser URL pointing to the downloaded file
       const link = document.createElement("a");
-      // Builds a hidden <a> tag purely to trigger a file download
       link.href = blobUrl;
       link.download = `inventory-report-${new Date().toISOString().slice(0, 10)}.csv`;
-      // Filename includes today's date
       document.body.appendChild(link);
       link.click();
-      // Programmatically "clicks" the link to start the download
       link.remove();
-      // Cleans up the temporary <a> tag from the DOM
       URL.revokeObjectURL(blobUrl);
-      // Frees the browser memory used by the temporary blob URL
       showSuccess("Export downloaded.");
     } catch (error) {
       showError("Failed to export inventory. Please try again.");
     } finally {
       setIsExporting(false);
-      // Always turns off the loading spinner, whether it succeeded or failed
     }
   };
 
-  // Table column config — "Min Stock" column REMOVED per request
+  // Table column config
   const columns = [
     {
       key: "product",
       label: "Product",
       render: (row) => (
         <div className="flex items-center gap-3">
-          {/* Product thumbnail — falls back to a placeholder when no
-              primary_image is set */}
           <img
             src={row.primary_image || "/placeholder-product.svg"}
             alt={row.name}
             className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
           />
           <div className="min-w-0">
-            {/* min-w-0 allows the truncate classes below to actually
-                work inside a flex container */}
             <p className="text-sm font-medium text-gray-900 truncate">
               {row.name}
             </p>
@@ -305,20 +355,17 @@ const InventoryAlerts = () => {
       render: (row) => (
         <span
           className={
-            row.stock === 0
+            (row.available_stock ?? 0) === 0
               ? "text-danger font-medium text-sm"
               : alertsByProductId[row.id]
                 ? "text-warning font-medium text-sm"
                 : "text-gray-900 text-sm"
           }
         >
-          {row.stock}
+          {row.available_stock ?? 0}
         </span>
       ),
     },
-    // "Min Stock" column REMOVED — was previously here, showing
-    // alert.low_stock_threshold only for flagged products and a dash
-    // for everything else
     {
       key: "status",
       label: "Status",
@@ -327,7 +374,7 @@ const InventoryAlerts = () => {
         if (!alert) {
           return <Badge label="Healthy" variant="success" size="sm" rounded />;
         }
-        if (alert.stock === 0) {
+        if ((alert.available_stock ?? 0) === 0) {
           return (
             <Badge label="Out of Stock" variant="danger" size="sm" rounded />
           );
@@ -358,7 +405,6 @@ const InventoryAlerts = () => {
           Export Report button lives inside the header's `actions` slot. */}
       <PageHeader
         icon={<AiOutlineWarning />}
-        // Same icon already used for "Inventory Alerts" in the sidebar
         title="Inventory Alerts"
         actions={
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -379,13 +425,7 @@ const InventoryAlerts = () => {
         outOfStockCount={outOfStockCount}
         lowStockCount={lowStockCount}
         onReviewAll={() => {
-          // Selects BOTH the "Out of Stock" and "Low Stock" tabs
-          // together (multi-select), so the table below shows every
-          // product that needs attention and both tabs are highlighted
           setActiveTabs(["out_of_stock", "low_stock"]);
-          // Smooth-scrolls the page down to the tabs/table section so
-          // the admin immediately sees the filtered results, instead
-          // of the filter silently changing off-screen above
           tableSectionRef.current?.scrollIntoView({
             behavior: "smooth",
             block: "start",
@@ -402,19 +442,7 @@ const InventoryAlerts = () => {
         className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
       >
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-          {/* overflow-x-auto + scrollbar-hide — lets the tab row
-              scroll horizontally on narrow phone screens instead of
-              wrapping awkwardly or overflowing the card */}
           {STATUS_TABS.map((tab) => {
-            // "All" (tab.key === "") is active ONLY when truly nothing
-            // is filtered — no status tabs selected, no search text,
-            // and no category picked. If the admin has typed a search
-            // or picked a category, "All" should NOT stay highlighted
-            // even though no status tab is selected, since a filter is
-            // still in effect. Every other tab is active when its key
-            // is present anywhere in the activeTabs array — this is
-            // what lets multiple tabs be highlighted and filtered
-            // together.
             const isActive =
               tab.key === ""
                 ? activeTabs.length === 0 && !search && !categoryId
@@ -425,20 +453,11 @@ const InventoryAlerts = () => {
                 key={tab.key || "all"}
                 onClick={() => {
                   if (tab.key === "") {
-                    // Clicking "All" is now a FULL reset — clears the
-                    // status tab selection, the search text, AND the
-                    // category dropdown, so "All" always means "show
-                    // everything, no filters active" instead of only
-                    // resetting the status tabs while search/category
-                    // filters stayed applied underneath
                     setActiveTabs([]);
                     setSearch("");
                     setCategoryId("");
                     return;
                   }
-                  // Any other tab TOGGLES in/out of the selection —
-                  // clicking a second tab adds it alongside the first
-                  // instead of replacing it, so both filter together
                   setActiveTabs((prev) =>
                     prev.includes(tab.key)
                       ? prev.filter((key) => key !== tab.key)
@@ -458,39 +477,30 @@ const InventoryAlerts = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          {/* flex-col on mobile (stacked), sm:flex-row from the small
-              breakpoint up (search box and category dropdown sit
-              side by side) */}
           <Input
             placeholder="Filter products..."
             leftIcon={<AiOutlineSearch className="w-4 h-4" />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            // Page-reset now happens centrally in the useEffect above,
-            // triggered off debouncedSearch — no need to reset it here
           />
           <Select
             options={categoryOptions}
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            // Page-reset now happens centrally in the useEffect above
           />
         </div>
       </div>
 
       <DataTable
         columns={columns}
-        data={pageProducts}
-        // pageProducts — the correctly filtered AND paginated slice
+        data={activeProducts}
         keyField="id"
-        isLoading={isLoading}
-        error={isError}
+        isLoading={activeIsLoading}
+        error={activeIsError}
         onRetry={refetch}
         currentPage={currentPage}
-        totalPages={totalPages}
-        totalResults={totalCount}
-        // totalResults — now the REAL total matching the active
-        // filters, so the "Showing X of Y" footer text is accurate
+        totalPages={activeTotalPages}
+        totalResults={activeTotalCount}
         onPageChange={setCurrentPage}
       />
     </div>

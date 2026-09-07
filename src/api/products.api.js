@@ -13,39 +13,56 @@ import axiosInstance from "../lib/axiosInstance";
 // Importing the pre-configured Axios instance, which automatically
 // attaches the base URL, auth token, and handles 401 errors globally.
 
-import extractListData from "../utils/extractListData";
-// extractListData — normalizes a product-list response into a plain
-// array regardless of whether the backend returned a flat array or a
-// DRF-paginated object ({ count, next, previous, results }). Needed
-// below by fetchAllProducts, which has to read `.results` and `.next`
-// off of every page it follows.
-
 // ----------------------------
 // API  - Get a paginated list of all products
 // ----------------------------
-export const getProducts = (params) => {
-  return axiosInstance.get("/api/v1/products/", { params });
+export const getProducts = (params, signal) => {
+  return axiosInstance.get("/api/v1/products/", { signal, params });
 };
 
 // ----------------------------
 // API - Search and filter products
 // ----------------------------
-export const searchProducts = (params) => {
-  return axiosInstance.get("/api/v1/products/search/", { params });
+// CONFIRMED WORKING SERVER-SIDE (as of the backend's latest fix):
+//   - q            -> matches against BOTH product name AND sku
+//   - category_id  -> filters to that exact category. Also now
+//                      confirmed to accept MULTIPLE values in one
+//                      request as a comma-separated list
+//                      (e.g. "category_id=5,8"), returning products in
+//                      ANY of those categories, combined and correctly
+//                      counted server-side.
+//   - in_stock     -> true/false, genuinely filters by real stock status
+//   - status       -> "out_of_stock" | "low_stock" | "healthy" —
+//                      combines correctly with every other filter
+//                      above. NOTE: only single values are confirmed;
+//                      sending multiple statuses in one request was
+//                      not part of the confirmed contract, so the
+//                      Inventory Alerts page fetches each selected
+//                      status separately when more than one is active
+//                      (see InventoryAlerts.jsx).
+//   - ordering     -> e.g. "-created_at", "price", "-price", "name"
+//   - page         -> standard pagination
+// All of the above now combine correctly in a single request. This
+// endpoint is the single source of truth for the admin Product
+// Management and Inventory Alerts pages — there is no longer a need
+// to fetch the entire catalog and filter it in the browser.
+export const searchProducts = (params, signal) => {
+  return axiosInstance.get("/api/v1/products/search/", { signal, params });
 };
 
 // ----------------------------
 // API  - Get full details of a single product
 // ----------------------------
-export const getProductById = (id) => {
-  return axiosInstance.get(`/api/v1/products/${id}/`);
+export const getProductById = (id, signal) => {
+  return axiosInstance.get(`/api/v1/products/${id}/`, { signal });
 };
 
 // ----------------------------
 // API - Create a new product (Admin only)
 // ----------------------------
-export const createProduct = (data) => {
+export const createProduct = (data, signal) => {
   return axiosInstance.post("/api/v1/products/", data, {
+    signal,
     headers: { "Content-Type": undefined },
   });
 };
@@ -58,8 +75,9 @@ export const createProduct = (data) => {
 // finding out after Submit. excludeId is passed only in edit mode, so
 // a product doesn't get flagged as a duplicate of itself.
 // Response shape (confirmed with backend): { exists: boolean }
-export const checkProductNameExists = (name, excludeId) => {
+export const checkProductNameExists = (name, excludeId, signal) => {
   return axiosInstance.get("/api/v1/products/check-name/", {
+    signal,
     params: { name, exclude_id: excludeId },
   });
 };
@@ -68,8 +86,9 @@ export const checkProductNameExists = (name, excludeId) => {
 // API 31.2 - Check whether a SKU is already taken (Admin only)
 // ----------------------------
 // Same pattern as checkProductNameExists above, for the sku field.
-export const checkProductSkuExists = (sku, excludeId) => {
+export const checkProductSkuExists = (sku, excludeId, signal) => {
   return axiosInstance.get("/api/v1/products/check-sku/", {
+    signal,
     params: { sku, exclude_id: excludeId },
   });
 };
@@ -81,8 +100,8 @@ export const checkProductSkuExists = (sku, excludeId) => {
 // Stock changes (add/remove/correction) now go through the dedicated
 // adjustStock() function below, which is atomic and race-condition-safe
 // on the backend. This endpoint stays for name/price/category/etc. only.
-export const updateProduct = (id, data) => {
-  return axiosInstance.put(`/api/v1/products/${id}/`, data);
+export const updateProduct = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/products/${id}/`, data, { signal });
 };
 
 // ----------------------------
@@ -101,15 +120,16 @@ export const updateProduct = (id, data) => {
 // shown in the UI, and has no restore path — once a product is
 // deleted here, it's gone from the storefront and admin catalog for
 // good (though its historical order references keep working).
-export const deleteProduct = (id) => {
-  return axiosInstance.delete(`/api/v1/products/${id}/`);
+export const deleteProduct = (id, signal) => {
+  return axiosInstance.delete(`/api/v1/products/${id}/`, { signal });
 };
 
 // ----------------------------
 // API - Upload an image for a product
 // ----------------------------
-export const uploadProductImage = (id, data) => {
+export const uploadProductImage = (id, data, signal) => {
   return axiosInstance.post(`/api/v1/products/${id}/images/`, data, {
+    signal,
     headers: { "Content-Type": undefined },
   });
 };
@@ -117,26 +137,29 @@ export const uploadProductImage = (id, data) => {
 // ----------------------------
 // API  - Delete a specific product image (Admin only)
 // ----------------------------
-export const deleteProductImage = (productId, imageId) => {
+export const deleteProductImage = (productId, imageId, signal) => {
   return axiosInstance.delete(
     `/api/v1/products/${productId}/images/${imageId}/`,
+    { signal },
   );
 };
 
 // ----------------------------
 // API - Set an image as the primary image (Admin only)
 // ----------------------------
-export const setPrimaryImage = (productId, imageId) => {
+export const setPrimaryImage = (productId, imageId, signal) => {
   return axiosInstance.put(
     `/api/v1/products/${productId}/images/${imageId}/set-primary/`,
+    undefined,
+    { signal },
   );
 };
 
 // ----------------------------
 // API - Get a list of low-stock products (Admin only)
 // ----------------------------
-export const getLowStockProducts = () => {
-  return axiosInstance.get("/api/v1/products/low-stock/");
+export const getLowStockProducts = (signal) => {
+  return axiosInstance.get("/api/v1/products/low-stock/", { signal });
 };
 
 // ----------------------------
@@ -153,62 +176,12 @@ export const getLowStockProducts = () => {
 //   reason -> "restock" | "damaged" | "correction" | "return" | "other"
 //   note   -> optional free-text explanation
 //
-// Response shape: { id, stock, previous_stock, delta_applied }
-export const adjustProductStock = (id, data) => {
-  return axiosInstance.post(`/api/v1/products/${id}/stock/adjust/`, data);
-};
-
-// ----------------------------
-// Fetch EVERY product across ALL pages (used by Inventory Alerts)
-// ----------------------------
-// WHY THIS EXISTS:
-// The Inventory Alerts page used to fetch products ONE SERVER PAGE at
-// a time (getProducts({ page: currentPage })) and then filter that
-// single page client-side by status tab (Out of Stock / Low Stock /
-// Healthy). That broke pagination — e.g. "Out of Stock" would only
-// ever be filtered from whatever 12 products happened to be on the
-// CURRENT page, instead of the real, complete set of out-of-stock
-// products across the entire catalog. Page 1 showed a different,
-// incomplete slice than page 2, and the tab counts never matched the
-// real totals.
-//
-// fetch the COMPLETE product catalog once (following the
-// `next` pagination link until it's null, so this works correctly no
-// matter how many products exist or what page size the backend
-// uses), then do ALL filtering (search, category, status tab) and
-// pagination entirely on the frontend, against the real, complete
-// list — exactly the same pattern already used for the admin
-// Customers page (see fetchAllCustomers in customers.api.js).
-//
-// USAGE:
-//   const allProducts = await fetchAllProducts();
-//   // allProducts is a plain array — every product in the catalog,
-//   // not just the first page.
-export const fetchAllProducts = async () => {
-  const allResults = [];
-  // Accumulates every product object from every page into one array
-
-  // Fetch the first page using the normal getProducts() call above
-  let response = await getProducts({ page: 1 });
-  allResults.push(...extractListData(response));
-  // Spreads this page's results into the accumulator array
-
-  // response.data.next is the FULL absolute URL for the next page,
-  // exactly as returned by DRF's standard pagination.
-  let nextUrl = response?.data?.next;
-
-  while (nextUrl) {
-    // axiosInstance.get() accepts a full absolute URL here — Axios
-    // uses it as-is instead of prefixing baseURL, and the auth
-    // interceptor still attaches the Bearer token automatically
-    // since the interceptor doesn't check the URL, only the config.
-    response = await axiosInstance.get(nextUrl);
-    allResults.push(...extractListData(response));
-    nextUrl = response?.data?.next;
-    // Keeps looping until the backend eventually returns next: null
-  }
-
-  return allResults;
-  // Returns a plain flat array — the calling component does not need
-  // to know or care how many pages it took to gather this
+// Response shape: { id, total_stock, reserved_stock, available_stock,
+// previous_stock, delta_applied }. available_stock is always
+// server-computed as total_stock - reserved_stock — this endpoint's
+// delta only ever changes total_stock, never reserved_stock directly.
+export const adjustProductStock = (id, data, signal) => {
+  return axiosInstance.post(`/api/v1/products/${id}/stock/adjust/`, data, {
+    signal,
+  });
 };

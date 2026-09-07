@@ -39,13 +39,12 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
   const { data: currentResponse, isLoading } = useQuery({
     queryKey: ["revenueReport", "current", startDate, endDate],
     // queryKey -> uniquely identifies this request for caching/refetching
-    queryFn: () =>
-      getRevenueReport({
+    queryFn: ({ signal }) => getRevenueReport({
         start_date: startDate,
         end_date: endDate,
         period: "daily",
         // period: "daily" -> one data point per day for an accurate total
-      }),
+      }, signal),
   });
 
   const previousRange = getPreviousPeriodRange(startDate, endDate);
@@ -57,12 +56,11 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
       previousRange.startDate,
       previousRange.endDate,
     ],
-    queryFn: () =>
-      getRevenueReport({
+    queryFn: ({ signal }) => getRevenueReport({
         start_date: previousRange.startDate,
         end_date: previousRange.endDate,
         period: "daily",
-      }),
+      }, signal),
   });
 
   const currentRevenue = sumRevenue(currentResponse?.data?.data || []);

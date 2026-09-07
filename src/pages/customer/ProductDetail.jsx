@@ -25,7 +25,7 @@ const ProductDetail = () => {
     refetch,
   } = useQuery({
     queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
-    queryFn: () => getProductById(id),
+    queryFn: ({ signal }) => getProductById(id, signal),
     enabled: !!id,
     staleTime: 1000 * 60 * 5,
   });

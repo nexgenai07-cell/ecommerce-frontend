@@ -25,6 +25,11 @@ export const QUERY_KEYS = {
   CATEGORY_DETAIL: (id) => ["category", id],
 
   // ----------------------------
+  // ADDRESSES
+  // ----------------------------
+  ADDRESSES: ["addresses"],
+
+  // ----------------------------
   // CART
   // ----------------------------
   CART: ["cart"],
@@ -38,9 +43,18 @@ export const QUERY_KEYS = {
   // ORDERS
   // ----------------------------
   MY_ORDERS: ["my-orders"],
+  // Separate key for OrderHistory.jsx's fully-paginated (all pages,
+  // pre-flattened into one plain array) version of "my orders" —
+  // MUST stay distinct from MY_ORDERS above, since every other screen
+  // using MY_ORDERS expects the raw single-page axios response shape
+  // ({ data: { results, count, ... } }), not a flattened array. Reusing
+  // the same key would let one shape silently overwrite the other in
+  // the cache and break whichever screen reads it next.
+  MY_ORDERS_FULL: ["my-orders", "full-paginated"],
   ORDER_DETAIL: (orderNumber) => ["order", orderNumber],
   ORDER_TRACKING: (orderNumber) => ["order-tracking", orderNumber],
   ADMIN_ORDERS: ["admin-orders"],
+  QR_PENDING_PAYMENTS: ["qr-pending-payments"],
 
   // ----------------------------
   // RETURNS
@@ -53,6 +67,7 @@ export const QUERY_KEYS = {
   // ----------------------------
   COMPLAINTS: ["complaints"],
   COMPLAINT_DETAIL: (id) => ["complaint", id],
+  COMPLAINT_MESSAGES: (id) => ["complaint-messages", id],
 
   // ----------------------------
   // NOTIFICATIONS

@@ -34,7 +34,7 @@ const AdminDashboard = () => {
   // --------------------------------------------------
   const { data: summaryResponse, isLoading: summaryLoading } = useQuery({
     queryKey: QUERY_KEYS.DASHBOARD_SUMMARY,
-    queryFn: getDashboardSummary,
+    queryFn: ({ signal }) => getDashboardSummary(signal),
     staleTime: 1000 * 60 * 2,
   });
 

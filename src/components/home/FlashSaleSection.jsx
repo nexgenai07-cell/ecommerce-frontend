@@ -442,11 +442,10 @@ const FlashSaleSection = () => {
   // =============================================
   const { data: productsData, isLoading } = useQuery({
     queryKey: [...QUERY_KEYS.PRODUCTS, "flash-sale"], // Unique cache key for this specific query
-    queryFn: () =>
-      searchProducts({
+    queryFn: ({ signal }) => searchProducts({
         ordering: "-created_at", // Newest products first
         page: 1,
-      }),
+      }, signal),
     staleTime: 1000 * 60 * 5, // Cache is considered fresh for 5 minutes
   });
 

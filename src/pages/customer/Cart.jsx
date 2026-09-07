@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-// useEffect is used twice in this file: once to redirect guests to the login
-// page, and once to sync freshly-fetched cart data into the Redux store.
+// useEffect syncs freshly-fetched cart data into the Redux store.
 
 import { Link, useNavigate } from "react-router-dom";
 // Link renders normal client-side navigation links (breadcrumb, "Continue
@@ -34,10 +33,6 @@ import { getProducts } from "../../api/products.api";
 import useCart from "../../hooks/useCart";
 // Custom hook exposing handleSyncCart() (writes fetched cart data into Redux)
 // and clearCart() (empties the Redux cart slice after the API call succeeds).
-
-import useAuth from "../../hooks/useAuth";
-// Custom hook exposing isAuthenticated — used to guard this page against
-// guests and to enable/disable the cart data query.
 
 import useFlyToIcon from "../../hooks/useFlyToIcon";
 // dismissAllFromCart — plays the "every item pops out of the cart at once"
@@ -94,9 +89,6 @@ const Cart = () => {
   // Shared React Query client, used to invalidate (refresh) cached queries.
   const queryClient = useQueryClient();
 
-  // Pulls the current authentication status from the auth hook.
-  const { isAuthenticated } = useAuth();
-
   // handleSyncCart writes the freshly-fetched API cart data into Redux.
   // handleClearCart empties the Redux cart slice after a successful
   // "clear cart" API call.
@@ -110,22 +102,15 @@ const Cart = () => {
   const [showClearModal, setShowClearModal] = useState(false);
 
   // --------------------------------------------------------------------------
-  // EFFECT: Redirect guests to login
-  // If the user is not logged in, immediately send them to the Login page.
-  // We pass the current cart path as "from" state, so after a successful
-  // login the app can redirect them straight back here automatically.
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN, { state: { from: { pathname: ROUTES.CART } } });
-    }
-  }, [isAuthenticated, navigate]);
-
-  // --------------------------------------------------------------------------
   // QUERY: Fetch Cart Data
   // Calls GET /api/v1/cart/ and returns all items, subtotal, discount, and
-  // coupon info. Only runs when the user is actually authenticated — there's
-  // no point calling this endpoint for a logged-out guest.
+  // coupon info. Guest carts are fully supported by the backend now (v3.0):
+  // a logged-out visitor gets an anonymous server-side cart identified by
+  // the X-Cart-Session header (attached automatically by axiosInstance —
+  // see src/lib/axiosInstance.js), so this page no longer forces a login
+  // redirect and the query runs for everyone, guest or logged in.
+  // Login/registration is only required later, at "Proceed to Checkout"
+  // (ROUTES.CHECKOUT is wrapped in ProtectedRoute in App.jsx).
   // staleTime of 2 minutes prevents this data from refetching too aggressively
   // while the user is simply browsing the page.
   // --------------------------------------------------------------------------
@@ -135,8 +120,7 @@ const Cart = () => {
     isError: cartError, // True if the fetch failed
   } = useQuery({
     queryKey: QUERY_KEYS.CART,
-    queryFn: getCart,
-    enabled: isAuthenticated,
+    queryFn: ({ signal }) => getCart(signal),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -182,7 +166,8 @@ const Cart = () => {
     // The "cart-recommended" suffix makes this cache entry unique so it
     // doesn't collide with any other product listing query elsewhere in the app.
     queryKey: [...QUERY_KEYS.PRODUCTS, "cart-recommended"],
-    queryFn: () => getProducts({ ordering: "-created_at", page: 1 }),
+    queryFn: ({ signal }) =>
+      getProducts({ ordering: "-created_at", page: 1 }, signal),
     // 5-minute cache — recommended products don't need to refresh very often.
     staleTime: 1000 * 60 * 5,
   });
@@ -196,7 +181,7 @@ const Cart = () => {
   // --------------------------------------------------------------------------
   const clearCartMutation = useMutation({
     // Directly references the clearCart API function as the mutation function.
-    mutationFn: clearCart,
+    mutationFn: () => clearCart(),
 
     // Runs IMMEDIATELY when mutate() is called, before waiting for the
     // network response. The backend has been observed to sometimes take

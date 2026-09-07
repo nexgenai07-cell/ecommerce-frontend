@@ -39,7 +39,7 @@ const STATUS_VARIANT = {
 const RecentPostsPerformanceTable = () => {
   const { data: postsResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POSTS,
-    queryFn: () => getSocialPosts({}),
+    queryFn: ({ signal }) => getSocialPosts({}, signal),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -55,7 +55,7 @@ const RecentPostsPerformanceTable = () => {
       .filter((post) => post.status === SOCIAL_POST_STATUS.PUBLISHED)
       .map((post) => ({
         queryKey: QUERY_KEYS.SOCIAL_POST_ANALYTICS(post.id),
-        queryFn: () => getPostAnalytics(post.id),
+        queryFn: ({ signal }) => getPostAnalytics(post.id, signal),
       })),
   });
 
@@ -69,8 +69,7 @@ const RecentPostsPerformanceTable = () => {
   const handleExport = async () => {
     try {
       const response = await exportReport({ type: "social_posts" });
-      // FLAG: "social_posts" as the `type` value is an unconfirmed
-      // assumption, same pattern flagged on every other export button
+      // "social_posts" is now a CONFIRMED accepted `type` value
       const blobUrl = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = blobUrl;

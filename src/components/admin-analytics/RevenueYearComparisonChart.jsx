@@ -29,22 +29,20 @@ const RevenueYearComparisonChart = () => {
 
   const { data: currentYearResponse, isLoading: isLoadingCurrent } = useQuery({
     queryKey: ["revenueReport", "yearly", currentYear],
-    queryFn: () =>
-      getRevenueReport({
+    queryFn: ({ signal }) => getRevenueReport({
         start_date: `${currentYear}-01-01`,
         end_date: `${currentYear}-12-31`,
         period: "monthly",
-      }),
+      }, signal),
   });
 
   const { data: lastYearResponse, isLoading: isLoadingLast } = useQuery({
     queryKey: ["revenueReport", "yearly", lastYear],
-    queryFn: () =>
-      getRevenueReport({
+    queryFn: ({ signal }) => getRevenueReport({
         start_date: `${lastYear}-01-01`,
         end_date: `${lastYear}-12-31`,
         period: "monthly",
-      }),
+      }, signal),
   });
 
   const isLoading = isLoadingCurrent || isLoadingLast;

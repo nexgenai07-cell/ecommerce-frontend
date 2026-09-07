@@ -13,36 +13,36 @@ import axiosInstance from "../lib/axiosInstance";
 // ----------------------------
 // API - Start a new customer chat session
 // ----------------------------
-export const startChatSession = () => {
-  return axiosInstance.post("/api/v1/chat/session/start/");
+export const startChatSession = (signal) => {
+  return axiosInstance.post("/api/v1/chat/session/start/", undefined, { signal });
 };
 
 // ----------------------------
 // Start a new ADMIN chat session
 // ----------------------------
-export const startAdminChatSession = () => {
-  return axiosInstance.post("/api/v1/chat/admin/session/start/");
+export const startAdminChatSession = (signal) => {
+  return axiosInstance.post("/api/v1/chat/admin/session/start/", undefined, { signal });
 };
 
 // ----------------------------
 // API- Get the chat history for an existing session
 // ----------------------------
-export const getChatHistory = (sessionKey) => {
-  return axiosInstance.get(`/api/v1/chat/session/${sessionKey}/history/`);
+export const getChatHistory = (sessionKey, signal) => {
+  return axiosInstance.get(`/api/v1/chat/session/${sessionKey}/history/`, { signal });
 };
 
 // ----------------------------
 // API - Clear the messages inside a chat session
 // ----------------------------
-export const clearChatSession = (sessionKey) => {
-  return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/clear/`);
+export const clearChatSession = (sessionKey, signal) => {
+  return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/clear/`, { signal });
 };
 
 // ----------------------------
 // List past chat sessions — CUSTOMER
 // ----------------------------
-export const listChatSessions = (limit = 20, offset = 0) => {
-  return axiosInstance.get("/api/v1/chat/sessions/", {
+export const listChatSessions = (limit = 20, offset = 0, signal) => {
+  return axiosInstance.get("/api/v1/chat/sessions/", { signal,
     params: { limit, offset },
   });
 };
@@ -50,8 +50,8 @@ export const listChatSessions = (limit = 20, offset = 0) => {
 // ----------------------------
 // List past chat sessions — ADMIN
 // ----------------------------
-export const listAdminChatSessions = (limit = 20, offset = 0) => {
-  return axiosInstance.get("/api/v1/chat/admin/sessions/", {
+export const listAdminChatSessions = (limit = 20, offset = 0, signal) => {
+  return axiosInstance.get("/api/v1/chat/admin/sessions/", { signal,
     params: { limit, offset },
   });
 };
@@ -59,48 +59,48 @@ export const listAdminChatSessions = (limit = 20, offset = 0) => {
 // ----------------------------
 // Soft-delete a chat session
 // ----------------------------
-export const deleteChatSession = (sessionKey) => {
-  return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/`);
+export const deleteChatSession = (sessionKey, signal) => {
+  return axiosInstance.delete(`/api/v1/chat/session/${sessionKey}/`, { signal });
 };
 
 // ----------------------------
 // Confirm a pending admin action
 // ----------------------------
-export const confirmAdminAction = (actionId) => {
-  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/confirm/`);
+export const confirmAdminAction = (actionId, signal) => {
+  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/confirm/`, undefined, { signal });
 };
 
 // ----------------------------
 // Cancel a pending admin action
 // ----------------------------
-export const cancelAdminAction = (actionId) => {
-  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/cancel/`);
+export const cancelAdminAction = (actionId, signal) => {
+  return axiosInstance.post(`/api/v1/chat/admin/action/${actionId}/cancel/`, undefined, { signal });
 };
 
 // ----------------------------
 // Submit thumbs up/down feedback on an AI message
 // ----------------------------
-export const sendMessageFeedback = (messageId, rating) => {
+export const sendMessageFeedback = (messageId, rating, signal) => {
   return axiosInstance.post(`/api/v1/chat/message/${messageId}/feedback/`, {
     rating,
-  });
+  }, { signal });
 };
 
 // ----------------------------
 // Remove feedback from an AI message
 // ----------------------------
-export const removeMessageFeedback = (messageId) => {
-  return axiosInstance.delete(`/api/v1/chat/message/${messageId}/feedback/`);
+export const removeMessageFeedback = (messageId, signal) => {
+  return axiosInstance.delete(`/api/v1/chat/message/${messageId}/feedback/`, { signal });
 };
 
 // ----------------------------
 // Upload a file/image attachment for the chat
 // ----------------------------
-export const uploadChatFile = (file) => {
+export const uploadChatFile = (file, signal) => {
   const formData = new FormData();
   formData.append("file", file);
 
-  return axiosInstance.post("/api/v1/chat/upload/", formData, {
+  return axiosInstance.post("/api/v1/chat/upload/", formData, { signal,
     headers: { "Content-Type": "multipart/form-data" },
   });
 };
@@ -116,7 +116,7 @@ const getWebSocketBaseUrl = () => {
 // ----------------------------
 // WebSocket Connection - Real-time customer chat
 // ----------------------------
-export const createChatWebSocket = (sessionKey) => {
+export const createChatWebSocket = (sessionKey, signal) => {
   const wsUrl = `${getWebSocketBaseUrl()}/ws/chat/${sessionKey}/`;
   return new WebSocket(wsUrl);
 };
@@ -126,7 +126,7 @@ export const createChatWebSocket = (sessionKey) => {
 // ----------------------------
 // FIXED: path corrected from "/ws/admin/chat/" to "/ws/admin-chat/"
 // (hyphen, not slash) — confirmed correct by the backend team.
-export const createAdminChatWebSocket = (sessionKey) => {
+export const createAdminChatWebSocket = (sessionKey, signal) => {
   const wsUrl = `${getWebSocketBaseUrl()}/ws/admin-chat/${sessionKey}/`;
   return new WebSocket(wsUrl);
 };

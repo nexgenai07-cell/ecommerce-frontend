@@ -1,29 +1,7 @@
-// ============================================================
-// STATUS & ENUM CONSTANTS
-// ============================================================
-// This file defines ALL status/enum values used across the project
-// for orders, payments, returns, complaints, and other modules.
-//
-// WHY THIS MATTERS:
-// - These exact string values should be used everywhere instead of
-//   hardcoding strings like "pending" or "shipped" directly in components.
-// - This avoids typos (e.g. "Pending" vs "pending" vs "PENDING") which
-//   could cause bugs when comparing values or filtering data.
-// - If the backend ever changes a status value, it only needs to be
-//   updated here, and it reflects everywhere automatically.
-// - Makes the code more readable: ORDER_STATUS.SHIPPED is clearer
-//   than just "shipped" scattered everywhere.
-
 // ----------------------------
 // ORDER STATUS
 // ----------------------------
-// Represents the current stage of a customer's order in its lifecycle
-// NOTE (Stripe integration, API doc v2.1): Order ka pehla status ab
-// "pending_payment" hai — order checkout ke turant baad isi status ke
-// sath banta hai aur Stripe webhook (API 70) payment succeed hone par
-// isko "confirmed" mein badalta hai. Constant ka NAME (PENDING) wahi
-// rakha hai taake jahan bhi ORDER_STATUS.PENDING use ho raha hai woh
-// sab jagah bina file chhue automatically naye value ke sath kaam kare.
+
 export const ORDER_STATUS = {
   PENDING: "pending_payment", // Order placed, awaiting Stripe payment confirmation
   CONFIRMED: "confirmed", // Payment succeeded (Stripe webhook) — order confirmed
@@ -35,11 +13,16 @@ export const ORDER_STATUS = {
 // ----------------------------
 // PAYMENT STATUS
 // ----------------------------
-// Represents the current state of payment for an order
+// Represents the current state of payment for an order. Exactly these
+// five values exist on the backend — for BOTH Stripe and QR orders.
+// UNDER_REVIEW and REJECTED only ever apply to QR orders (payment
+// proof awaiting/failing manual admin verification); Stripe orders
+// never enter those two states.
 export const PAYMENT_STATUS = {
   PENDING: "pending", // Payment has not been completed yet
+  UNDER_REVIEW: "under_review", // QR only — proof uploaded, awaiting admin approval
   PAID: "paid", // Payment was successfully completed
-  FAILED: "failed", // Payment attempt failed (e.g. card declined)
+  REJECTED: "rejected", // QR only — admin rejected the uploaded proof
   REFUNDED: "refunded", // Payment was refunded back to the customer
 };
 
@@ -83,12 +66,17 @@ export const COMPLAINT_TYPE = {
 };
 
 // ----------------------------
-// PAYMENT METHOD — REMOVED
+// PAYMENT METHOD
 // ----------------------------
-// COD / Easypaisa / manual card selection no longer exists in this
-// project. All payments now go through Stripe (Test Mode). Payment
-// status is tracked via PAYMENT_STATUS above, together with
-// order.payment.stripe_payment_intent_id returned by the API.
+// Chosen by the customer on the Checkout page and sent as
+// "payment_method" on the Checkout request. QR is a static-image,
+// manual-verification flow (Easypaisa/JazzCash) — no live gateway
+// integration; the customer pays outside the system and uploads
+// proof, which an admin verifies manually.
+export const PAYMENT_METHOD = {
+  STRIPE: "stripe",
+  QR: "qr",
+};
 
 // ----------------------------
 // SOCIAL POST STATUS

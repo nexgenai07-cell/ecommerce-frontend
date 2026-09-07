@@ -34,7 +34,7 @@ const BasicInfoSection = ({
   // --------------------------------------------------
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10, // categories change rarely — 10 minute cache
   });
 

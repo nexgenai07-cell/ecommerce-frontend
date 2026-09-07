@@ -34,7 +34,7 @@ const Calendar = () => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_CALENDAR.concat(monthParam),
-    queryFn: () => getPostsCalendar({ month: monthParam }),
+    queryFn: ({ signal }) => getPostsCalendar({ month: monthParam }, signal),
   });
 
   const allPosts = extractListData(response);

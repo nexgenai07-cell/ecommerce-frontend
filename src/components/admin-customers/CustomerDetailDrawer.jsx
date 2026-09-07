@@ -258,12 +258,11 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
       ordersStatusFilter,
       debouncedOrdersSearch,
     ],
-    queryFn: () =>
-      getCustomerOrders(customer.id, {
+    queryFn: ({ signal }) => getCustomerOrders(customer.id, {
         status: ordersStatusFilter || undefined,
         search: debouncedOrdersSearch || undefined,
         page: ordersPage,
-      }),
+      }, signal),
     enabled: isOpen && !!customer?.id,
   });
 

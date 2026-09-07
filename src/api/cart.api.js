@@ -22,8 +22,8 @@ import axiosInstance from "../lib/axiosInstance";
 // Fetches everything about the logged-in user's cart: the list of
 // items, subtotal (before discount), discount amount, final total,
 // and any applied coupon. Typically called when the cart page loads.
-export const getCart = () => {
-  return axiosInstance.get("/api/v1/cart/");
+export const getCart = (signal) => {
+  return axiosInstance.get("/api/v1/cart/", { signal });
 };
 
 // ----------------------------
@@ -35,8 +35,8 @@ export const getCart = () => {
 // - quantity: how many units to add
 // If the product is already in the cart, the backend should increase
 // its existing quantity rather than creating a duplicate entry.
-export const addToCart = (data) => {
-  return axiosInstance.post("/api/v1/cart/add/", data);
+export const addToCart = (data, signal) => {
+  return axiosInstance.post("/api/v1/cart/add/", data, { signal });
 };
 
 // ----------------------------
@@ -48,8 +48,8 @@ export const addToCart = (data) => {
 // IMPORTANT BEHAVIOR: if "quantity" is sent as 0, the backend will
 // treat this as a removal request and delete the item from the cart
 // entirely, instead of leaving a cart item with zero quantity.
-export const updateCartItem = (itemId, data) => {
-  return axiosInstance.put(`/api/v1/cart/update/${itemId}/`, data);
+export const updateCartItem = (itemId, data, signal) => {
+  return axiosInstance.put(`/api/v1/cart/update/${itemId}/`, data, { signal });
 };
 
 // ----------------------------
@@ -58,8 +58,8 @@ export const updateCartItem = (itemId, data) => {
 // Used when the customer clicks the trash/delete icon next to a
 // specific cart item, explicitly removing it from the cart —
 // regardless of its quantity.
-export const removeCartItem = (itemId) => {
-  return axiosInstance.delete(`/api/v1/cart/remove/${itemId}/`);
+export const removeCartItem = (itemId, signal) => {
+  return axiosInstance.delete(`/api/v1/cart/remove/${itemId}/`, { signal });
 };
 
 // ----------------------------
@@ -69,8 +69,8 @@ export const removeCartItem = (itemId) => {
 // called either after a successful checkout (since items are now
 // purchased), or if there's a "Clear Cart" button for the user to
 // empty their cart manually.
-export const clearCart = () => {
-  return axiosInstance.delete("/api/v1/cart/clear/");
+export const clearCart = (signal) => {
+  return axiosInstance.delete("/api/v1/cart/clear/", { signal });
 };
 
 // ----------------------------
@@ -81,8 +81,8 @@ export const clearCart = () => {
 // - code: the actual coupon code string entered by the customer
 // The backend validates the code and, if valid, applies the discount
 // to the cart's total.
-export const applyCoupon = (data) => {
-  return axiosInstance.post("/api/v1/cart/apply-coupon/", data);
+export const applyCoupon = (data, signal) => {
+  return axiosInstance.post("/api/v1/cart/apply-coupon/", data, { signal });
 };
 
 // ----------------------------
@@ -91,6 +91,6 @@ export const applyCoupon = (data) => {
 // Used when the customer wants to remove a coupon they previously
 // applied (e.g. clicking an "X" next to the applied coupon badge).
 // This resets the cart's discount back to zero.
-export const removeCoupon = () => {
-  return axiosInstance.delete("/api/v1/cart/remove-coupon/");
+export const removeCoupon = (signal) => {
+  return axiosInstance.delete("/api/v1/cart/remove-coupon/", { signal });
 };

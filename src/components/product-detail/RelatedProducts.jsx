@@ -18,12 +18,12 @@ import ProductGrid from "../shared/ProductGrid";
 const RelatedProducts = ({ categoryId, currentProductId }) => {
   const { data: productsData, isLoading } = useQuery({
     queryKey: [...QUERY_KEYS.PRODUCTS, "related", categoryId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Step 1 — try the documented, filtered endpoint first
       const searchRes = await searchProducts({
         category_id: categoryId,
         page: 1,
-      });
+      }, signal);
       const searchResults = searchRes?.data?.results || [];
 
       // Only useful if it actually returned items OTHER than the current product
@@ -37,7 +37,7 @@ const RelatedProducts = ({ categoryId, currentProductId }) => {
       // Step 2 — fallback: fetch the general product list and filter
       // by category on the frontend (covers backends that don't actually
       // apply the category_id query param yet)
-      const allRes = await getProducts({ page: 1 });
+      const allRes = await getProducts({ page: 1 }, signal);
       const allResults = allRes?.data?.results || [];
 
       return allResults.filter(

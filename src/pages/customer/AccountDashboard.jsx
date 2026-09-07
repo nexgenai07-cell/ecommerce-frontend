@@ -29,35 +29,35 @@ const AccountDashboard = () => {
   // staleTime 2 min — orders can change frequently so we refetch relatively often
   const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: QUERY_KEYS.MY_ORDERS,
-    queryFn: getMyOrders,
+    queryFn: ({ signal }) => getMyOrders(undefined, signal),
     staleTime: 1000 * 60 * 2,
   });
 
   // Wishlist — staleTime 5 min — wishlist items change less frequently than orders
   const { data: wishlistData } = useQuery({
     queryKey: QUERY_KEYS.WISHLIST,
-    queryFn: getWishlist,
+    queryFn: ({ signal }) => getWishlist(signal),
     staleTime: 1000 * 60 * 5,
   });
 
   // Notifications — staleTime 2 min — unread count should stay fairly fresh
   const { data: notificationsData } = useQuery({
     queryKey: QUERY_KEYS.NOTIFICATIONS,
-    queryFn: getNotifications,
+    queryFn: ({ signal }) => getNotifications(undefined, signal),
     staleTime: 1000 * 60 * 2,
   });
 
   // Returns — staleTime 5 min — return status changes are infrequent
   const { data: returnsData } = useQuery({
     queryKey: QUERY_KEYS.RETURNS,
-    queryFn: getReturns,
+    queryFn: ({ signal }) => getReturns(undefined, signal),
     staleTime: 1000 * 60 * 5,
   });
 
   // Complaints — staleTime 5 min — complaint updates are infrequent
   const { data: complaintsData } = useQuery({
     queryKey: QUERY_KEYS.COMPLAINTS,
-    queryFn: getComplaints,
+    queryFn: ({ signal }) => getComplaints(undefined, signal),
     staleTime: 1000 * 60 * 5,
   });
 

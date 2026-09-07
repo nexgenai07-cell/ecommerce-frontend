@@ -80,7 +80,7 @@ const AccountSecurity = ({ user }) => {
   // =============================================
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
     queryKey: QUERY_KEYS.MY_SESSIONS,
-    queryFn: getMySessions,
+    queryFn: ({ signal }) => getMySessions(signal),
     staleTime: 1000 * 60,
   });
   // extractListData safely handles BOTH shapes:
@@ -94,7 +94,7 @@ const AccountSecurity = ({ user }) => {
   // SIGN OUT ALL DEVICES MUTATION — API 13
   // =============================================
   const signOutMutation = useMutation({
-    mutationFn: revokeAllSessions,
+    mutationFn: () => revokeAllSessions(),
     onSuccess: () => {
       logoutRedux();
       showSuccess("Signed out from all devices");
@@ -111,7 +111,7 @@ const AccountSecurity = ({ user }) => {
   // ENABLE 2FA — STEP 1 — API 14
   // =============================================
   const enableMutation = useMutation({
-    mutationFn: enable2FA,
+    mutationFn: () => enable2FA(),
     onSuccess: (response) => {
       setQrCode(response?.data?.qr_code_base64 || "");
       setManualKey(response?.data?.manual_entry_key || "");

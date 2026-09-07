@@ -16,8 +16,8 @@ import axiosInstance from "../lib/axiosInstance";
 // Fetches the current store's profile details — things like the
 // store's name, logo, contact phone number, and address. Used to
 // display/pre-fill the store settings page in the admin panel.
-export const getMyStore = () => {
-  return axiosInstance.get("/api/v1/stores/me/");
+export const getMyStore = (signal) => {
+  return axiosInstance.get("/api/v1/stores/me/", { signal });
 };
 
 // ----------------------------
@@ -33,8 +33,8 @@ export const getMyStore = () => {
 // Since "logo" involves uploading an actual image FILE (not just
 // plain text), this request needs to use "multipart/form-data"
 // instead of the default JSON content type.
-export const updateMyStore = (data) => {
-  return axiosInstance.put("/api/v1/stores/me/", data, {
+export const updateMyStore = (data, signal) => {
+  return axiosInstance.put("/api/v1/stores/me/", data, { signal,
     headers: { "Content-Type": "multipart/form-data" },
     // Overriding the default "application/json" content type
     // (set globally in axiosInstance) specifically for THIS request,
@@ -43,12 +43,17 @@ export const updateMyStore = (data) => {
 };
 
 // ----------------------------
-// API  - Get the platform's audit logs (Admin only)
-// FIXED — same bug pattern found and fixed in returns.api.js,
-// complaints.api.js, and discounts.api.js: this took no arguments
-// before, making filtering impossible. API 55's docs don't document
-// any query params either, but that hasn't reliably meant "backend
-// rejects extra params" anywhere else in this project.
-export const getAuditLogs = (params) => {
-  return axiosInstance.get("/api/v1/admin/audit-logs/", { params });
+// API — Get the platform's audit logs (Admin only)
+// ----------------------------
+// CONFIRMED WORKING SERVER-SIDE (as of the backend's latest fix):
+//   - page   -> standard pagination
+//   - entity -> filters by entity type
+//   - user   -> filters by the acting user
+//   - search -> matches against the log's action/description text
+//   - action -> filters by "create"/"update"/"delete", combines
+//               correctly with entity/user/search/page
+// Response shape confirmed as the standard paginated object
+// ({ count, next, previous, results }).
+export const getAuditLogs = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/audit-logs/", { signal, params });
 };

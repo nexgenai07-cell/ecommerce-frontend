@@ -22,10 +22,9 @@ const TYPE_OPTIONS = [
   { value: "promotion", label: "Promotion" },
 ];
 
-// FLAG: API 74's docs say sent_via is just a free-form "string" with
-// no documented enum — these 3 options are a reasonable assumption,
-// not a confirmed list. Confirm the exact accepted values with the
-// backend team.
+// CONFIRMED — these 3 are the complete, accepted list of `sent_via`
+// values for API 74 (previously only documented as a generic
+// unconstrained "string", now explicitly confirmed).
 const CHANNEL_OPTIONS = [
   { value: "in_app", label: "In-App" },
   { value: "email", label: "Email" },
@@ -49,7 +48,7 @@ const NotificationTemplates = () => {
 
   const { data: customersResponse } = useQuery({
     queryKey: ["notificationCompose", "customerSearch", debouncedSearch],
-    queryFn: () => getCustomers({ search: debouncedSearch }),
+    queryFn: ({ signal }) => getCustomers({ search: debouncedSearch }, signal),
     enabled: !isBroadcast && debouncedSearch.length > 0,
   });
   const customerResults = extractListData(customersResponse);

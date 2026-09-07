@@ -70,7 +70,7 @@ const Wishlist = () => {
   // staleTime 5 min — wishlist changes less frequently than orders or notifications
   const { data: wishlistData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.WISHLIST,
-    queryFn: getWishlist,
+    queryFn: ({ signal }) => getWishlist(signal),
     enabled: isAuthenticated, // prevents unnecessary API calls for guest users
     staleTime: 1000 * 60 * 5,
   });
@@ -255,7 +255,9 @@ const Wishlist = () => {
   // Uses mutateAsync so each call awaits the previous before firing the next
   // Shows an error toast early if there are no in-stock items to add
   const handleAddAllToCart = async () => {
-    const inStock = wishlistItems.filter((i) => i.product.in_stock); // exclude out-of-stock products
+    const inStock = wishlistItems.filter(
+      (i) => (i.product.available_stock ?? 0) > 0,
+    ); // exclude out-of-stock products
 
     if (inStock.length === 0) {
       showError("No in-stock items to add"); // early exit with feedback if nothing can be added

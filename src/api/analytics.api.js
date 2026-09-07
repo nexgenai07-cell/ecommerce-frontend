@@ -31,8 +31,8 @@ import axiosInstance from "../lib/axiosInstance";
 //
 // This data later feeds into admin analytics like best sellers,
 // customer growth, and behavior reports.
-export const trackBehavior = (data) => {
-  return axiosInstance.post("/api/v1/analytics/track/", data);
+export const trackBehavior = (data, signal) => {
+  return axiosInstance.post("/api/v1/analytics/track/", data, { signal });
 };
 
 // ----------------------------
@@ -42,8 +42,8 @@ export const trackBehavior = (data) => {
 // trackBehavior() above. The "params" object can include:
 // - action: filter by a specific action type (e.g. only "purchase" events)
 // - entity_type: filter by entity type (e.g. only "product" related events)
-export const getBehaviorRecords = (params) => {
-  return axiosInstance.get("/api/v1/analytics/behavior/", { params });
+export const getBehaviorRecords = (params, signal) => {
+  return axiosInstance.get("/api/v1/analytics/behavior/", { signal, params });
   // Passing "params" as the second argument tells Axios to automatically
   // convert this object into URL query parameters
 };
@@ -55,8 +55,8 @@ export const getBehaviorRecords = (params) => {
 // dashboard — things like total revenue, total orders, total
 // customers, total products, and growth percentages compared to
 // previous periods. This gives admins a quick overview at a glance.
-export const getDashboardSummary = () => {
-  return axiosInstance.get("/api/v1/analytics/dashboard/");
+export const getDashboardSummary = (signal) => {
+  return axiosInstance.get("/api/v1/analytics/dashboard/", { signal });
 };
 
 // ----------------------------
@@ -67,8 +67,8 @@ export const getDashboardSummary = () => {
 // - start_date / end_date: the date range to report on
 // - period: how the data should be grouped, e.g. "daily", "weekly",
 //   or "monthly"
-export const getSalesReport = (params) => {
-  return axiosInstance.get("/api/v1/analytics/sales/", { params });
+export const getSalesReport = (params, signal) => {
+  return axiosInstance.get("/api/v1/analytics/sales/", { signal, params });
 };
 
 // ----------------------------
@@ -78,8 +78,8 @@ export const getSalesReport = (params) => {
 // The "params" object follows the same pattern:
 // - start_date / end_date: the date range to report on
 // - period: grouping interval, e.g. "daily", "weekly", "monthly"
-export const getRevenueReport = (params) => {
-  return axiosInstance.get("/api/v1/analytics/revenue/", { params });
+export const getRevenueReport = (params, signal) => {
+  return axiosInstance.get("/api/v1/analytics/revenue/", { signal, params });
 };
 
 // ----------------------------
@@ -89,8 +89,8 @@ export const getRevenueReport = (params) => {
 // (e.g. how many are pending, confirmed, shipped, delivered,
 // cancelled) within a given date range. The "params" object includes:
 // - start_date / end_date: the date range to report on
-export const getOrdersAnalytics = (params) => {
-  return axiosInstance.get("/api/v1/analytics/orders/", { params });
+export const getOrdersAnalytics = (params, signal) => {
+  return axiosInstance.get("/api/v1/analytics/orders/", { signal, params });
 };
 
 // ----------------------------
@@ -100,8 +100,9 @@ export const getOrdersAnalytics = (params) => {
 // The "params" object can include:
 // - start_date / end_date: the date range to analyze
 // - limit: how many top products to return (e.g. top 10)
-export const getBestSellers = (params) => {
+export const getBestSellers = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/products/best-sellers/", {
+    signal,
     params,
   });
 };
@@ -113,8 +114,9 @@ export const getBestSellers = (params) => {
 // identify items that may need a discount, better marketing, or
 // removal from the catalog. The "params" object can include:
 // - limit: how many low-performing products to return
-export const getLowPerformingProducts = (params) => {
+export const getLowPerformingProducts = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/products/low-performing/", {
+    signal,
     params,
   });
 };
@@ -127,19 +129,27 @@ export const getLowPerformingProducts = (params) => {
 // are affecting signups. The "params" object can include:
 // - start_date / end_date: the date range to analyze
 // - period: grouping interval, e.g. "daily", "weekly", "monthly"
-export const getCustomerGrowth = (params) => {
-  return axiosInstance.get("/api/v1/analytics/customers/growth/", { params });
+export const getCustomerGrowth = (params, signal) => {
+  return axiosInstance.get("/api/v1/analytics/customers/growth/", {
+    signal,
+    params,
+  });
 };
 
 // ----------------------------
 // API  - Get low-stock inventory alerts (Admin only)
 // ----------------------------
 // Fetches a list of products that are currently running low on
-// stock, so admins can be alerted and restock them before they
-// run out completely. No filters/params needed here — it just
-// returns whatever is currently flagged as low stock.
-export const getInventoryAlerts = () => {
-  return axiosInstance.get("/api/v1/analytics/inventory/alerts/");
+// available stock, so admins can be alerted and restock them before
+// they run out completely. No filters/params needed here — it just
+// returns whatever is currently flagged as low stock. Each item now
+// carries the full total_stock/reserved_stock/available_stock
+// breakdown rather than a single flat stock number — "low" and "out
+// of stock" are judged against available_stock, since that's what's
+// actually left to sell once pending orders' reservations are
+// accounted for.
+export const getInventoryAlerts = (signal) => {
+  return axiosInstance.get("/api/v1/analytics/inventory/alerts/", { signal });
 };
 
 // ----------------------------
@@ -149,9 +159,12 @@ export const getInventoryAlerts = () => {
 // (instead of just viewing it in the browser). The "params" object
 // can include:
 // - start_date / end_date: the date range to include in the export
-// - type: which kind of report to export (e.g. "sales", "revenue")
-export const exportReport = (params) => {
+// - type: which kind of report to export. CONFIRMED accepted values:
+//   "sales", "orders", "discounts", "inventory", "returns",
+//   "complaints", "social_posts", "customers", "revenue", "products"
+export const exportReport = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/export/", {
+    signal,
     params,
 
     responseType: "blob",

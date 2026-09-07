@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  EMAIL_REGEX,
+  EMAIL_INVALID_MESSAGE,
+} from "../../utils/emailValidation";
 import { useMutation } from "@tanstack/react-query";
 import { AiOutlineMail, AiOutlineArrowRight } from "react-icons/ai";
 import { BsShieldCheck } from "react-icons/bs";
@@ -17,7 +21,7 @@ const forgotPasswordSchema = z.object({
     .string()
     .trim()
     .min(1, "Email is required")
-    .email("Please enter a valid email address")
+    .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
     .max(255, "Email is too long"),
 });
 
@@ -46,7 +50,7 @@ const ForgotPassword = () => {
   });
 
   const forgotMutation = useMutation({
-    mutationFn: forgotPassword,
+    mutationFn: (variables) => forgotPassword(variables),
 
     onSuccess: (_, variables) => {
       setSubmittedEmail(variables.email);

@@ -66,28 +66,24 @@ const PostsList = () => {
       debouncedSearch,
       currentPage,
     ],
-    queryFn: () =>
-      getSocialPosts({
+    queryFn: ({ signal }) => getSocialPosts({
         status: activeStatus || undefined,
         platform: platform || undefined,
-        // FLAG: `search` isn't a documented param on API 78 (only
-        // status/platform are) — sent as an optimistic attempt, same
-        // pattern used across every other admin list page
+        // `search` is now confirmed to work server-side on this
+        // endpoint (previously undocumented and sent optimistically)
         search: debouncedSearch || undefined,
         page: currentPage,
-      }),
+        page_size: PAGE_SIZE,
+      }, signal),
   });
 
-  const allPosts = extractListData(postsResponse);
-  const totalCount = postsResponse?.data?.count ?? allPosts.length;
+  const posts = extractListData(postsResponse);
+  const totalCount = postsResponse?.data?.count ?? posts.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
-
-  // Client-side pagination fallback — only kicks in if the backend
-  // response ISN'T actually paginated (i.e. it returned every post at
-  // once), so the grid never shows more than PAGE_SIZE cards
-  const posts = postsResponse?.data?.results
-    ? allPosts
-    : allPosts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Real server-side pagination is now confirmed on this endpoint, so
+  // `posts` is always already exactly one page's worth of results —
+  // no more client-side slicing fallback needed for the case where
+  // the backend used to return the entire post history at once.
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSocialPost(postToDelete.id),

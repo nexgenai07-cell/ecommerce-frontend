@@ -1,11 +1,11 @@
-// Import useMutation for the "mark all as read" bulk API calls, and useQueryClient to refresh cached notification data afterward
+// Import useMutation for the "mark all as read" bulk API call, and useQueryClient to refresh cached notification data afterward
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 // Import a checkmark icon from the react-icons Ant Design icon set, used on the "Mark all as read" button
 import { AiOutlineCheck } from "react-icons/ai";
 // Import the QUERY_KEYS constants object that stores standardized React Query cache key names
 import { QUERY_KEYS } from "../../constants/queryKeys";
-// Import the API function that marks a single notification as read on the backend
-import { markNotificationRead } from "../../api/notifications.api";
+// Import the NEW dedicated bulk "mark all as read" API function
+import { markAllNotificationsRead } from "../../api/notifications.api";
 // Import the success and error toast notification helper functions for user feedback
 import { showSuccess, showError } from "../ui/Toast";
 // Import the shared Spinner component — shown inside the "Mark all as read" button while the bulk mutation is running
@@ -23,41 +23,32 @@ export const NOTIFICATION_TABS = [
   { id: "system", label: "System" },
 ];
 
-// Define the NotificationFilters functional component, receiving the currently active tab, a callback to change tabs, and the full notifications list (used for counting)
-const NotificationFilters = ({
-  activeTab,
-  onTabChange,
-  notifications, // All notifications — count ke liye
-}) => {
+// Define the NotificationFilters functional component, receiving the
+// currently active tab, a callback to change tabs, and the confirmed
+// total unread count (a single real number from the backend, NOT a
+// full notifications array — see the note below on why per-tab counts
+// were removed).
+const NotificationFilters = ({ activeTab, onTabChange, unreadCount }) => {
   // Get access to the React Query client instance so we can manually invalidate/refresh cached queries later
   const queryClient = useQueryClient();
 
-  // Unread notifications
-  // Filter the full notifications list down to only the ones that are not yet marked as read
-  const unreadNotifications = notifications.filter((n) => !n.is_read);
-
   // =============================================
   // MARK ALL READ MUTATION
-  // API 61 — sab unread notifications mark karo
   // =============================================
-  // Set up a mutation that marks every currently unread notification as read in one action
+  // Now calls the single, dedicated bulk endpoint instead of firing
+  // one PUT request per unread notification. No longer needs to know
+  // the full list of unread notifications — the backend handles all
+  // of the logged-in user's unread notifications in one request.
   const markAllMutation = useMutation({
-    // The async function that performs the bulk operation
-    mutationFn: async () => {
-      // Sab unread pe ek ek call karo
-      // Fire off a "mark as read" API call for every unread notification simultaneously, waiting for all of them to complete
-      await Promise.all(
-        unreadNotifications.map((n) => markNotificationRead(n.id)),
-      );
-    },
-    // Callback executed once all the mark-as-read calls have succeeded
+    mutationFn: () => markAllNotificationsRead(),
+    // Callback executed once the bulk mark-as-read call succeeds
     onSuccess: () => {
       // Show a success toast notification to the user
       showSuccess("All notifications marked as read");
       // Invalidate the cached notifications list so it refetches and reflects all notifications now being read
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
     },
-    // Callback executed if one or more of the bulk mark-as-read calls fail — Promise.all rejects on the first failure, so the user needs to know the bulk action didn't fully complete
+    // Callback executed if the bulk mark-as-read call fails
     onError: () => {
       showError("Couldn't mark all notifications as read. Please try again.");
     },
@@ -77,14 +68,17 @@ const NotificationFilters = ({
         {NOTIFICATION_TABS.map((tab) => {
           // Determine whether this specific tab is the currently active one
           const isActive = activeTab === tab.id;
-          // Tab count
-          // Calculate the count badge number for this tab: unread notifications count for "unread", total notifications count for "all", or a count of notifications matching this tab's type for all other tabs
-          const count =
-            tab.id === "unread"
-              ? unreadNotifications.length
-              : tab.id === "all"
-                ? notifications.length
-                : notifications.filter((n) => n.type === tab.id).length;
+
+          // NOTE: per-tab counts for "Orders"/"Promotions"/"System"/"All"
+          // used to be computed by counting the FULL notifications array
+          // in the browser. Now that only one page is ever loaded at a
+          // time, that full list no longer exists on the frontend, and
+          // the backend's confirmed contract only provides a single
+          // TOTAL unread_count — not a breakdown by type. So only the
+          // "Unread" tab shows a count (using the real, confirmed
+          // number passed in as a prop); the other tabs show no count
+          // rather than a fake or stale one.
+          const count = tab.id === "unread" ? unreadCount : null;
 
           // Return the JSX for this individual tab pill button
           return (
@@ -103,9 +97,9 @@ const NotificationFilters = ({
             >
               {/* The tab's display label text (e.g., "All", "Unread", "Orders") */}
               {tab.label}
-              {/* Only show the count badge if there's a non-zero count and this isn't the "all" tab (since showing a count next to "All" would be redundant with the total) */}
-              {count > 0 && tab.id !== "all" && (
-                // Count badge text, in parentheses, colored semi-transparent white when active or light gray when inactive
+              {/* Only shown for the "Unread" tab, and only when there's
+                  at least one unread notification */}
+              {count > 0 && (
                 <span
                   className={cn(
                     "ml-1.5 text-xs",
@@ -124,7 +118,7 @@ const NotificationFilters = ({
       {/* Only show the "Mark all as read" button if there is at least one unread notification
           Upgraded from a plain underlined text link to a proper outlined pill button —
           reads as a real secondary action rather than an easy-to-miss inline link       */}
-      {unreadNotifications.length > 0 && (
+      {unreadCount > 0 && (
         // Button that triggers the bulk mark-all-as-read mutation when clicked
         <button
           onClick={() => markAllMutation.mutate()}

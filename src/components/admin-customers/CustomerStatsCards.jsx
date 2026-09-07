@@ -6,47 +6,92 @@ import { AiOutlineTeam, AiOutlineUserAdd } from "react-icons/ai";
 // AiOutlineTeam — icon for the "Total Customers" card
 // AiOutlineUserAdd — icon for the "New This Month" card
 
-import { fetchAllCustomers } from "../../api/customers.api";
-// fetchAllCustomers — loops through every page of the customers
-// endpoint and returns one flat, complete array
+import { getCustomers } from "../../api/customers.api";
+// getCustomers — real, confirmed server-side search/ordering/pagination.
+// fetchAllCustomers no longer exists (removed once the backend's
+// filtering/pagination was confirmed fixed) — this component now
+// computes both stats without ever downloading the entire customer
+// list, as explained below.
+
+import extractListData from "../../utils/extractListData";
 
 import StatsCard from "../ui/StatsCard";
 // StatsCard — shared KPI card component used across every admin page
 
 const CustomerStatsCards = () => {
-  // Single query fetches EVERY customer once, cached for 5 minutes —
-  // both card numbers below are derived from this one source of truth
-  const { data: allCustomers = [], isLoading } = useQuery({
-    queryKey: ["adminCustomers", "statsAll"],
-    queryFn: () => fetchAllCustomers({}),
+  // --------------------------------------------------
+  // TOTAL CUSTOMERS — one lightweight request that reads only the
+  // real backend `count` field; the actual result rows aren't needed,
+  // just the total. Accurate across the ENTIRE customer base, no
+  // matter how large it grows.
+  // --------------------------------------------------
+  const { data: totalCountResponse, isLoading: isLoadingTotal } = useQuery({
+    queryKey: ["adminCustomers", "statsTotal"],
+    queryFn: ({ signal }) => getCustomers({ page: 1, page_size: 1 }, signal),
     staleTime: 1000 * 60 * 5,
-    // staleTime: 5 minutes — avoids re-fetching the entire customer
-    // list on every render
   });
+  const totalCount = totalCountResponse?.data?.count ?? 0;
 
-  // "Total Customers" — simply the length of the complete array
-  const totalCount = allCustomers.length;
+  // --------------------------------------------------
+  // NEW THIS MONTH — there's no confirmed backend date-range filter on
+  // this endpoint (only search/ordering/page were confirmed), so this
+  // can't be read directly from a single `count`. Instead of falling
+  // back to downloading the entire customer base, this walks the list
+  // newest-first (ordering=-created_at) and stops as soon as it finds
+  // a customer OUTSIDE the current month — since the list is sorted
+  // newest-first, every customer after that point is even older, so
+  // there's no need to look further. This only ever fetches as many
+  // pages as this month's actual new signups require, not the whole
+  // customer base — bounded and scalable either way.
+  // --------------------------------------------------
+  const { data: newThisMonthCount = 0, isLoading: isLoadingNewThisMonth } =
+    useQuery({
+      queryKey: ["adminCustomers", "statsNewThisMonth"],
+      queryFn: async ({ signal }) => {
+        const now = new Date();
+        let page = 1;
+        let count = 0;
 
-  // "New This Month" — counts customers whose created_at falls in the
-  // CURRENT calendar month and year, checked entirely in JavaScript
-  const now = new Date();
-  // Captures "today" once, outside the loop, so every comparison
-  // below uses the exact same reference point
+        // Loops until either a customer outside this month is found,
+        // or the backend runs out of pages — whichever comes first
+        while (true) {
+          const response = await getCustomers({
+            ordering: "-created_at",
+            page,
+            page_size: 50,
+          }, signal);
+          const results = extractListData(response);
+          if (results.length === 0) break;
 
-  const newThisMonthCount = allCustomers.filter((customer) => {
-    if (!customer.created_at) return false;
-    // Defensive guard — skips any record missing created_at entirely
+          let hitOlderCustomer = false;
+          for (const customer of results) {
+            if (!customer.created_at) continue;
+            const createdDate = new Date(customer.created_at);
+            const isThisMonth =
+              createdDate.getFullYear() === now.getFullYear() &&
+              createdDate.getMonth() === now.getMonth();
 
-    const createdDate = new Date(customer.created_at);
-    // Converts the ISO date string into an actual JS Date object
+            if (isThisMonth) {
+              count += 1;
+            } else {
+              // Sorted newest-first, so once we hit one customer
+              // outside this month, every remaining customer (on this
+              // page and every page after) is older too — safe to stop.
+              hitOlderCustomer = true;
+              break;
+            }
+          }
 
-    return (
-      createdDate.getFullYear() === now.getFullYear() &&
-      createdDate.getMonth() === now.getMonth()
-    );
-    // True only when the customer joined in the same month AND year
-    // as today
-  }).length;
+          if (hitOlderCustomer || !response?.data?.next) break;
+          page += 1;
+        }
+
+        return count;
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+
+  const isLoading = isLoadingTotal || isLoadingNewThisMonth;
 
   return (
     // flex + flex-wrap instead of a stretching grid — each card now
@@ -56,8 +101,8 @@ const CustomerStatsCards = () => {
       {/* Total Customers — the real, confirmed total */}
       <StatsCard
         title="Total Customers"
-        // While the full list is still loading, show a subtle dash
-        // instead of a flash of "0" that would look like a real value
+        // While loading, show a subtle dash instead of a flash of "0"
+        // that would look like a real value
         value={isLoading ? "—" : totalCount}
         icon={<AiOutlineTeam />}
         iconBg="bg-primary-50"
@@ -73,7 +118,8 @@ const CustomerStatsCards = () => {
         className="w-full sm:w-52 shadow-[0_8px_22px_-8px_rgba(16,24,40,0.18)] hover:shadow-[0_12px_26px_-8px_rgba(16,24,40,0.24)] hover:-translate-y-0.5"
       />
 
-      {/* New This Month — calculated client-side from real created_at values */}
+      {/* New This Month — real backend data, computed via the bounded
+          newest-first walk explained above */}
       <StatsCard
         title="New This Month"
         value={isLoading ? "—" : newThisMonthCount}

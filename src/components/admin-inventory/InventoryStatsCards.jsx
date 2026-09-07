@@ -27,22 +27,27 @@ import StatsCard from "../ui/StatsCard";
 const InventoryStatsCards = () => {
   const { data: alertsResponse, isLoading: isAlertsLoading } = useQuery({
     queryKey: ["inventoryAlerts", "list"],
-    queryFn: getInventoryAlerts,
+    queryFn: ({ signal }) => getInventoryAlerts(signal),
     staleTime: 1000 * 60 * 2,
   });
 
   const { data: productsResponse, isLoading: isProductsLoading } = useQuery({
     queryKey: ["inventoryAlerts", "totalProducts"],
-    queryFn: () => getProducts({ page: 1 }),
+    queryFn: ({ signal }) => getProducts({ page: 1 }, signal),
     staleTime: 1000 * 60 * 5,
   });
 
   const alerts = extractListData(alertsResponse);
-  const outOfStockCount = alerts.filter((item) => item.stock === 0).length;
-  const lowStockCount = alerts.filter((item) => item.stock > 0).length;
+  const outOfStockCount = alerts.filter(
+    (item) => (item.available_stock ?? 0) === 0,
+  ).length;
+  const lowStockCount = alerts.filter(
+    (item) => (item.available_stock ?? 0) > 0,
+  ).length;
   // Every item Inventory Alerts returns is, by definition, EITHER out
-  // of stock (0) or below its threshold (>0 but flagged) — splitting
-  // on stock === 0 cleanly separates the two real categories
+  // of stock (0 available) or below its threshold (some available, but
+  // still flagged) — splitting on available_stock === 0 cleanly
+  // separates the two real categories
 
   const totalProducts = productsResponse?.data?.count ?? 0;
   const healthyStockCount = Math.max(

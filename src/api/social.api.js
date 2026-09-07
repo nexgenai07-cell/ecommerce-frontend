@@ -11,16 +11,21 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API - Get the list of all social media posts
+// API - List social posts (Admin only)
 // ----------------------------
-// Fetches social media posts, used on the admin's social posts
-// management page. The "params" object can include:
-// - status: filter by post status (e.g. pending, scheduled,
-//   published, rejected — matching SOCIAL_POST_STATUS constants)
-// - platform: filter by which platform the post is for
-//   (e.g. Facebook, Instagram)
-export const getSocialPosts = (params) => {
-  return axiosInstance.get("/api/v1/social/posts/", { params });
+// CONFIRMED WORKING SERVER-SIDE (as of the backend's latest fix):
+//   - status   -> filters by post status (pending, scheduled,
+//                 published, rejected — matching SOCIAL_POST_STATUS
+//                 constants)
+//   - platform -> filter by which platform the post is for
+//                 (e.g. Facebook, Instagram)
+//   - search   -> matches post caption/hashtags (previously
+//                 undocumented, now confirmed working)
+//   - page     -> standard pagination (previously this endpoint
+//                 returned the entire post history in one response;
+//                 now properly paginated)
+export const getSocialPosts = (params, signal) => {
+  return axiosInstance.get("/api/v1/social/posts/", { signal, params });
 };
 
 // ----------------------------
@@ -36,8 +41,8 @@ export const getSocialPosts = (params) => {
 // - image_url: the image to attach to the post
 // - scheduled_at: when this post should go live (if scheduling
 //   immediately during creation)
-export const createSocialPost = (data) => {
-  return axiosInstance.post("/api/v1/social/posts/create/", data);
+export const createSocialPost = (data, signal) => {
+  return axiosInstance.post("/api/v1/social/posts/create/", data, { signal });
 };
 
 // ----------------------------
@@ -46,8 +51,8 @@ export const createSocialPost = (data) => {
 // Fetches everything about one specific social media post,
 // identified by its ID — used on a post detail/preview page,
 // e.g. before approving or rejecting it.
-export const getSocialPostById = (id) => {
-  return axiosInstance.get(`/api/v1/social/posts/${id}/`);
+export const getSocialPostById = (id, signal) => {
+  return axiosInstance.get(`/api/v1/social/posts/${id}/`, { signal });
   // Template literal inserts the "id" directly into the URL path
 };
 
@@ -57,8 +62,8 @@ export const getSocialPostById = (id) => {
 // Removes a social media post entirely from the system. Unlike
 // some other delete operations in this project, the comment here
 // notes this is a PERMANENT delete (not a soft delete).
-export const deleteSocialPost = (id) => {
-  return axiosInstance.delete(`/api/v1/social/posts/${id}/`);
+export const deleteSocialPost = (id, signal) => {
+  return axiosInstance.delete(`/api/v1/social/posts/${id}/`, { signal });
 };
 
 // ----------------------------
@@ -68,8 +73,8 @@ export const deleteSocialPost = (id) => {
 // being published. The "data" payload is expected to include:
 // - scheduled_at: the date/time when this approved post should
 //   actually go live on the social platform
-export const approvePost = (id, data) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/approve/`, data);
+export const approvePost = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/social/posts/${id}/approve/`, data, { signal });
 };
 
 // ----------------------------
@@ -79,8 +84,8 @@ export const approvePost = (id, data) => {
 // The "data" payload is expected to include:
 // - reason: why the post was rejected (e.g. feedback for whoever
 //   created it, or just an internal note)
-export const rejectPost = (id, data) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/reject/`, data);
+export const rejectPost = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/social/posts/${id}/reject/`, data, { signal });
 };
 
 // ----------------------------
@@ -89,8 +94,8 @@ export const rejectPost = (id, data) => {
 // Allows an admin to RESCHEDULE an already-approved post to a
 // different date/time. The "data" payload is expected to include:
 // - scheduled_at: the new date/time for this post to go live
-export const schedulePost = (id, data) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/schedule/`, data);
+export const schedulePost = (id, data, signal) => {
+  return axiosInstance.put(`/api/v1/social/posts/${id}/schedule/`, data, { signal });
 };
 
 // ----------------------------
@@ -101,8 +106,8 @@ export const schedulePost = (id, data) => {
 // grid showing which posts are scheduled on which days).
 // The "params" object includes:
 // - month: which month to fetch the calendar data for
-export const getPostsCalendar = (params) => {
-  return axiosInstance.get("/api/v1/social/posts/calendar/", { params });
+export const getPostsCalendar = (params, signal) => {
+  return axiosInstance.get("/api/v1/social/posts/calendar/", { signal, params });
 };
 
 // ----------------------------
@@ -117,8 +122,8 @@ export const getPostsCalendar = (params) => {
 // - page_id: the specific page/account ID on that platform
 // - token_expiry: when this access token will expire (so it can be
 //   refreshed before it stops working)
-export const connectSocialAccount = (data) => {
-  return axiosInstance.post("/api/v1/social/accounts/connect/", data);
+export const connectSocialAccount = (data, signal) => {
+  return axiosInstance.post("/api/v1/social/accounts/connect/", data, { signal });
 };
 
 // ----------------------------
@@ -127,8 +132,8 @@ export const connectSocialAccount = (data) => {
 // Fetches all the social media accounts currently linked to the
 // store, so admins can see which platforms are connected and
 // available for posting.
-export const getSocialAccounts = () => {
-  return axiosInstance.get("/api/v1/social/accounts/");
+export const getSocialAccounts = (signal) => {
+  return axiosInstance.get("/api/v1/social/accounts/", { signal });
 };
 
 // ----------------------------
@@ -138,6 +143,6 @@ export const getSocialAccounts = () => {
 // been published — including likes, comments, shares, and overall
 // reach. Used to show admins how well their social media posts
 // are performing.
-export const getPostAnalytics = (postId) => {
-  return axiosInstance.get(`/api/v1/social/analytics/${postId}/`);
+export const getPostAnalytics = (postId, signal) => {
+  return axiosInstance.get(`/api/v1/social/analytics/${postId}/`, { signal });
 };

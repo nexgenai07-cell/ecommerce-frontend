@@ -5,12 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 // Import back-arrow, paperclip (attachment), robot (AI/system), person (agent), and clock icons used throughout this redesigned page
 import { AiOutlineArrowLeft, AiOutlinePaperClip } from "react-icons/ai";
-import {
-  BsRobot,
-  BsPersonCheck,
-  BsClockHistory,
-  BsChatSquareDots,
-} from "react-icons/bs";
+import { BsRobot, BsChatSquareDots } from "react-icons/bs";
 // Import the ROUTES object which holds all the predefined route paths used across the app
 import { ROUTES } from "../../constants/routes";
 // Import the QUERY_KEYS constants object that stores standardized React Query cache key names
@@ -33,6 +28,9 @@ import Container from "../../components/layouts/Container";
 import { SkeletonDetailThread } from "../../components/ui/Skeleton";
 // Import the reusable error state component shown if the fetch fails
 import ErrorState from "../../components/ui/ErrorState";
+// Import the shared chat-style message thread — replaces the old
+// fixed "customer message + single admin response" pair
+import ComplaintThread from "../../components/complaint/ComplaintThread";
 
 // Status badge colors — same convention used in PreviousComplaints.jsx, kept identical here so the
 // status pill always looks the same wherever it appears across the complaints module
@@ -77,7 +75,7 @@ const ComplaintDetail = () => {
     // Unique cache key that includes the complaint ID so each complaint's detail is cached independently
     queryKey: QUERY_KEYS.COMPLAINT_DETAIL(id),
     // The actual async function that performs the API call, passing along the ID from the URL
-    queryFn: () => getComplaintDetail(id),
+    queryFn: ({ signal }) => getComplaintDetail(id, signal),
     // Only run this query once an ID is actually present in the URL
     enabled: !!id,
     // Keep this data "fresh" (won't auto-refetch) for 2 minutes (2 * 60 * 1000 ms) to avoid unnecessary network calls
@@ -242,55 +240,22 @@ const ComplaintDetail = () => {
               </div>
             </div>
 
-            {/* Admin response — only shown once one exists; otherwise a "pending" state card is shown instead */}
-            {complaint.response ? (
-              // Response received — elevated card tinted with the brand color so it visually reads as
-              // "the reply" in the thread, with a person-check avatar badge distinguishing it from the
-              // customer's own message above (which uses the robot/AI-triage avatar)
-              <div className="relative bg-linear-to-br from-primary-50 to-white rounded-3xl border border-primary/10 shadow-[0_6px_22px_-6px_rgba(16,185,129,0.12)] overflow-hidden">
-                {/* Card body — flex row with an avatar badge on the left and the response content on the right */}
-                <div className="p-5 sm:p-6 flex items-start gap-4">
-                  {/* Avatar badge representing the support agent's reply */}
-                  <div className="relative z-10 w-10 h-10 rounded-full bg-linear-to-br from-primary-dark to-primary flex items-center justify-center shadow-sm shadow-primary/30 shrink-0 ring-4 ring-white">
-                    <BsPersonCheck className="w-4.5 h-4.5 text-white" />
-                  </div>
-                  {/* Content column: responder label and the response body text */}
-                  <div className="flex-1 min-w-0 flex flex-col gap-2">
-                    {/* Label naming who responded, falling back to a generic "Support Team" if no name is provided */}
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">
-                      Response from{" "}
-                      {complaint.resolved_by_name || "Support Team"}
-                    </p>
-                    {/* The actual response text, preserving line breaks and using relaxed line height for readability */}
-                    <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
-                      {complaint.response}
-                    </p>
-                  </div>
-                </div>
+            {/* ── Message thread ──────────────────────────────────────────────
+                Real back-and-forth thread with the support team — the customer
+                can keep replying, and posting a message here never changes
+                this complaint's status (that only ever happens on the admin
+                side, explicitly). */}
+            <div className="relative bg-white rounded-3xl border border-gray-100 shadow-[0_6px_22px_-6px_rgba(16,24,40,0.10)] overflow-hidden">
+              <div className="p-5 sm:p-6">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+                  Conversation
+                </p>
+                <ComplaintThread
+                  complaintId={complaint.id}
+                  currentRole="customer"
+                />
               </div>
-            ) : (
-              // No response yet — a calmer "waiting" state card, with a clock avatar badge and a soft pulse
-              // animation on the icon so it reads as "actively pending" rather than a dead-end empty box
-              <div className="relative bg-white rounded-3xl border border-dashed border-gray-200 overflow-hidden">
-                {/* Card body — flex row with a pulsing clock avatar on the left and the waiting message on the right */}
-                <div className="p-5 sm:p-6 flex items-start gap-4">
-                  {/* Avatar badge with a soft pulse animation, signaling that this step is still in progress */}
-                  <div className="relative z-10 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0 ring-4 ring-white">
-                    <BsClockHistory className="w-4.5 h-4.5 text-gray-400 animate-pulse" />
-                  </div>
-                  {/* Waiting message content */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-600">
-                      Awaiting response
-                    </p>
-                    <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">
-                      Our team is currently reviewing your complaint. You'll see
-                      a response here once it's available.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </Container>

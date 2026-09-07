@@ -17,7 +17,7 @@ const BotLogs = () => {
   // were removed — see the flags shared before this code.
   const { data: sessionsResponse, isLoading } = useQuery({
     queryKey: ["whatsappBotLogs", "sessions"],
-    queryFn: getWhatsAppSessions,
+    queryFn: ({ signal }) => getWhatsAppSessions(signal),
   });
   const activeSessions = extractListData(sessionsResponse);
 

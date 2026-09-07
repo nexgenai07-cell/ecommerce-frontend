@@ -1,7 +1,6 @@
 // useState — local component state (filters, modal targets, loading flags)
-// useMemo — recomputes filtered/sorted/paginated data only when its real
-// dependencies change, instead of on every single render
-import { useState, useMemo } from "react";
+// useEffect — resets the current page back to 1 whenever a filter changes
+import { useState, useEffect } from "react";
 
 // TanStack Query hooks — data fetching, caching, and mutations
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,33 +30,28 @@ import {
 import { FaWhatsapp } from "react-icons/fa";
 
 import { getReturns, updateReturnStatus } from "../../api/returns.api";
-// getReturns         — API 51: GET /api/v1/returns/ — an admin calling this
+// getReturns         — API 65: GET /api/v1/returns/ — an admin calling this
 //                       gets EVERY return request across the store (role-based
 //                       filtering happens server-side, no separate admin
 //                       endpoint needed).
 // updateReturnStatus — API 53: PUT /api/v1/admin/returns/{id}/status/
 //                       body: { status: "approved" | "rejected" }
 //
-// BACKEND BUG — CONFIRMED VIA NETWORK TAB (not a guess):
-// This page used to send status/search as query params on the request above,
-// hoping the backend supported undocumented filtering (a pattern that has
-// worked for other endpoints in this project before). It does NOT work here.
-// Screenshots of the Network tab show FOUR separate requests —
-// returns/?status=pending, ?status=approved, ?status=rejected, and a plain
-// ?page=1 — and every single one of them returned the EXACT same payload:
-// { count: 4, results: [...same 4 rows, mostly status: "approved"...] }.
-// The backend is silently ignoring the ?status= query param and always
-// returning the full, unfiltered list. That is a backend issue, not a
-// frontend one — flag this to the backend team so /api/v1/returns/ actually
-// honors ?status=.
+// BACKEND FIX CONFIRMED: `page`, `status`, `search`, `start_date`,
+// `end_date`, and `ordering` all now filter/paginate correctly and
+// combine together in one request. The old bug (every request,
+// regardless of ?status=, silently returned the exact same unfiltered
+// page — confirmed via the Network tab at the time) is fixed. This
+// page now sends every filter straight to the backend and only fetches
+// ONE already-filtered page at a time.
 //
-// THE FIX APPLIED HERE: since the backend can't be trusted to filter, this
-// page now fetches the return list ONCE, in full, and does ALL filtering —
-// status tabs, search, date range, sorting, and pagination — on the client,
-// against that single real dataset. This guarantees the tabs/search actually
-// work correctly for the admin today, and costs nothing once the backend is
-// eventually fixed (the extra client-side pass will simply have nothing left
-// to do).
+// One narrower note: the backend's `search` is confirmed to match
+// order number and return reason text. It was NOT explicitly confirmed
+// to match the return's own reference number (e.g. "RET-6") or the
+// customer's name — both of which the OLD client-side search used to
+// match. If admins commonly search by return ID or customer name and
+// notice search no longer finds those, that's the reason — worth a
+// quick follow-up confirmation with the backend if so.
 
 import { sendNotification } from "../../api/notifications.api";
 // sendNotification — API 74: POST /api/v1/notifications/send/
@@ -86,10 +80,7 @@ import { getCustomerDetail } from "../../api/customers.api";
 // on (see CustomerDetailDrawer.jsx for the identical field usage).
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — API 90 (Export Report). FLAG: the API doc only confirms
-// "sales" as an example `type` value; "returns" is used here as a reasonable
-// guess for this report — confirm the exact accepted type string with the
-// backend team.
+// exportReport — "returns" is now a CONFIRMED accepted `type` value
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { RETURN_STATUS } from "../../constants/statusTypes";
@@ -129,10 +120,11 @@ const STATUS_TABS = [
 ];
 
 // --------------------------------------------------
-// SORT OPTIONS — purely client-side re-ordering of the full return list,
-// same pattern already used on the Orders admin page. There is no
-// documented "ordering" query param on API 51, so this never triggers a new
-// network request — it just re-sorts the rows already in memory.
+// SORT OPTIONS — sent straight to the backend as a real `ordering`
+// query param. "-created_at"/"created_at" are CONFIRMED working.
+// "customer_name"/"-customer_name" were never explicitly confirmed —
+// sent through optimistically; if the backend doesn't recognize this
+// field name it will simply have no effect rather than error.
 // --------------------------------------------------
 const SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
@@ -141,34 +133,8 @@ const SORT_OPTIONS = [
   { value: "-customer_name", label: "Customer Name: Z-A" },
 ];
 
-// Maps each SORT_OPTIONS value to an actual comparator function used by
-// Array.prototype.sort() further down.
-const SORTERS = {
-  "-created_at": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-  customer_name: (a, b) =>
-    (a.customer_name || "").localeCompare(b.customer_name || ""),
-  "-customer_name": (a, b) =>
-    (b.customer_name || "").localeCompare(a.customer_name || ""),
-};
-
-// --------------------------------------------------
-// normalizeForSearch — strips EVERYTHING except letters and digits, and
-// lowercases the result. This is what fixes the Return ID search bug: the
-// table displays each row as "#RET-6", but a raw string compare against
-// "RET-6" fails the moment the admin types the "#" that's visibly right
-// there on screen, or leaves out the dash, or types "ret 6" with a space.
-// Stripping punctuation/spaces from BOTH the search query and the value
-// being searched means "#RET-6", "RET-6", "ret6", and "RET 6" all
-// normalize down to the same "ret6" and match correctly.
-// --------------------------------------------------
-const normalizeForSearch = (value) =>
-  String(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-
-// How many rows to show per page — client-side pagination, since the
-// backend does not reliably paginate this endpoint either (see flag above).
+// How many rows to show per page — matches the page size confirmed
+// working on the backend.
 const PAGE_SIZE = 10;
 
 // ============================================================
@@ -197,7 +163,7 @@ const ReturnDetailModal = ({
     isError: isCustomerError,
   } = useQuery({
     queryKey: QUERY_KEYS.CUSTOMER_DETAIL(returnItem?.customer),
-    queryFn: () => getCustomerDetail(returnItem.customer),
+    queryFn: ({ signal }) => getCustomerDetail(returnItem.customer, signal),
     enabled: !!returnItem?.customer,
     // enabled — TanStack Query never fires this request until a return with
     // a real customer id has actually been selected.
@@ -641,8 +607,10 @@ const ReturnsManagement = () => {
   // activeStatus — which status pill is currently selected ("" = All).
 
   const [search, setSearch] = useState("");
-  // search — raw text typed into the search box before debouncing. Matches
-  // against Return ID, Order ID, and Customer Name (see filteredReturns).
+  // search — raw text typed into the search box before debouncing, sent
+  // to the backend as `search` (confirmed to match order number and
+  // return reason text — see the note near the getReturns import above
+  // for what's NOT confirmed).
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   // showAdvancedFilters — toggles the Date Range + Sort By row open/closed
@@ -688,8 +656,10 @@ const ReturnsManagement = () => {
   // Feeds the little numbered badge next to the "Filters" heading.
 
   // --------------------------------------------------
-  // MAIN LIST — API 51, fetched ONCE with no query params (see the
-  // backend-bug flag above for why every filter now happens client-side).
+  // MAIN LIST — real server-side status/search/date filtering,
+  // sorting, and pagination. Only ONE already-filtered page of
+  // returns is ever fetched, no matter how many return requests
+  // exist in total.
   // --------------------------------------------------
   const {
     data: returnsResponse,
@@ -697,94 +667,76 @@ const ReturnsManagement = () => {
     isError,
     refetch,
   } = useQuery({
-    queryKey: QUERY_KEYS.RETURNS,
-    queryFn: () => getReturns(),
+    queryKey: [
+      ...QUERY_KEYS.RETURNS,
+      "list",
+      activeStatus,
+      debouncedSearch,
+      startDate,
+      endDate,
+      sortBy,
+      currentPage,
+    ],
+    queryFn: ({ signal }) => getReturns({
+        status: activeStatus || undefined,
+        search: debouncedSearch || undefined,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        ordering: sortBy,
+        page: currentPage,
+        page_size: PAGE_SIZE,
+      }, signal),
+    keepPreviousData: true,
   });
 
-  const allReturns = extractListData(returnsResponse);
-  // The complete, unfiltered list — also the single source of truth the
-  // stat cards below are computed from, instead of three extra (and, per
-  // the Network tab, equally broken) filtered requests.
+  const visibleReturns = extractListData(returnsResponse);
+  const totalCount = returnsResponse?.data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  // `visibleReturns` is now always exactly one real, already-filtered,
+  // already-sorted page straight from the backend — no more client-side
+  // re-filtering, re-sorting, or re-slicing on top of it.
 
   // --------------------------------------------------
-  // STAT CARD COUNTS — real counts, computed directly from allReturns.
-  // Approval rate is only shown once at least one return has actually been
-  // decided, to avoid a misleading "0% approval rate" on a fresh store.
+  // STAT CARD COUNTS — each its own lightweight request that reads
+  // only the real backend `count` field for that specific status; the
+  // actual result rows aren't needed, just the totals. Accurate across
+  // the ENTIRE return history, not just whatever page happens to be
+  // loaded.
   // --------------------------------------------------
-  const pendingCount = allReturns.filter(
-    (r) => r.status === RETURN_STATUS.REQUESTED,
-  ).length;
-  const approvedCount = allReturns.filter(
-    (r) => r.status === RETURN_STATUS.APPROVED,
-  ).length;
-  const rejectedCount = allReturns.filter(
-    (r) => r.status === RETURN_STATUS.REJECTED,
-  ).length;
+  const { data: pendingCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.REQUESTED],
+    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.REQUESTED, page: 1, page_size: 1 }, signal),
+  });
+  const pendingCount = pendingCountResponse?.data?.count ?? 0;
+
+  const { data: approvedCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.APPROVED],
+    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.APPROVED, page: 1, page_size: 1 }, signal),
+  });
+  const approvedCount = approvedCountResponse?.data?.count ?? 0;
+
+  const { data: rejectedCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.REJECTED],
+    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.REJECTED, page: 1, page_size: 1 }, signal),
+  });
+  const rejectedCount = rejectedCountResponse?.data?.count ?? 0;
+
+  const { data: totalCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.RETURNS, "count", "total"],
+    queryFn: ({ signal }) => getReturns({ page: 1, page_size: 1 }, signal),
+  });
+  const grandTotalCount = totalCountResponse?.data?.count ?? 0;
+
   const decidedCount = approvedCount + rejectedCount;
   const approvalRate =
     decidedCount > 0 ? Math.round((approvedCount / decidedCount) * 100) : null;
 
-  // --------------------------------------------------
-  // FILTERED + SORTED LIST — every real filter (status, search, date
-  // range) plus the client-side sort, all applied together on top of the
-  // one real dataset fetched above. useMemo skips redoing this work unless
-  // one of its actual inputs changed.
-  // --------------------------------------------------
-  const filteredReturns = useMemo(() => {
-    // Step 1 — status tab.
-    let result = activeStatus
-      ? allReturns.filter((r) => r.status === activeStatus)
-      : allReturns;
-
-    // Step 2 — search, matched against Return ID, Order ID, and Customer
-    // Name all at once. Both the query and every field are run through
-    // normalizeForSearch first (strips "#", "-", spaces, and lowercases),
-    // so typing "#RET-6", "RET-6", "ret 6", or just "6" all correctly find
-    // return #RET-6 — this is the actual fix for the Return ID search bug.
-    if (debouncedSearch.trim()) {
-      const query = normalizeForSearch(debouncedSearch);
-      result = result.filter((r) => {
-        const returnId = normalizeForSearch("RET" + r.id);
-        const orderId = normalizeForSearch(r.order_number);
-        const customerName = normalizeForSearch(r.customer_name);
-        return (
-          returnId.includes(query) ||
-          orderId.includes(query) ||
-          customerName.includes(query)
-        );
-      });
-    }
-
-    // Step 3 — date range, inclusive on both ends, compared against the
-    // return's created_at (request date).
-    if (startDate) {
-      const from = new Date(startDate);
-      result = result.filter((r) => new Date(r.created_at) >= from);
-    }
-    if (endDate) {
-      // End-of-day so the selected end date itself is included, not
-      // excluded by the time-of-day component of created_at.
-      const to = new Date(endDate);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter((r) => new Date(r.created_at) <= to);
-    }
-
-    // Step 4 — sort, applied last on top of whatever survived filtering.
-    const sorter = SORTERS[sortBy];
-    if (!sorter) return result;
-    return [...result].sort(sorter);
-    // Spreads into a new array first — never mutates the array React Query
-    // owns, which could otherwise cause subtle re-render bugs.
-  }, [allReturns, activeStatus, debouncedSearch, startDate, endDate, sortBy]);
-
-  const totalCount = filteredReturns.length;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
-
-  // visibleReturns — just the current page's slice of the filtered list.
-  const visibleReturns = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredReturns.slice(start, start + PAGE_SIZE);
-  }, [filteredReturns, currentPage]);
+  // Whenever any filter or sort changes, jump back to page 1 —
+  // staying on, say, page 3 of a now-much-smaller filtered result set
+  // would otherwise show an empty page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeStatus, debouncedSearch, startDate, endDate, sortBy]);
 
   const handleTabChange = (statusKey) => {
     setActiveStatus(statusKey);
@@ -989,14 +941,15 @@ const ReturnsManagement = () => {
 
       {/* ================================================================
           STAT CARDS — all four are now real counts computed straight from
-          the one real dataset fetched above (see the flag near the imports
-          for why the old per-status queries were removed). Fully
-          responsive: 1 column on mobile, 2 on small screens, 4 on large.
+          Real backend `count` values, one lightweight request per stat
+          (see above) — accurate across the ENTIRE return history, not
+          just whatever page happens to be loaded. Fully responsive: 1
+          column on mobile, 2 on small screens, 4 on large.
           ================================================================ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Total Returns"
-          value={allReturns.length}
+          value={grandTotalCount}
           icon={<AiOutlineHistory />}
           iconBg="bg-primary-50"
           iconColor="text-primary"

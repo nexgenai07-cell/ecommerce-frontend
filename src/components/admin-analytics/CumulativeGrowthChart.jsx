@@ -68,8 +68,7 @@ const CumulativeGrowthChart = ({ startDate, endDate }) => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ["customerGrowth", "chart", startDate, endDate, period],
-    queryFn: () =>
-      getCustomerGrowth({ start_date: startDate, end_date: endDate, period }),
+    queryFn: ({ signal }) => getCustomerGrowth({ start_date: startDate, end_date: endDate, period }, signal),
   });
 
   const points = response?.data || [];

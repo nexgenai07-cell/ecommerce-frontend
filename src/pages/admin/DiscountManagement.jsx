@@ -146,7 +146,7 @@ const DiscountManagement = () => {
     refetch,
   } = useQuery({
     queryKey: QUERY_KEYS.DISCOUNTS,
-    queryFn: () => getDiscounts(),
+    queryFn: ({ signal }) => getDiscounts(signal),
   });
 
   const allDiscounts = extractListData(discountsResponse);
@@ -238,9 +238,7 @@ const DiscountManagement = () => {
     setIsExporting(true);
     try {
       const response = await exportReport({ type: "discounts" });
-      // FLAG: "discounts" as the `type` value is an assumption — the
-      // API doc only confirms "sales" as an example; confirm the real
-      // accepted values with the backend team
+      // "discounts" is now a CONFIRMED accepted `type` value
 
       const blobUrl = URL.createObjectURL(response.data);
       const link = document.createElement("a");

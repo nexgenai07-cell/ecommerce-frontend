@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 // useState — local component state (search text, sort choice, page, drawer)
 // useEffect — resets the current page back to 1 whenever search/sort changes
-// useMemo — avoids re-sorting the full customer list on every unrelated render
 
 import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches server data automatically
@@ -17,22 +16,27 @@ import {
 // AiOutlineEye — "view customer" row action icon
 // AiOutlineTeam — PageHeader icon for this page
 
-import { getCustomerDetail, fetchAllCustomers } from "../../api/customers.api";
+import { getCustomers, getCustomerDetail } from "../../api/customers.api";
+// getCustomers — API 110, now confirmed to filter (`search`), sort
+// (`ordering`), and paginate (`page`) correctly on the backend, so
+// this always returns exactly one already-sorted, already-filtered
+// page of results.
 // getCustomerDetail — API 88, fetched only when a specific customer's
 // drawer is opened
-// fetchAllCustomers — loops through every page of API 87 and returns
-// one complete, flat array — this is what powers the rich client-side
-// sorting below
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — same type-value assumption flagged in OrderManagement
-// and ReturnsManagement ("customers" as the `type`, unconfirmed)
+// exportReport — confirmed accepted `type` values now include
+// "customers" for this page's export button
 
 import formatPrice from "../../utils/formatPrice";
 // formatPrice — converts a raw number into "Rs. X,XXX" display format
 
 import formatDate from "../../utils/formatDate";
 // formatDate — converts a raw ISO date string into "Jul 15, 2026" format
+
+import extractListData from "../../utils/extractListData";
+// extractListData — normalizes the response into a plain array,
+// regardless of whether it's a paginated object or a bare array
 
 import useDebounce from "../../hooks/useDebounce";
 // useDebounce — delays updating the search value until typing pauses,
@@ -69,13 +73,11 @@ import CustomerDetailDrawer from "../../components/admin-customers/CustomerDetai
 // CustomerDetailDrawer — the side panel that opens on "eye" click
 
 // --------------------------------------------------
-// SORT OPTIONS — this is the "rich filtering" the customer list
-// supports. Since API 87 only confirms a `search` query param (no
-// documented ordering param), sorting is done ENTIRELY on the
-// frontend against the COMPLETE customer list (see fetchAllCustomers)
-// — this is reliable because every field being sorted on
-// (name, total_orders, total_spent, created_at) is a real, confirmed
-// field already present on every customer object.
+// SORT OPTIONS — each value is sent straight to the backend as the
+// `ordering` query parameter and confirmed working there (newest/
+// oldest joined, name A–Z/Z–A, most/fewest orders, highest/lowest
+// spender). Sorting now always applies across the customer's ENTIRE
+// matching list, not just whichever page happened to be loaded.
 // --------------------------------------------------
 const SORT_OPTIONS = [
   { value: "-created_at", label: "Newest Joined" },
@@ -96,35 +98,9 @@ const SORT_OPTIONS = [
   // Customer who has spent the least money first
 ];
 
-// Maps each SORT_OPTIONS value to an actual comparator function used
-// by Array.prototype.sort() below — one function per sort choice
-const SORTERS = {
-  "-created_at": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  // Newest first — larger (more recent) date comes before smaller date
-  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-  // Oldest first — smaller (older) date comes before larger date
-  name: (a, b) => (a.name || "").localeCompare(b.name || ""),
-  // A-Z — localeCompare handles alphabetical ordering correctly
-  "-name": (a, b) => (b.name || "").localeCompare(a.name || ""),
-  // Z-A — same comparator, arguments swapped to reverse the order
-  "-total_orders": (a, b) =>
-    (Number(b.total_orders) || 0) - (Number(a.total_orders) || 0),
-  // Most orders first — Number(...) || 0 guards against null/undefined
-  total_orders: (a, b) =>
-    (Number(a.total_orders) || 0) - (Number(b.total_orders) || 0),
-  // Fewest orders first
-  "-total_spent": (a, b) =>
-    (Number(b.total_spent) || 0) - (Number(a.total_spent) || 0),
-  // Highest spender first
-  total_spent: (a, b) =>
-    (Number(a.total_spent) || 0) - (Number(b.total_spent) || 0),
-  // Lowest spender first
-};
-
 const PAGE_SIZE = 10;
-// How many customers are shown per page — pagination is done entirely
-// on the frontend (see pageCustomers below), since we hold the
-// complete, already-sorted list in memory
+// How many customers are shown per page — matches the page size the
+// backend was confirmed to use for this endpoint
 
 const CustomerManagement = () => {
   const [search, setSearch] = useState("");
@@ -132,11 +108,11 @@ const CustomerManagement = () => {
 
   const [sortBy, setSortBy] = useState("-created_at");
   // sortBy — which SORT_OPTIONS value is currently active; defaults
-  // to "Newest Joined" so the default order never surprises anyone
+  // to "Newest Joined" so the default order never surprises anyone.
+  // Sent directly to the backend as the `ordering` param.
 
   const [currentPage, setCurrentPage] = useState(1);
-  // currentPage — which page of the (already sorted/filtered) list
-  // is currently being viewed
+  // currentPage — which page of results is currently being viewed
 
   const [isExporting, setIsExporting] = useState(false);
   // isExporting — true while the CSV export download is in progress
@@ -150,57 +126,33 @@ const CustomerManagement = () => {
   // network request — prevents a new API call on every keystroke
 
   // --------------------------------------------------
-  // CUSTOMERS — fetches the COMPLETE list matching the current search
-  // term (search IS sent to the backend, since it's a confirmed real
-  // param). Sorting and pagination happen afterwards, on the frontend.
+  // CUSTOMERS — real server-side search + sort + pagination. Only
+  // ONE page of already-filtered, already-sorted results is ever
+  // fetched, no matter how large the customer base grows.
   // --------------------------------------------------
   const {
-    data: allCustomers = [],
-    // Defaults to an empty array so .length/.map never crash before
-    // the first response arrives
+    data: response,
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["adminCustomers", "allFiltered", debouncedSearch],
-    // queryKey includes debouncedSearch — a new search term triggers
-    // a fresh fetch and its own cache entry
-    queryFn: () => fetchAllCustomers({ search: debouncedSearch || undefined }),
-    // undefined (not empty string) so an empty search box doesn't send
-    // a pointless ?search= query param
+    queryKey: ["adminCustomers", "list", debouncedSearch, sortBy, currentPage],
+    queryFn: ({ signal }) => getCustomers({
+        search: debouncedSearch || undefined,
+        // undefined (not empty string) so an empty search box doesn't
+        // send a pointless ?search= query param
+        ordering: sortBy,
+        page: currentPage,
+        page_size: PAGE_SIZE,
+      }, signal),
+    keepPreviousData: true,
+    // Keeps showing the previous page's rows while the next page
+    // loads, instead of flashing an empty table on every page change
   });
 
-  // Re-sorts the complete list whenever the list itself or the chosen
-  // sort option changes — useMemo avoids redoing this on every
-  // unrelated re-render (e.g. when the drawer opens/closes)
-  const sortedCustomers = useMemo(() => {
-    const list = [...allCustomers];
-    // Copies the array before sorting — Array.sort() mutates in place,
-    // and mutating the react-query cached array directly would cause
-    // subtle bugs elsewhere in the app
-
-    const sorter = SORTERS[sortBy];
-    // Looks up the comparator function matching the current sortBy value
-
-    if (sorter) list.sort(sorter);
-    // Only sorts if a matching comparator was actually found
-
-    return list;
-  }, [allCustomers, sortBy]);
-  // Recomputes only when the source data or the sort choice changes
-
-  const totalCount = sortedCustomers.length;
-  // Total number of customers matching the current search (before pagination)
-
+  const pageCustomers = extractListData(response);
+  const totalCount = response?.data?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  // At least 1 page even when totalCount is 0, so pagination never shows "page 0 of 0"
-
-  // Slices out just the current page's worth of rows from the fully
-  // sorted list — this is the frontend equivalent of backend pagination
-  const pageCustomers = sortedCustomers.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
 
   // Whenever the search term or sort option changes, jump back to
   // page 1 — staying on, say, page 3 of a brand-new filtered/sorted
@@ -216,7 +168,7 @@ const CustomerManagement = () => {
     queryKey: ["adminCustomers", "detail", selectedCustomerId],
     // queryKey includes selectedCustomerId — switching customers
     // triggers a fresh fetch and its own cache entry per customer
-    queryFn: () => getCustomerDetail(selectedCustomerId),
+    queryFn: ({ signal }) => getCustomerDetail(selectedCustomerId, signal),
     enabled: !!selectedCustomerId,
     // enabled — only runs this query once a customer id is actually selected
   });
@@ -259,8 +211,7 @@ const CustomerManagement = () => {
     }
   };
 
-  // Table column config — STATUS COLUMN REMOVED per request (there is
-  // no confirmed is_active field, so it only ever showed a dash anyway)
+  // Table column config
   const columns = [
     {
       key: "customer",
@@ -314,7 +265,6 @@ const CustomerManagement = () => {
         </span>
       ),
     },
-    // "Status" column intentionally removed — see comment above
     {
       key: "actions",
       label: "Actions",
@@ -361,9 +311,9 @@ const CustomerManagement = () => {
       {/* Only 2 real, accurate, compact stat cards — see CustomerStatsCards.jsx */}
       <CustomerStatsCards />
 
-      {/* Filter toolbar — search (real backend param) + sort (client-side,
-          rich filtering: most/least orders, highest/lowest spender, name
-          A-Z/Z-A, newest/oldest joined) */}
+      {/* Filter toolbar — search AND sort are both real backend
+          parameters now, so filtering/sorting always applies across
+          the customer's entire matching list, not just one page */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-3">
         {/* Small section heading above the filter controls — makes it
             clear at a glance that this whole card is the filter area */}

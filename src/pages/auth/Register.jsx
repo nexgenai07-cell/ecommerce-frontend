@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  EMAIL_REGEX,
+  EMAIL_INVALID_MESSAGE,
+} from "../../utils/emailValidation";
 import { useMutation } from "@tanstack/react-query";
 import {
   AiOutlineEye,
@@ -43,7 +47,7 @@ const registerSchema = z
       .string()
       .trim()
       .min(1, "Email is required")
-      .email("Please enter a valid email address")
+      .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
       .max(255, "Email is too long"),
     phone: z
       .string()
@@ -180,7 +184,7 @@ const Register = () => {
   // (block login until email_verified) — confirmed already implemented.
   // =============================================
   const registerMutation = useMutation({
-    mutationFn: registerUser,
+    mutationFn: (variables) => registerUser(variables),
 
     onSuccess: (response) => {
       const { user } = response.data;

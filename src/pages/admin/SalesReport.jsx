@@ -105,12 +105,11 @@ const SalesReport = () => {
   // and passed down, so the table doesn't duplicate the same request
   const { data: response, isLoading } = useQuery({
     queryKey: ["salesReport", "breakdown", startDate, endDate],
-    queryFn: () =>
-      getSalesReport({
+    queryFn: ({ signal }) => getSalesReport({
         start_date: startDate,
         end_date: endDate,
         period: "daily",
-      }),
+      }, signal),
   });
 
   const dataPoints = response?.data?.data || [];

@@ -25,13 +25,13 @@ const ProductTabs = ({ product }) => {
     {
       icon: <BsBoxSeam className="w-5 h-5" />,
       label: "Stock",
-      value: `${product?.stock ?? 0} units`,
+      value: `${product?.available_stock ?? 0} units`,
     },
     {
       icon: <BsCheckCircle className="w-5 h-5" />,
       label: "Availability",
-      value: product?.in_stock ? "In Stock" : "Out of Stock",
-      accent: product?.in_stock ? "success" : "danger",
+      value: (product?.available_stock ?? 0) > 0 ? "In Stock" : "Out of Stock",
+      accent: (product?.available_stock ?? 0) > 0 ? "success" : "danger",
     },
   ].filter(Boolean);
 

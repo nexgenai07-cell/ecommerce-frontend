@@ -41,7 +41,7 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
 
   const { data: logsResponse, isLoading } = useQuery({
     queryKey: ["whatsappBotLogs", "thread", phoneNumber],
-    queryFn: () => getWhatsAppLogs({ phone_number: phoneNumber }),
+    queryFn: ({ signal }) => getWhatsAppLogs({ phone_number: phoneNumber }, signal),
     enabled: !!phoneNumber,
   });
   const messages = extractListData(logsResponse).sort(
@@ -52,7 +52,7 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
   // conversation currently being handled by a human admin, or the bot?
   const { data: sessionsResponse } = useQuery({
     queryKey: ["whatsappBotLogs", "sessions"],
-    queryFn: getWhatsAppSessions,
+    queryFn: ({ signal }) => getWhatsAppSessions(signal),
   });
   const session = extractListData(sessionsResponse).find(
     (s) => s.phone_number === phoneNumber,

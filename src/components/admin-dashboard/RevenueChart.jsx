@@ -40,7 +40,7 @@ const RevenueChart = () => {
 
   const { data: salesResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "salesReport", period],
-    queryFn: () => getSalesReport({ period }),
+    queryFn: ({ signal }) => getSalesReport({ period }, signal),
     staleTime: 1000 * 60 * 2, // 2 minute cache
   });
 

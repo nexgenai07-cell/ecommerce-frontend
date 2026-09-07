@@ -21,26 +21,41 @@ import axiosInstance from "../lib/axiosInstance";
 // This takes everything in their current cart and turns it into
 // a real order with status "pending_payment". The "data" payload
 // is expected to include:
-// - shipping_address: where the order should be delivered
-// - coupon_code: any discount code applied (if used)
+// - address_id: which saved Address Book entry to ship to (optional —
+//   backend falls back to whichever saved address is currently
+//   marked is_default if omitted; still 400s if neither exists)
+// - payment_method: "stripe" | "qr" (required)
 // - notes: any special instructions from the customer
-// NOTE: This endpoint no longer accepts a payment_method field —
-// all payments now go through Stripe. Immediately after this call
-// succeeds, call createPaymentIntent() (payments.api.js, API 69)
-// with the returned order_number to start the Stripe payment.
+//
+// Response differs by payment_method:
+// - "stripe": call createPaymentIntent() (payments.api.js, API 69)
+//   immediately after, with the returned order_number, to start the
+//   Stripe payment — exactly as before.
+// - "qr": the response ALSO includes qr_image_url (a static,
+//   config-driven QR image) and payment_reference (the order_number,
+//   to write in the transfer note) — no Stripe call needed at all.
+//   payment.status starts as "pending" until the customer uploads
+//   proof via uploadQrProof() (payments.api.js).
+//
 // On success, the cart is cleared server-side automatically, so we
 // also clear it from Redux state on the frontend.
-export const checkout = (data) => {
-  return axiosInstance.post("/api/v1/orders/checkout/", data);
+export const checkout = (data, signal) => {
+  return axiosInstance.post("/api/v1/orders/checkout/", data, { signal });
 };
 
 // ----------------------------
 // API - Get the logged-in customer's own orders
 // ----------------------------
-// Fetches the full list of orders placed by the currently logged-in
-// customer. Used on the "My Orders" page in the customer account section.
-export const getMyOrders = () => {
-  return axiosInstance.get("/api/v1/orders/");
+// Fetches orders placed by the currently logged-in customer. Used on
+// the "My Orders" page in the customer account section.
+//
+// BACKEND FIX CONFIRMED: this endpoint's pagination behavior has now
+// been explicitly confirmed by the backend team — see OrderHistory.jsx
+// for how the frontend fetches every page to guarantee the customer's
+// complete order history is always shown, regardless of how many
+// orders they have.
+export const getMyOrders = (params, signal) => {
+  return axiosInstance.get("/api/v1/orders/", { signal, params });
 };
 
 // ----------------------------
@@ -61,8 +76,8 @@ export const getMyOrders = () => {
 // DO NOT reuse this function for the admin order detail page — use
 // getAdminOrderDetail() below instead, which calls the new
 // admin-only endpoint the backend added specifically to fix this.
-export const getOrderDetail = (orderNumber) => {
-  return axiosInstance.get(`/api/v1/orders/${orderNumber}/`);
+export const getOrderDetail = (orderNumber, signal) => {
+  return axiosInstance.get(`/api/v1/orders/${orderNumber}/`, { signal });
   // Template literal inserts the "orderNumber" directly into the URL path
 };
 
@@ -74,10 +89,17 @@ export const getOrderDetail = (orderNumber) => {
 // frontend if the order hasn't already been delivered or cancelled
 // (this restriction logic is enforced in the UI/component, and
 // likely double-checked on the backend as well).
-export const cancelOrder = (orderNumber) => {
-  return axiosInstance.put(`/api/v1/orders/${orderNumber}/cancel/`);
-  // No "data" argument passed since cancelling doesn't require
-  // sending a request body — the order number in the URL is enough
+// ----------------------------
+// API - Cancel a customer's own order
+// ----------------------------
+// data.reason is entirely optional — sending no body at all (or
+// data with no reason) continues to work exactly as before. When
+// provided, it's just a free-text string for the customer's own
+// context; it does not change how the cancellation itself is handled.
+export const cancelOrder = (orderNumber, data, signal) => {
+  return axiosInstance.put(`/api/v1/orders/${orderNumber}/cancel/`, data, {
+    signal,
+  });
 };
 
 // ----------------------------
@@ -86,18 +108,28 @@ export const cancelOrder = (orderNumber) => {
 // Fetches the tracking timeline/history for a specific order
 // (e.g. "Order Placed" -> "Confirmed" -> "Shipped" -> "Delivered"),
 // identified by its order number. Used on the order tracking page.
-export const trackOrder = (orderNumber) => {
-  return axiosInstance.get(`/api/v1/orders/${orderNumber}/track/`);
+export const trackOrder = (orderNumber, signal) => {
+  return axiosInstance.get(`/api/v1/orders/${orderNumber}/track/`, { signal });
 };
 
 // ----------------------------
 // API  - Get all orders from all customers (Admin only)
 // ----------------------------
-// Fetches the complete list of orders across the ENTIRE store
-// (not just one customer's orders). Used in the admin panel's
-// orders management page.
-export const getAdminOrders = () => {
-  return axiosInstance.get("/api/v1/admin/orders/");
+// Fetches orders across the ENTIRE store (not just one customer's
+// orders). Used in the admin panel's orders management page when no
+// status/search/date filter is active.
+//
+// BUG FIXED: this used to take no arguments at all, so every click on
+// a different page number silently re-requested the exact same
+// (unpaginated) response — the admin always saw the same first page
+// of orders no matter which page they clicked. The backend's own
+// documented example response for this endpoint already includes a
+// working "next": ".../admin/orders/?page=2" link, confirming `page`
+// was supported all along — it just was never actually being sent.
+// Now forwards `page` (and `ordering`, now confirmed working) exactly
+// like every other list endpoint in this file.
+export const getAdminOrders = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/orders/", { signal, params });
 };
 
 // ----------------------------
@@ -107,13 +139,17 @@ export const getAdminOrders = () => {
 // The "params" object can include:
 // - status: filter by order status (e.g. pending, shipped, delivered)
 // - start_date / end_date: filter orders within a date range
-// - search: search by customer name, order number, etc.
-// - customer_id: NEW — added by the backend team specifically so we
+// - search: search by customer name, order number, AND phone number
+//   (phone matching is now confirmed working server-side — see the
+//   backend fix notes in OrderManagement.jsx)
+// - customer_id: added by the backend team specifically so we
 //   can show one customer's own order history (see getCustomerOrders
 //   below). Returns only orders placed by that exact customer.
+// - ordering: now confirmed working — e.g. "-created_at", "created_at",
+//   "-total_amount", "total_amount"
 // - page: which page of results to fetch (for pagination)
-export const filterAdminOrders = (params) => {
-  return axiosInstance.get("/api/v1/admin/orders/filter/", { params });
+export const filterAdminOrders = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/orders/filter/", { signal, params });
   // Passing "params" as the second argument tells Axios to automatically
   // convert this object into URL query parameters
 };
@@ -129,8 +165,8 @@ export const filterAdminOrders = (params) => {
 // `params` can additionally include status / search / page — all of
 // which combine correctly with customer_id on the backend, e.g.:
 //   getCustomerOrders(20, { status: "delivered", page: 2 })
-export const getCustomerOrders = (customerId, params = {}) => {
-  return filterAdminOrders({ ...params, customer_id: customerId });
+export const getCustomerOrders = (customerId, params = {}, signal) => {
+  return filterAdminOrders({ ...params, customer_id: customerId }, signal);
   // Reuses filterAdminOrders so both functions always stay in sync —
   // this is just filterAdminOrders with customer_id always included
 };
@@ -150,8 +186,8 @@ export const getCustomerOrders = (customerId, params = {}) => {
 //
 // Used ONLY on the admin order detail page ("/admin/orders/:id") —
 // the customer-facing page keeps using getOrderDetail() unchanged.
-export const getAdminOrderDetail = (orderNumber) => {
-  return axiosInstance.get(`/api/v1/admin/orders/${orderNumber}/`);
+export const getAdminOrderDetail = (orderNumber, signal) => {
+  return axiosInstance.get(`/api/v1/admin/orders/${orderNumber}/`, { signal });
 };
 
 // ----------------------------
@@ -163,8 +199,21 @@ export const getAdminOrderDetail = (orderNumber) => {
 // is expected to include:
 // - status: the new status to set for this order
 // - tracking_number: the courier/shipping tracking number (if applicable)
-export const updateOrderStatus = (orderNumber, data) => {
-  return axiosInstance.put(`/api/v1/admin/orders/${orderNumber}/status/`, data);
+// - cancellation_reason: required whenever status is "cancelled" — its
+//   exact text is included in the customer's cancellation notification
+// - refund_method / refund_transaction_reference: ONLY required when
+//   status is "cancelled" AND the order's payment.method is "qr".
+//   refund_method is always "manual" in that case (no live gateway
+//   exists to refund automatically); refund_transaction_reference is
+//   mandatory and the backend 400s without it. For payment.method
+//   "stripe", omit both entirely — refund stays fully automatic,
+//   exactly as before.
+export const updateOrderStatus = (orderNumber, data, signal) => {
+  return axiosInstance.put(
+    `/api/v1/admin/orders/${orderNumber}/status/`,
+    data,
+    { signal },
+  );
 };
 
 // ----------------------------
@@ -173,6 +222,8 @@ export const updateOrderStatus = (orderNumber, data) => {
 // Allows the customer to request a return for an order that has
 // already been delivered. The "data" payload is expected to include:
 // - reason: why the customer wants to return the order/item
-export const requestReturn = (orderNumber, data) => {
-  return axiosInstance.post(`/api/v1/orders/${orderNumber}/return/`, data);
+export const requestReturn = (orderNumber, data, signal) => {
+  return axiosInstance.post(`/api/v1/orders/${orderNumber}/return/`, data, {
+    signal,
+  });
 };

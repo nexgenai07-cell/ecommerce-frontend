@@ -49,7 +49,7 @@ const RecentOrdersTable = () => {
 
   const { data: ordersResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "recentOrders"],
-    queryFn: getAdminOrders,
+    queryFn: ({ signal }) => getAdminOrders(undefined, signal),
     staleTime: 1000 * 60 * 2,
     // Data is considered "fresh" for 2 minutes (won't auto refetch during that time)
   });

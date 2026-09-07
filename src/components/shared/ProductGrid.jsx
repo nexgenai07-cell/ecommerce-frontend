@@ -1,9 +1,3 @@
-// Reusable ProductGrid component
-// Arranges ProductCards into a responsive grid
-// Shows skeleton cards while loading, and an EmptyState when there's no data
-// Used on the Home page, search results, and category pages
-// Fully responsive
-
 // Import a helper function that merges/conditionally joins CSS class names
 import cn from "../../utils/cn";
 // Import the ProductCard component used to render each individual product
@@ -70,11 +64,19 @@ const ProductGrid = ({
     );
   }
 
+  // Defensive de-dupe: if the same product id ever appears more than once in
+  // the incoming array (e.g. a multi-category filter matching a product that
+  // belongs to more than one selected category on the backend), keep only
+  // the first occurrence so React never sees two children with the same key.
+  const dedupedProducts = Array.from(
+    new Map(products.map((p) => [p.id, p])).values(),
+  );
+
   // Default case — render the actual grid of product cards
   return (
     <div className={cn("grid gap-4", gridCols, className)}>
       {/* Loop through the products array and render a ProductCard for each one */}
-      {products.map((product) => (
+      {dedupedProducts.map((product) => (
         <ProductCard
           key={product.id} // Unique key for each product, required by React for list rendering
           product={product} // Pass the full product data down to the card

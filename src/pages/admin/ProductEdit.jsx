@@ -162,7 +162,7 @@ const ProductEdit = () => {
 
   const { data: productResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
-    queryFn: () => getProductById(id),
+    queryFn: ({ signal }) => getProductById(id, signal),
   });
 
   const product = productResponse?.data;
@@ -205,7 +205,7 @@ const ProductEdit = () => {
 
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
   const categories = extractListData(categoriesResponse);
@@ -385,7 +385,9 @@ const ProductEdit = () => {
           <InventorySection
             register={register}
             errors={errors}
-            currentStock={product?.stock}
+            totalStock={product?.total_stock}
+            reservedStock={product?.reserved_stock}
+            availableStock={product?.available_stock}
             onAdjustStockClick={() => setIsAdjustStockOpen(true)}
             onRegenerateSku={handleRegenerateSku}
             onSkuBlur={checkSkuOnBlur}
@@ -404,7 +406,7 @@ const ProductEdit = () => {
         isOpen={isAdjustStockOpen}
         onClose={() => setIsAdjustStockOpen(false)}
         productId={id}
-        currentStock={product?.stock ?? 0}
+        currentStock={product?.total_stock ?? 0}
       />
     </div>
   );

@@ -76,7 +76,7 @@ const ReturnRequest = () => {
     // Generate a unique cache key for this order's detail query based on the selected order number
     queryKey: QUERY_KEYS.ORDER_DETAIL(selectedOrder),
     // The actual function that performs the API call to fetch order details
-    queryFn: () => getOrderDetail(selectedOrder),
+    queryFn: ({ signal }) => getOrderDetail(selectedOrder, signal),
     // Only run this query if an order has actually been selected
     enabled: !!selectedOrder,
     // Consider the cached data fresh for 5 minutes before refetching is allowed
@@ -106,6 +106,9 @@ const ReturnRequest = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
       // Mark the cached "MY_ORDERS" query as stale too, since the order's return status may have changed
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+      // Also invalidate the separately-cached full paginated order
+      // history used by OrderHistory.jsx, for the same reason
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
     },
 
     // Callback executed when the mutation fails

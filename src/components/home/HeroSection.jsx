@@ -24,14 +24,14 @@ const useHeroSlides = () => {
   // so this does NOT trigger a duplicate network request.
   const { data: productsData, isLoading: productsLoading } = useQuery({
     queryKey: [...QUERY_KEYS.PRODUCTS, "flash-sale"],
-    queryFn: () => searchProducts({ ordering: "-created_at", page: 1 }),
+    queryFn: ({ signal }) => searchProducts({ ordering: "-created_at", page: 1 }, signal),
     staleTime: 1000 * 60 * 5,
   });
 
   // Same queryKey + queryFn as CollectionsGrid -> shares its cache too.
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: getCategories,
+    queryFn: ({ signal }) => getCategories(signal),
     staleTime: 1000 * 60 * 10,
   });
 
@@ -43,12 +43,11 @@ const useHeroSlides = () => {
   const categoryImageQueries = useQueries({
     queries: categories.map((category) => ({
       queryKey: [...QUERY_KEYS.PRODUCTS, "collection-thumbnail", category.id],
-      queryFn: () =>
-        searchProducts({
+      queryFn: ({ signal }) => searchProducts({
           category_id: category.id,
           ordering: "-created_at",
           page: 1,
-        }),
+        }, signal),
       enabled: categories.length > 0,
       staleTime: 1000 * 60 * 10,
     })),

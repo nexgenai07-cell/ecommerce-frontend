@@ -33,23 +33,44 @@ const NumbersManagement = () => {
   // --------------------------------------------------
   const { data: sessionsResponse, isLoading } = useQuery({
     queryKey: ["whatsappNumbers", "sessions"],
-    queryFn: getWhatsAppSessions,
+    queryFn: ({ signal }) => getWhatsAppSessions(signal),
   });
   const allSessions = extractListData(sessionsResponse);
 
-  const { data: customersResponse } = useQuery({
-    queryKey: ["whatsappNumbers", "customersForNameLookup"],
-    queryFn: () => getCustomers({ page_size: 200 }),
-    staleTime: 1000 * 60 * 5,
+  // Real customer name lookup — one precise search-by-phone request
+  // PER SESSION, instead of the old approach of fetching up to 200
+  // customers and hoping the match was somewhere in there. allSessions
+  // is already a small, bounded list (currently-active WhatsApp
+  // sessions only — see the comment above), so looking up every
+  // session's real name this way is safe and accurate, and no longer
+  // silently fails once the customer base grows past 200. The
+  // backend's `search` param is now confirmed to match phone numbers
+  // directly.
+  const customerLookupQueries = useQueries({
+    queries: allSessions.map((session) => ({
+      queryKey: ["whatsappNumbers", "customerLookup", session.phone_number],
+      queryFn: ({ signal }) => getCustomers({ search: session.phone_number, page_size: 1 }, signal),
+      staleTime: 1000 * 60 * 5,
+    })),
   });
-  const customers = extractListData(customersResponse);
 
-  const findCustomer = (phone) => {
-    const normalizedPhone = phone?.replace(/\D/g, "").slice(-10);
-    return customers.find(
-      (c) => c.phone?.replace(/\D/g, "").slice(-10) === normalizedPhone,
-    );
-  };
+  // Builds a phone -> customer lookup map, keyed by phone number so it
+  // stays correct regardless of filtering/pagination order afterward
+  const customerByPhone = {};
+  allSessions.forEach((session, index) => {
+    const match = extractListData(customerLookupQueries[index]?.data)[0];
+    if (match) customerByPhone[session.phone_number] = match;
+  });
+
+  const findCustomer = (phone) => customerByPhone[phone] || null;
+  // Same signature as before — every other usage of findCustomer()
+  // below (search filtering, the table render, CSV export) works
+  // unchanged.
+  // CONFIRMED: the backend's `search` param now normalizes phone
+  // formatting before matching (spaces, dashes, and a "+" country
+  // code prefix are stripped, then compared as digits) — so this
+  // correctly matches even when WhatsApp's phone format differs from
+  // how the customer's phone was originally stored.
 
   const filteredSessions = search
     ? allSessions.filter((s) => {
@@ -69,7 +90,7 @@ const NumbersManagement = () => {
   const chatCountQueries = useQueries({
     queries: visibleSessions.map((session) => ({
       queryKey: ["whatsappNumbers", "chatCount", session.phone_number],
-      queryFn: () => getWhatsAppLogs({ phone_number: session.phone_number }),
+      queryFn: ({ signal }) => getWhatsAppLogs({ phone_number: session.phone_number }, signal),
     })),
   });
 

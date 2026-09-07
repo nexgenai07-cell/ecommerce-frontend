@@ -14,7 +14,7 @@
 // customer is found, the raw phone number is shown instead of a
 // fabricated name.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 
 import { getWhatsAppSessions } from "../../api/whatsapp.api";
 import { getCustomers } from "../../api/customers.api";
@@ -27,31 +27,37 @@ import EmptyState from "../ui/EmptyState";
 const ConversationsList = ({ selectedPhone, onSelect }) => {
   const { data: sessionsResponse, isLoading } = useQuery({
     queryKey: ["whatsappBotLogs", "sessions"],
-    queryFn: getWhatsAppSessions,
+    queryFn: ({ signal }) => getWhatsAppSessions(signal),
     staleTime: 1000 * 30, // short cache — this is meant to reflect near-live state
   });
   const sessions = extractListData(sessionsResponse);
 
-  // Fetched once, used purely to resolve phone -> real customer name.
-  // A large page is requested so the match has a real chance of
-  // finding the customer even without a dedicated phone-lookup endpoint.
-  const { data: customersResponse } = useQuery({
-    queryKey: ["whatsappBotLogs", "customersForNameLookup"],
-    queryFn: () => getCustomers({ page_size: 200 }),
-    staleTime: 1000 * 60 * 5,
+  // Real customer name lookup — one precise search-by-phone request
+  // PER SESSION, instead of the old approach of fetching up to 200
+  // customers and hoping the match was somewhere in there. `sessions`
+  // is already a small, bounded list (people currently mid-conversation
+  // with the bot), so resolving every session's real name this way is
+  // safe and accurate — and no longer silently fails once the customer
+  // base grows past 200. The backend's `search` param is now confirmed
+  // to match phone numbers directly.
+  const customerLookupQueries = useQueries({
+    queries: sessions.map((session) => ({
+      queryKey: ["whatsappBotLogs", "customerLookup", session.phone_number],
+      queryFn: ({ signal }) => getCustomers({ search: session.phone_number, page_size: 1 }, signal),
+      staleTime: 1000 * 60 * 5,
+    })),
   });
-  const customers = extractListData(customersResponse);
 
   const findCustomerName = (phone) => {
-    // Simple digit-only comparison, since phone formatting (spaces,
-    // dashes, country code prefixes) can differ between what's stored
-    // on the customer record vs what WhatsApp reports
-    const normalizedPhone = phone?.replace(/\D/g, "").slice(-10);
-    const match = customers.find(
-      (c) => c.phone?.replace(/\D/g, "").slice(-10) === normalizedPhone,
-    );
+    const index = sessions.findIndex((s) => s.phone_number === phone);
+    const match = extractListData(customerLookupQueries[index]?.data)[0];
     return match?.name || null;
   };
+  // CONFIRMED: the backend's `search` param now normalizes phone
+  // formatting before matching (spaces, dashes, and a "+" country
+  // code prefix are stripped, then compared as digits) — so this
+  // correctly matches even when WhatsApp's phone_number format
+  // differs from how the customer's phone was originally stored.
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 flex flex-col h-full">

@@ -8,15 +8,38 @@ import axios from "axios"; // axios library — used to create a configurable HT
 
 // Create a single shared axios instance used across the whole app
 // baseURL comes from Vite's environment variable so it can differ between dev/staging/production
-// timeout — any request taking longer than 10 seconds is automatically aborted
+// timeout — any request taking longer than 15 seconds is automatically aborted
 // headers — default Content-Type for all requests; can be overridden per-request if needed
 const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 160000,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+// =============================================
+// GUEST CART SESSION BOOTSTRAP LOCK
+// =============================================
+// Problem this solves: if two or more requests go out at nearly the same
+// moment (e.g. the navbar's GET /cart/ on page load racing a customer's
+// "Add to Cart" click) and NEITHER has a cartSessionKey yet, both leave
+// with no X-Cart-Session header. The backend then treats EACH one as a
+// brand-new guest and hands back two DIFFERENT session keys — whichever
+// response's session_key is saved last "wins", silently orphaning
+// whatever the other request just did (e.g. an item that was just added
+// vanishes from the cart moments later).
+//
+// Fix (same lock/queue shape as isRefreshing/failedQueue below, just for
+// session bootstrapping instead of token refreshing): only the FIRST
+// sessionless request in a burst is allowed to actually leave right
+// away. Any other sessionless request that fires while that first one
+// is still in flight waits here until the first one's response has been
+// handled (and its session_key, if any, saved) — then re-reads
+// localStorage so every request in the burst ends up on the SAME guest
+// cart, instead of racing each other into separate ones.
+let sessionBootstrapInFlight = null; // Promise that resolves once the in-flight bootstrap request has settled; null when no bootstrap is currently underway
+let releaseSessionBootstrap = null; // resolve() for the promise above — called from the response interceptor (success or error) once that request settles
 
 // =============================================
 // REQUEST INTERCEPTOR
@@ -24,11 +47,50 @@ const axiosInstance = axios.create({
 // Reads the access token from localStorage and attaches it as a Bearer header if present
 // =============================================
 axiosInstance.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const token = localStorage.getItem("token"); // read the current access token from storage
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`; // attach it so the backend can authenticate the request
+    }
+
+    // Guest cart support (backend v3.0): while the customer is browsing/
+    // shopping without an account, the cart lives server-side under an
+    // anonymous "cart session" identified by this header. It's stored in
+    // localStorage the moment the backend first hands one out (see the
+    // response interceptor below) and is attached to EVERY request from
+    // then on — not just cart calls — because Login (POST /auth/login/)
+    // and Google Login (POST /auth/google/) both read it too, to merge
+    // the guest cart into the account cart in that same request. It's
+    // cleared from localStorage right after a successful login (see
+    // Login.jsx's completeLogin), so a logged-in user never sends a
+    // stale guest session once they have real tokens.
+    let cartSessionKey = localStorage.getItem("cartSessionKey");
+
+    // Only real guests with no session key yet need the bootstrap lock —
+    // a logged-in user (has a token) never sends X-Cart-Session at all,
+    // and a guest who already has a session key just attaches it below
+    // like normal, no waiting required.
+    if (!token && !cartSessionKey) {
+      if (sessionBootstrapInFlight) {
+        // Another sessionless request is already out there establishing
+        // the guest session — wait for it to settle before sending this
+        // one, then pick up whatever session key it (hopefully) got.
+        await sessionBootstrapInFlight;
+        cartSessionKey = localStorage.getItem("cartSessionKey");
+      } else {
+        // First sessionless request in this burst — let it go immediately,
+        // but open the lock so anything fired right behind it waits for
+        // THIS one to finish instead of also going out sessionless.
+        sessionBootstrapInFlight = new Promise((resolve) => {
+          releaseSessionBootstrap = resolve;
+        });
+        config._isSessionBootstrap = true; // flags this request so the response interceptor knows to release the lock once it settles
+      }
+    }
+
+    if (cartSessionKey) {
+      config.headers["X-Cart-Session"] = cartSessionKey;
     }
 
     return config; // always return the (possibly modified) config so the request can proceed
@@ -66,10 +128,41 @@ const processQueue = (error, token = null) => {
 // they are rejected normally without forcing a redirect to /login
 // =============================================
 axiosInstance.interceptors.response.use(
-  (response) => response, // successful responses pass straight through untouched
+  (response) => {
+    // Guest cart support (backend v3.0): the very first guest cart call
+    // (no Authorization header, no X-Cart-Session sent yet) gets back a
+    // fresh session_key from the backend. Persist it so every request
+    // from here on — via the request interceptor above — identifies the
+    // same guest cart, including across tabs/page reloads.
+    const sessionKey = response?.data?.session_key;
+    if (sessionKey) {
+      localStorage.setItem("cartSessionKey", sessionKey);
+    }
+
+    // Session bootstrap lock (see above): this was the request holding the
+    // lock — release it now that its session_key (if any) has been saved,
+    // so any requests that were waiting on it can proceed.
+    if (response.config?._isSessionBootstrap && releaseSessionBootstrap) {
+      releaseSessionBootstrap();
+      sessionBootstrapInFlight = null;
+      releaseSessionBootstrap = null;
+    }
+
+    return response; // successful responses pass straight through untouched
+  },
 
   async (error) => {
     const originalRequest = error.config; // the request config that triggered this error — needed to retry it later
+
+    // Session bootstrap lock (see above): release it here too if the
+    // bootstrap request itself failed (network error, 4xx, etc.) — even
+    // with no session_key to save, requests waiting on this lock must
+    // never be stuck forever just because the first request errored out.
+    if (originalRequest?._isSessionBootstrap && releaseSessionBootstrap) {
+      releaseSessionBootstrap();
+      sessionBootstrapInFlight = null;
+      releaseSessionBootstrap = null;
+    }
 
     // If the error isn't a 401, or this exact request has already been retried once,
     // there's nothing more we can do — reject immediately to avoid infinite retry loops

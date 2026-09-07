@@ -8,8 +8,8 @@ import axiosInstance from "../lib/axiosInstance";
 // ----------------------------
 // API  - Register a new customer account
 // ----------------------------
-export const registerUser = (data) => {
-  return axiosInstance.post("/api/v1/auth/register/", data);
+export const registerUser = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/register/", data, { signal });
 };
 
 // ----------------------------
@@ -21,50 +21,50 @@ export const registerUser = (data) => {
 // This check happens on the backend AFTER email_not_verified and
 // BEFORE require_2fa — see Login.jsx for how the frontend branches on
 // it. The request shape sent here is completely unchanged.
-export const loginUser = (data) => {
-  return axiosInstance.post("/api/v1/auth/login/", data);
+export const loginUser = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/login/", data, { signal });
 };
 
 // ----------------------------
 // API - Log out the current user
 // ----------------------------
-export const logoutUser = (data) => {
-  return axiosInstance.post("/api/v1/auth/logout/", data);
+export const logoutUser = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/logout/", data, { signal });
 };
 
 // ----------------------------
 // API - Refresh the access token
 // ----------------------------
-export const refreshToken = (data) => {
-  return axiosInstance.post("/api/v1/auth/token/refresh/", data);
+export const refreshToken = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/token/refresh/", data, { signal });
 };
 
 // ----------------------------
 // API - Request a password reset link
 // ----------------------------
-export const forgotPassword = (data) => {
-  return axiosInstance.post("/api/v1/auth/password-reset/", data);
+export const forgotPassword = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/password-reset/", data, { signal });
 };
 
 // ----------------------------
 // API - Confirm and set a new password
 // ----------------------------
-export const resetPassword = (data) => {
-  return axiosInstance.post("/api/v1/auth/password-reset/confirm/", data);
+export const resetPassword = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/password-reset/confirm/", data, { signal });
 };
 
 // ----------------------------
 // API - Get the currently logged-in user's profile
 // ----------------------------
-export const getMyProfile = () => {
-  return axiosInstance.get("/api/v1/auth/me/");
+export const getMyProfile = (signal) => {
+  return axiosInstance.get("/api/v1/auth/me/", { signal });
 };
 
 // ----------------------------
 // API - Update the logged-in user's profile
 // ----------------------------
-export const updateMyProfile = (data) => {
-  return axiosInstance.put("/api/v1/auth/me/update/", data);
+export const updateMyProfile = (data, signal) => {
+  return axiosInstance.put("/api/v1/auth/me/update/", data, { signal });
 };
 
 // ----------------------------
@@ -72,8 +72,8 @@ export const updateMyProfile = (data) => {
 // ----------------------------
 // Sends current_password (for verification) + new_password.
 // Backend returns 400 with { error: "Current password is incorrect." } if current_password is wrong.
-export const changePassword = (data) => {
-  return axiosInstance.post("/api/v1/auth/change-password/", data);
+export const changePassword = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/change-password/", data, { signal });
 };
 
 // ----------------------------
@@ -81,8 +81,8 @@ export const changePassword = (data) => {
 // ----------------------------
 // Called after API 2 (login) returns { require_2fa: true, user_id }.
 // Sends the 6-digit OTP code along with user_id to receive the real tokens.
-export const verify2FALogin = (data) => {
-  return axiosInstance.post("/api/v1/auth/2fa/login-verify/", data);
+export const verify2FALogin = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/2fa/login-verify/", data, { signal });
 };
 
 // ----------------------------
@@ -97,24 +97,24 @@ export const verify2FALogin = (data) => {
 // be brought back WITHOUT an admin, purely by the user themself, via
 // the reactivation flow below (API 11-B / API 11-C) — this request/
 // response shape itself is unchanged.
-export const deleteMyAccount = (data) => {
+export const deleteMyAccount = (data, signal) => {
   // axiosInstance.delete's second argument is the config object, not the body —
   // DELETE requests need the body passed inside { data: ... }.
-  return axiosInstance.delete("/api/v1/auth/me/delete/", { data });
+  return axiosInstance.delete("/api/v1/auth/me/delete/", { signal, data });
 };
 
 // ----------------------------
 // API  - List Active Sessions ★ NEW
 // ----------------------------
-export const getMySessions = () => {
-  return axiosInstance.get("/api/v1/auth/sessions/");
+export const getMySessions = (signal) => {
+  return axiosInstance.get("/api/v1/auth/sessions/", { signal });
 };
 
 // ----------------------------
 // API  - Sign Out All Sessions ★ NEW
 // ----------------------------
-export const revokeAllSessions = () => {
-  return axiosInstance.post("/api/v1/auth/sessions/revoke-all/");
+export const revokeAllSessions = (signal) => {
+  return axiosInstance.post("/api/v1/auth/sessions/revoke-all/", undefined, { signal });
 };
 
 // ----------------------------
@@ -122,22 +122,22 @@ export const revokeAllSessions = () => {
 // ----------------------------
 // Generates a TOTP secret and returns a QR code (base64 image) + manual entry key.
 // 2FA is NOT active yet at this point — must be confirmed via verify2FAEnable (API 15).
-export const enable2FA = () => {
-  return axiosInstance.post("/api/v1/auth/2fa/enable/");
+export const enable2FA = (signal) => {
+  return axiosInstance.post("/api/v1/auth/2fa/enable/", undefined, { signal });
 };
 
 // ----------------------------
 // API  - Verify & Activate 2FA — Step 2 ★ NEW
 // ----------------------------
-export const verify2FAEnable = (data) => {
-  return axiosInstance.post("/api/v1/auth/2fa/verify/", data);
+export const verify2FAEnable = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/2fa/verify/", data, { signal });
 };
 
 // ----------------------------
 // API  - Disable 2FA ★ NEW
 // ----------------------------
-export const disable2FA = (data) => {
-  return axiosInstance.post("/api/v1/auth/2fa/disable/", data);
+export const disable2FA = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/2fa/disable/", data, { signal });
 };
 
 // ----------------------------
@@ -148,18 +148,18 @@ export const disable2FA = (data) => {
 // access token yet (login itself was blocked). Same pattern as
 // forgot-password: identify the user by email, not by session.
 // ----------------------------
-export const sendVerificationEmail = (email) => {
+export const sendVerificationEmail = (email, signal) => {
   return axiosInstance.post("/api/v1/auth/send-verification-email/", {
     email,
-  });
+  }, { signal });
 };
 
 // ----------------------------
 // API - Verify Email Address ★ NEW
 // ----------------------------
 // token comes from the query string in the emailed link: /verify-email?token=xxx
-export const verifyEmail = (token) => {
-  return axiosInstance.get("/api/v1/auth/verify-email/", {
+export const verifyEmail = (token, signal) => {
+  return axiosInstance.get("/api/v1/auth/verify-email/", { signal,
     params: { token },
   });
 };
@@ -175,8 +175,8 @@ export const verifyEmail = (token) => {
 // whether a given email exists on the platform (security-by-design,
 // same reasoning as the password-reset request flow).
 // Request shape: { email: string }
-export const requestAccountReactivation = (data) => {
-  return axiosInstance.post("/api/v1/auth/reactivate/request/", data);
+export const requestAccountReactivation = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/reactivate/request/", data, { signal });
 };
 
 // ----------------------------
@@ -190,6 +190,6 @@ export const requestAccountReactivation = (data) => {
 // before deletion comes back exactly as it was. The token is
 // single-use and expires after 24 hours per the backend spec.
 // Request shape: { token: string }
-export const confirmAccountReactivation = (data) => {
-  return axiosInstance.post("/api/v1/auth/reactivate/confirm/", data);
+export const confirmAccountReactivation = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/reactivate/confirm/", data, { signal });
 };

@@ -22,7 +22,7 @@ const ProductPicker = ({ selectedProduct, onSelect }) => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ["productPicker", debouncedSearch],
-    queryFn: () => searchProducts({ q: debouncedSearch || undefined, page: 1 }),
+    queryFn: ({ signal }) => searchProducts({ q: debouncedSearch || undefined, page: 1 }, signal),
     enabled: debouncedSearch.length > 0,
   });
 

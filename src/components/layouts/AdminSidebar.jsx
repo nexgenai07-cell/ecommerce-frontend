@@ -30,6 +30,7 @@ import {
   AiOutlineLink, // Link icon (Connected Accounts)
   AiOutlineComment, // Comment icon (Bot Conversations)
   AiOutlinePhone, // Phone icon (WhatsApp Numbers)
+  AiOutlineQrcode, // QR code icon (QR Payment Queue)
 } from "react-icons/ai";
 import { BsBoxSeam } from "react-icons/bs"; // Box icon (Products)
 import cn from "../../utils/cn"; // Import utility function to conditionally combine class names
@@ -85,6 +86,11 @@ const NAV_ITEMS = [
         label: "Orders", // Text shown for this nav item
         icon: <AiOutlineShoppingCart className="w-4.5 h-4.5" />, // Icon for this nav item
         route: ROUTES.ADMIN_ORDERS, // Route this item navigates to
+      },
+      {
+        label: "QR Payments", // Text shown for this nav item
+        icon: <AiOutlineQrcode className="w-4.5 h-4.5" />, // Icon for this nav item
+        route: ROUTES.ADMIN_QR_PAYMENTS, // Route this item navigates to
       },
       {
         label: "Returns", // Text shown for this nav item

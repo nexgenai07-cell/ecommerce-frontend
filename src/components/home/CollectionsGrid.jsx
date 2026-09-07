@@ -84,7 +84,7 @@ const CollectionsGrid = () => {
   // =============================================
   const { data: categoriesData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES, // Cache key for this request
-    queryFn: getCategories, // Function that performs the API call
+    queryFn: ({ signal }) => getCategories(signal), // Function that performs the API call
     staleTime: 1000 * 60 * 10, // Data considered fresh for 10 minutes
   });
 

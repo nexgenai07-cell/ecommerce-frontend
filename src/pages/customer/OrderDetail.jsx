@@ -24,7 +24,10 @@ import NeedHelp from "../../components/order-detail/NeedHelp"; // Contextual act
 import OrderStatusBadge from "../../components/shared/OrderStatusBadge"; // Colored status pill shown in the page heading row
 import { SkeletonOrderDetail } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the order data is loading — mirrors this exact page's header, stepper, and 2/3+1/3 grid
 import ErrorState from "../../components/ui/ErrorState"; // Error UI with a retry button shown when the API call fails
-import ConfirmModal from "../../components/ui/ConfirmModal"; // Modal dialog that asks the customer to confirm before cancelling
+import Modal from "../../components/ui/Modal"; // Base modal used to build the cancel dialog (with its own reason dropdown) below
+import Select from "../../components/ui/Select"; // Optional cancellation reason dropdown
+import Textarea from "../../components/ui/Textarea"; // Free-text field shown when "Other" is picked as the reason
+import Button from "../../components/ui/Button"; // Cancel dialog's own action buttons
 
 // How long (ms) we're willing to keep polling for the Stripe webhook to land
 // before giving up and just showing the order in whatever state it's in.
@@ -50,6 +53,11 @@ const OrderDetail = () => {
 
   // showCancelModal controls whether the cancel confirmation dialog is visible
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Optional reason picked from the dropdown — entirely optional, purely
+  // for the customer's own context. "" means no reason selected.
+  const [cancelReason, setCancelReason] = useState("");
+  // Free-text field shown only when "other" is selected above.
+  const [cancelReasonOther, setCancelReasonOther] = useState("");
 
   // Tracks whether we're still within the short post-payment polling window —
   // starts true only if we arrived here via a successful Stripe redirect.
@@ -72,7 +80,7 @@ const OrderDetail = () => {
     refetch, // function passed to ErrorState so the user can retry manually
   } = useQuery({
     queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber), // unique cache key scoped to this order number
-    queryFn: () => getOrderDetail(orderNumber), // API call — fetches a single order by its number
+    queryFn: ({ signal }) => getOrderDetail(orderNumber, signal), // API call — fetches a single order by its number
     enabled: !!orderNumber, // skip the query entirely if orderNumber is undefined or empty
     staleTime: 1000 * 60 * 2, // treat cached data as fresh for 2 minutes before refetching
     // Only poll while we're actively waiting on the Stripe webhook right after
@@ -133,7 +141,7 @@ const OrderDetail = () => {
 
   const { data: returnsData } = useQuery({
     queryKey: QUERY_KEYS.RETURNS, // shared cache key — same data used on the Returns page
-    queryFn: getReturns, // API call — fetches all return requests for the logged-in user
+    queryFn: ({ signal }) => getReturns(undefined, signal), // API call — fetches all return requests for the logged-in user
     staleTime: 1000 * 60 * 5, // returns change less frequently — 5 minute cache is sufficient
   });
 
@@ -153,11 +161,20 @@ const OrderDetail = () => {
   // =============================================
 
   const cancelMutation = useMutation({
-    mutationFn: () => cancelOrder(orderNumber), // API call — marks the order as cancelled
+    // "Other" resolves to the free-text field; any other dropdown value
+    // is sent as-is; leaving the reason unset sends no reason at all —
+    // this field is purely additive, never required.
+    mutationFn: () => {
+      const reason =
+        cancelReason === "other" ? cancelReasonOther.trim() : cancelReason;
+      return cancelOrder(orderNumber, reason ? { reason } : undefined);
+    },
 
     onSuccess: () => {
       showSuccess("Order cancelled successfully"); // green toast confirms the action to the user
       setShowCancelModal(false); // close the confirmation modal after success
+      setCancelReason("");
+      setCancelReasonOther("");
 
       // Invalidate the specific order's cached data so the status badge and stepper update immediately
       queryClient.invalidateQueries({
@@ -167,6 +184,9 @@ const OrderDetail = () => {
       // Also invalidate the full orders list so the Order History page reflects the cancellation
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.MY_ORDERS,
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.MY_ORDERS_FULL,
       });
     },
 
@@ -324,18 +344,68 @@ const OrderDetail = () => {
 
         {/* ── Cancel order confirmation modal ─────────────────────────────────────
             Rendered outside the Container so it overlays the full viewport
-            Only fires the mutation after the customer explicitly clicks "Yes, Cancel Order" */}
-        <ConfirmModal
+            Only fires the mutation after the customer explicitly clicks "Yes, Cancel Order".
+            The reason dropdown is entirely optional — leaving it unset still
+            cancels the order exactly as before. */}
+        <Modal
           isOpen={showCancelModal}
-          onClose={() => setShowCancelModal(false)} // dismisses the modal without cancelling
-          onConfirm={() => cancelMutation.mutate()} // triggers the cancel API call on confirmation
+          onClose={() => setShowCancelModal(false)}
           title="Cancel Order?"
-          message={`Are you sure you want to cancel order ${orderNumber}? This action cannot be undone.`}
-          confirmLabel="Yes, Cancel Order" // destructive action label
-          cancelLabel="Keep Order" // safe exit label
-          variant="danger" // styles the confirm button in red
-          isLoading={cancelMutation.isPending} // disables buttons and shows a spinner while the API call is in flight
-        />
+          size="sm"
+          closeOnBackdrop={!cancelMutation.isPending}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Are you sure you want to cancel order {orderNumber}? This action
+              cannot be undone.
+            </p>
+
+            <Select
+              label="Reason (optional)"
+              placeholder="Select a reason"
+              options={[
+                { value: "changed_mind", label: "Changed my mind" },
+                {
+                  value: "better_price",
+                  label: "Found a better price elsewhere",
+                },
+                { value: "ordered_by_mistake", label: "Ordered by mistake" },
+                {
+                  value: "delivery_too_long",
+                  label: "Delivery taking too long",
+                },
+                { value: "other", label: "Other" },
+              ]}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+
+            {cancelReason === "other" && (
+              <Textarea
+                placeholder="Tell us a bit more (optional)"
+                value={cancelReasonOther}
+                onChange={(e) => setCancelReasonOther(e.target.value)}
+              />
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <Button
+                variant="secondary"
+                onClick={() => setShowCancelModal(false)}
+                disabled={cancelMutation.isPending}
+              >
+                Keep Order
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => cancelMutation.mutate()}
+                isLoading={cancelMutation.isPending}
+              >
+                Yes, Cancel Order
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </motion.div>
     </div>
   );

@@ -54,7 +54,7 @@ const OrderTracking = () => {
     // Generate a unique cache key for this order's detail query based on the order number
     queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
     // The actual function that performs the API call to fetch order details
-    queryFn: () => getOrderDetail(orderNumber),
+    queryFn: ({ signal }) => getOrderDetail(orderNumber, signal),
     // Only run this query if orderNumber actually exists (prevents firing with undefined)
     enabled: !!orderNumber,
     // Consider the cached data fresh for 2 minutes before refetching is allowed
@@ -74,7 +74,7 @@ const OrderTracking = () => {
     // Generate a unique cache key for this order's tracking query based on the order number
     queryKey: QUERY_KEYS.ORDER_TRACKING(orderNumber),
     // The actual function that performs the API call to fetch tracking info
-    queryFn: () => trackOrder(orderNumber),
+    queryFn: ({ signal }) => trackOrder(orderNumber, signal),
     // Only run this query if orderNumber actually exists
     enabled: !!orderNumber,
     // Consider the cached data fresh for only 1 minute since tracking updates frequently

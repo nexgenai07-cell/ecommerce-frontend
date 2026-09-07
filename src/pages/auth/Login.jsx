@@ -3,7 +3,11 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import {
+  EMAIL_REGEX,
+  EMAIL_INVALID_MESSAGE,
+} from "../../utils/emailValidation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AiOutlineEye,
   AiOutlineEyeInvisible,
@@ -21,13 +25,14 @@ import {
 import useAuth from "../../hooks/useAuth";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import { ROUTES } from "../../constants/routes";
+import { QUERY_KEYS } from "../../constants/queryKeys";
 
 const loginSchema = z.object({
   email: z
     .string()
     .trim()
     .min(1, "Email is required")
-    .email("Please enter a valid email address")
+    .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
     .max(255, "Email is too long"),
   // NOTE: no .trim() on password — a leading/trailing space is a valid
   // password character, and stripping it here would send a different
@@ -55,6 +60,7 @@ const Login = () => {
   const safeFrom = from.startsWith("/admin") ? ROUTES.HOME : from;
 
   const { login, isAuthenticated, role } = useAuth();
+  const queryClient = useQueryClient();
 
   // Post-login destination by role: admins go to the admin dashboard,
   // customers go to safeFrom. Keeps admins off the customer portal,
@@ -153,6 +159,16 @@ const Login = () => {
       localStorage.removeItem("rememberedEmail");
     }
 
+    // Guest cart support (backend v3.0): if a guest cart session was
+    // attached to the login request (via the X-Cart-Session header — see
+    // axiosInstance.js), the backend has just merged it into this user's
+    // account cart as part of this same login response. The guest
+    // session_key is now meaningless, so drop it from localStorage and
+    // throw away any cached (pre-merge) cart data so the next read of
+    // the cart hits the backend again and shows the merged result.
+    localStorage.removeItem("cartSessionKey");
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+
     login({ user, tokens });
     showSuccess(`Welcome back, ${user.name}!`);
 
@@ -163,7 +179,7 @@ const Login = () => {
   // LOGIN API MUTATION — API 2
   // =============================================
   const loginMutation = useMutation({
-    mutationFn: loginUser,
+    mutationFn: (variables) => loginUser(variables),
 
     onSuccess: (response) => {
       // Double opt-in flow — backend blocks login until email is verified.
@@ -277,9 +293,16 @@ const Login = () => {
   };
 
   const onSubmit = (data) => {
+    // remember_me is sent exactly as the backend expects it (API 2 —
+    // POST /api/v1/auth/login/): true only when the checkbox is checked,
+    // false otherwise. This is the piece that was previously missing —
+    // the checkbox existed in the form but its value was never actually
+    // sent to the backend, so it had no effect on the refresh token's
+    // lifetime (30 days when true, 1 day when false/omitted).
     loginMutation.mutate({
       email: data.email,
       password: data.password,
+      remember_me: !!data.rememberMe,
     });
   };
 

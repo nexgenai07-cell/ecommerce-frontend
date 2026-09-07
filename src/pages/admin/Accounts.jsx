@@ -24,7 +24,7 @@ const Accounts = () => {
 
   const { data: response, isLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_ACCOUNTS,
-    queryFn: getSocialAccounts,
+    queryFn: ({ signal }) => getSocialAccounts(signal),
   });
 
   const connectedAccounts = extractListData(response);

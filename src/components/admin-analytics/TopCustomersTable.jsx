@@ -56,7 +56,7 @@ const TopCustomersTable = ({ customers, isLoading }) => {
     queryKey: ["adminCustomers", "detail", selectedCustomerId],
     // queryKey includes selectedCustomerId — switching customers
     // triggers a fresh fetch and its own cache entry per customer
-    queryFn: () => getCustomerDetail(selectedCustomerId),
+    queryFn: ({ signal }) => getCustomerDetail(selectedCustomerId, signal),
     enabled: !!selectedCustomerId,
     // enabled — only runs once a customer id is actually selected,
     // so opening this widget never fires an unnecessary request
