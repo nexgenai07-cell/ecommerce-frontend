@@ -1,9 +1,3 @@
-// Reusable OrderStatusStepper component
-// Displays a horizontal stepper on the order tracking page
-// Completed steps are shown in emerald, the active step is highlighted, and pending steps are gray
-// Used in OrderDetail and OrderTracking pages
-// Fully responsive — vertical layout on mobile, horizontal layout on desktop
-
 // Import a helper function that merges/conditionally joins CSS class names
 import cn from "../../utils/cn";
 // Import the ORDER_STATUS constants object containing valid status values
@@ -72,6 +66,32 @@ const ORDER_STEPS = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+        />
+      </svg>
+    ),
+  },
+  {
+    // Added per Bug #30 fix — backend confirmed the admin status-update
+    // endpoint accepts "out_for_delivery" as a real status, so the
+    // admin's own timeline needs this step too, not just the
+    // customer-facing OrderStepper.jsx
+    status: ORDER_STATUS.OUT_FOR_DELIVERY, // Matches this step to the OUT_FOR_DELIVERY order status
+    label: "Out for Delivery",
+    description: "Courier is on the way to the delivery address",
+    icon: (
+      // Delivery-truck-in-motion icon — distinct from the plain "Shipped"
+      // truck above, signals the courier is actively en route
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 13h10V6H3v7zm10 0h4l3 3v3h-2m-5-6v6m-9 0a2 2 0 104 0m9 0a2 2 0 104 0"
         />
       </svg>
     ),

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   AiOutlineSearch,
@@ -77,13 +77,29 @@ const SORT_OPTIONS = [
 
 const PAGE_SIZE = 10;
 
+// Set of every status value the tab bar actually recognizes, used to
+// validate an incoming "status" URL parameter so an unrecognized or
+// malformed value falls back to "All" instead of leaving the page in a
+// pill state that doesn't match any tab.
+const VALID_STATUS_KEYS = new Set(STATUS_TABS.map((tab) => tab.key));
+
 const OrderManagement = () => {
   const navigate = useNavigate();
   // navigate — used by the "eye" action button on each row to push the
   // admin to that order's detail page.
 
-  const [activeStatus, setActiveStatus] = useState("");
+  const [searchParams] = useSearchParams();
+  // searchParams — read once on mount to support deep links such as
+  // /admin/orders?status=pending_payment, which the Dashboard's
+  // "Pending Orders" card uses to land directly on a pre-filtered view.
+
+  const [activeStatus, setActiveStatus] = useState(() => {
+    const statusFromUrl = searchParams.get("status");
+    return VALID_STATUS_KEYS.has(statusFromUrl) ? statusFromUrl : "";
+  });
   // activeStatus — which status pill is currently selected ("" = All).
+  // Initialized from the URL when a valid status is present, otherwise
+  // defaults to "All" exactly as before.
 
   const [search, setSearch] = useState("");
   // search — raw text typed into the main search box BEFORE debouncing.
@@ -170,14 +186,17 @@ const OrderManagement = () => {
       if (!hasActiveFilters) {
         return getAdminOrders({ ordering: sortBy, page: currentPage }, signal);
       }
-      return filterAdminOrders({
-        status: activeStatus || undefined,
-        search: effectiveSearch || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        ordering: sortBy,
-        page: currentPage,
-      }, signal);
+      return filterAdminOrders(
+        {
+          status: activeStatus || undefined,
+          search: effectiveSearch || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          ordering: sortBy,
+          page: currentPage,
+        },
+        signal,
+      );
     },
     keepPreviousData: true,
   });

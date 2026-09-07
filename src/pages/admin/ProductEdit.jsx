@@ -57,15 +57,12 @@ const productSchema = z
     price: z
       .string()
       .trim()
-      .min(1, "Sale price is required")
+      .min(1, "Price is required")
       .refine(
         (val) => !Number.isNaN(parseFloat(val)),
-        "Sale price must be a valid number",
+        "Price must be a valid number",
       )
-      .refine(
-        (val) => parseFloat(val) > 0,
-        "Sale price must be greater than 0",
-      ),
+      .refine((val) => parseFloat(val) > 0, "Price must be greater than 0"),
     original_price: z
       .string()
       .trim()

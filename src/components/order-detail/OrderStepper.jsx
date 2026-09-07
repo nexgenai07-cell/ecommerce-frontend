@@ -43,8 +43,10 @@ const getStepIndex = (status) => {
       return 1; // Seller confirmed the order
     case ORDER_STATUS.SHIPPED:
       return 2; // Order is on its way
-    case "out_for_delivery":
-      return 3; // Courier is at the last mile — no constant exists yet so string is used directly
+    case ORDER_STATUS.OUT_FOR_DELIVERY:
+      return 3; // Courier is at the last mile — now backed by a real
+    // ORDER_STATUS constant (Bug #30 fix confirmed backend support)
+    // instead of the previously hardcoded "out_for_delivery" string
     case ORDER_STATUS.DELIVERED:
       return 4; // Customer received the order — all steps complete
     default:

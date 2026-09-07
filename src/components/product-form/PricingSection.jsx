@@ -46,6 +46,7 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
           step="0.01"
           min="0"
           placeholder="e.g. 2500"
+          hint="Optional — only fill this in if you want to show a discount"
           leftIcon={<span className="text-gray-400">Rs.</span>}
           {...originalPriceField}
           onBlur={(e) => {
@@ -57,12 +58,13 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
 
         <div className="flex flex-col gap-1.5">
           <Input
-            label="Sale Price"
+            label="Price"
             type="number"
             step="0.01"
             min="0"
             placeholder="e.g. 1999"
             required
+            hint="The price customers will pay for this product"
             leftIcon={<span className="text-gray-400">Rs.</span>}
             {...salePriceField}
             onBlur={(e) => {

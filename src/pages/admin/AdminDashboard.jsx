@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   AiOutlineDashboard,
@@ -14,6 +15,8 @@ import { getDashboardSummary } from "../../api/analytics.api";
 //           low_stock_products, today_revenue, today_orders }
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
+import { ROUTES } from "../../constants/routes";
+import { ORDER_STATUS } from "../../constants/statusTypes";
 import formatPrice from "../../utils/formatPrice";
 import PageHeader from "../../components/shared/PageHeader";
 import StatsCard from "../../components/ui/StatsCard";
@@ -25,6 +28,11 @@ import TopSellingProducts from "../../components/admin-dashboard/TopSellingProdu
 import ActivityLogWidget from "../../components/admin-dashboard/ActivityLogWidget";
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
+  // navigate — used by the 4 KPI cards below so each one takes the admin
+  // straight to the relevant management page instead of being purely
+  // informational.
+
   // --------------------------------------------------
   // DASHBOARD SUMMARY — API 82
   // Powers the 4 KPI cards at the top of the page.
@@ -61,6 +69,9 @@ const AdminDashboard = () => {
           icon={<AiOutlineDollarCircle />}
           iconBg="bg-primary-50"
           iconColor="text-primary"
+          onClick={() => navigate(ROUTES.ADMIN_ANALYTICS_REVENUE)}
+          // Takes the admin to the Revenue Report page for a detailed
+          // breakdown of the total revenue figure shown on this card.
         />
 
         <StatsCard
@@ -69,6 +80,8 @@ const AdminDashboard = () => {
           icon={<AiOutlineShoppingCart />}
           iconBg="bg-info-light"
           iconColor="text-info"
+          onClick={() => navigate(ROUTES.ADMIN_ORDERS)}
+          // Takes the admin to the full Order Management list.
         />
 
         <StatsCard
@@ -79,6 +92,8 @@ const AdminDashboard = () => {
           iconColor="text-primary"
           // No growth badge here — API 82 doesn't provide a customer
           // growth percentage, only the cumulative total (see flag notes)
+          onClick={() => navigate(ROUTES.ADMIN_CUSTOMERS)}
+          // Takes the admin to the Customer Management list.
         />
 
         <StatsCard
@@ -87,6 +102,12 @@ const AdminDashboard = () => {
           icon={<AiOutlineClockCircle />}
           iconBg="bg-warning-light"
           iconColor="text-warning"
+          onClick={() =>
+            navigate(`${ROUTES.ADMIN_ORDERS}?status=${ORDER_STATUS.PENDING}`)
+          }
+          // Takes the admin to Order Management with the "Pending" status
+          // tab pre-selected via a query parameter, so they land directly
+          // on the filtered list instead of the unfiltered "All" view.
         />
       </div>
 

@@ -51,15 +51,12 @@ const productSchema = z
     price: z
       .string()
       .trim()
-      .min(1, "Sale price is required")
+      .min(1, "Price is required")
       .refine(
         (val) => !Number.isNaN(parseFloat(val)),
-        "Sale price must be a valid number",
+        "Price must be a valid number",
       )
-      .refine(
-        (val) => parseFloat(val) > 0,
-        "Sale price must be greater than 0",
-      ),
+      .refine((val) => parseFloat(val) > 0, "Price must be greater than 0"),
     original_price: z
       .string()
       .trim()
@@ -378,6 +375,14 @@ const ProductAdd = () => {
             register={register}
             errors={errors}
             isNewProduct={true}
+            totalStock={parseInt(watchedValues.stock, 10) || 0}
+            // The "In Stock / Out of Stock" badge inside InventorySection
+            // reads this prop, not the raw form field directly. Without
+            // passing it here, the badge always fell back to its default
+            // of 0 and showed "Out of Stock" regardless of what the admin
+            // typed into the Starting Quantity field. Parsed to a number
+            // here so a non-numeric or empty value during typing safely
+            // falls back to 0 instead of passing through as NaN.
             onRegenerateSku={handleRegenerateSku}
             onSkuBlur={checkSkuOnBlur}
           />

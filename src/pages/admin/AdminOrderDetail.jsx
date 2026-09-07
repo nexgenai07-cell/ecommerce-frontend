@@ -7,6 +7,10 @@ import {
   AiOutlineUser,
   AiOutlineFileText,
   AiOutlineRight,
+  AiOutlineBulb,
+  // Dismiss icon for the suggested-alternatives card — lets the admin
+  // close the panel once they've reviewed it, without reloading the page
+  AiOutlineClose,
 } from "react-icons/ai";
 
 import {
@@ -47,6 +51,10 @@ const STATUS_OPTIONS = [
   { value: ORDER_STATUS.PENDING, label: "Pending Payment" },
   { value: ORDER_STATUS.CONFIRMED, label: "Confirmed" },
   { value: ORDER_STATUS.SHIPPED, label: "Shipped" },
+  // Added per Bug #30 fix — backend confirmed this endpoint accepts
+  // "out_for_delivery" and enforces the same paid-only rule as
+  // Shipped/Delivered (400 if payment isn't confirmed yet)
+  { value: ORDER_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
   { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
   { value: ORDER_STATUS.CANCELLED, label: "Cancelled" },
 ];
@@ -63,6 +71,11 @@ const STATUS_OPTIONS = [
 // --------------------------------------------------
 const CARD_CLASS =
   "bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)] hover:shadow-[0_10px_24px_-6px_rgba(16,24,40,0.12)] hover:-translate-y-0.5 transition-all duration-300 p-5 sm:p-6 flex flex-col gap-4";
+
+// Local placeholder image shown whenever a suggested-alternative product
+// has no image of its own — same fallback path ProductCard.jsx already
+// uses elsewhere, kept consistent across the app
+const FALLBACK_IMAGE = "/placeholder-product.svg";
 
 const AdminOrderDetail = () => {
   // Reads the ":id" route param — in this app that's actually the
@@ -93,6 +106,13 @@ const AdminOrderDetail = () => {
   const [refundTransactionReference, setRefundTransactionReference] =
     useState("");
   const [statusFormError, setStatusFormError] = useState("");
+
+  // Alternatives the backend suggests once an order is actually cancelled
+  // (API 63 response) — e.g. similar in-stock products the admin can
+  // point the customer toward. Lives only in this component's state
+  // (not on the order object itself) because the backend sends it once,
+  // as part of the cancel response, not on every future order fetch.
+  const [suggestedAlternatives, setSuggestedAlternatives] = useState([]);
 
   // --------------------------------------------------
   // ORDER DETAIL — now uses the NEW admin-only endpoint, fixed after
@@ -145,8 +165,14 @@ const AdminOrderDetail = () => {
           refund_transaction_reference: refundTransactionReference,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (response) => {
       showSuccess("Order status updated.");
+      // The backend only ever populates this on a cancellation response
+      // (it's the "similar items" suggestion for an out-of-stock cancel),
+      // so for every other status change it will simply be missing/empty
+      // and the card below won't render. Falls back to an empty array so
+      // .length / .map() below never crash on a missing field.
+      setSuggestedAlternatives(response?.data?.suggested_alternatives || []);
       // Invalidating these three query keys forces a fresh refetch of:
       // 1) this exact order's detail (so the new status shows immediately)
       queryClient.invalidateQueries({
@@ -194,6 +220,10 @@ const AdminOrderDetail = () => {
     setStatusFormError("");
     setIsStatusModalOpen(true);
   };
+
+  // Clears the suggested-alternatives card once the admin has seen it —
+  // purely local UI state, nothing is sent back to the backend for this
+  const dismissSuggestedAlternatives = () => setSuggestedAlternatives([]);
 
   // Loading state — full-page spinner while the order detail request is
   // still in flight, shown BEFORE the header so the admin isn't looking
@@ -272,9 +302,92 @@ const AdminOrderDetail = () => {
             <p className="text-sm text-gray-400 mt-1">
               Placed on {formatDate(order.created_at)}
             </p>
+            {/* Cancellation Reason — only shown once the order is actually
+                cancelled AND a reason exists on it. Covers both cases: the
+                customer cancelling their own order with a reason, and an
+                admin cancelling it and typing one in the Update Status
+                modal above — both are stored on the same
+                order.cancellation_reason field by the backend. */}
+            {order.status === ORDER_STATUS.CANCELLED &&
+              order.cancellation_reason && (
+                <p className="text-sm text-danger mt-2">
+                  <span className="font-medium">Cancellation Reason:</span>{" "}
+                  {order.cancellation_reason}
+                </p>
+              )}
           </div>
         </div>
       </div>
+
+      {/* ================================================================
+          SUGGESTED ALTERNATIVES — only rendered right after a cancel that
+          actually came back with alternatives (API 63 response). Purely
+          session-local: it disappears on dismiss or on navigating away,
+          since the backend doesn't persist it back onto the order.
+          ================================================================ */}
+      {suggestedAlternatives.length > 0 && (
+        <div className={CARD_CLASS}>
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+            <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <AiOutlineBulb className="w-4 h-4 text-gray-400" />
+              Suggested Alternatives
+            </h3>
+            {/* Lets the admin close this card once they've reviewed it */}
+            <button
+              type="button"
+              onClick={dismissSuggestedAlternatives}
+              aria-label="Dismiss suggested alternatives"
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <AiOutlineClose className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 -mt-2">
+            This order was cancelled — here are similar in-stock products you
+            can point the customer toward.
+          </p>
+          <div className="flex flex-col divide-y divide-gray-50">
+            {suggestedAlternatives.map((alt) => (
+              <div key={alt.id} className="flex items-center gap-3 py-3">
+                {/* Reuses the same fallback pattern as ProductCard.jsx —
+                    falls back to the shared placeholder if no image is
+                    returned for this specific alternative */}
+                <img
+                  src={alt.primary_image || FALLBACK_IMAGE}
+                  alt={alt.name}
+                  className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {alt.name}
+                  </p>
+                  {/* available_stock is optional on this payload — only
+                      shown when the backend actually sends it */}
+                  {typeof alt.available_stock === "number" && (
+                    <p className="text-xs text-gray-400">
+                      {alt.available_stock} in stock
+                    </p>
+                  )}
+                </div>
+                {typeof alt.price !== "undefined" && (
+                  <p className="text-sm font-semibold text-gray-900 shrink-0">
+                    {formatPrice(alt.price)}
+                  </p>
+                )}
+                {/* Takes the admin straight to that product's edit page —
+                    same navigation target InventoryAlertsWidget.jsx uses
+                    for its own "similar product" shortcuts */}
+                <Link
+                  to={ROUTES.ADMIN_PRODUCT_EDIT.replace(":id", alt.id)}
+                  className="text-xs font-medium text-primary hover:underline shrink-0"
+                >
+                  View
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ================================================================
           MAIN CONTENT GRID — two columns on large screens (order items,

@@ -6,6 +6,11 @@ export const ORDER_STATUS = {
   PENDING: "pending_payment", // Order placed, awaiting Stripe payment confirmation
   CONFIRMED: "confirmed", // Payment succeeded (Stripe webhook) — order confirmed
   SHIPPED: "shipped", // Order has been dispatched/shipped to the customer
+  // Courier is actively delivering to the customer's address — backend
+  // confirmed (Bug #30 fix) this requires payment.status === "paid" first,
+  // same rule as SHIPPED/DELIVERED, and triggers its own customer
+  // notification ("Order {order_number} is out for delivery.")
+  OUT_FOR_DELIVERY: "out_for_delivery",
   DELIVERED: "delivered", // Order has successfully reached the customer
   CANCELLED: "cancelled", // Order was cancelled (by customer or admin)
 };
