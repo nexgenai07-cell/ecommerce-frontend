@@ -1,5 +1,3 @@
-// useState — local component state (filters, modal targets, loading flags)
-// useEffect — resets the current page back to 1 whenever a filter changes
 import { useState, useEffect } from "react";
 
 // TanStack Query hooks — data fetching, caching, and mutations
@@ -640,6 +638,16 @@ const ReturnsManagement = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isDeciding, setIsDeciding] = useState(false);
 
+  // Bulk selection — array of return ids currently checked in the
+  // table, driven by DataTable's built-in selection support. This is
+  // independent of decisionTarget above, which still drives the
+  // single-row Approve/Reject flow unchanged.
+  const [selectedReturnIds, setSelectedReturnIds] = useState([]);
+  // "approved" | "rejected" — which bulk action the confirm modal below
+  // is currently open for.
+  const [bulkAction, setBulkAction] = useState(null);
+  const [isBulkDeciding, setIsBulkDeciding] = useState(false);
+
   const debouncedSearch = useDebounce(search, 300);
   // Small delay so filtering doesn't recompute on every single keystroke.
 
@@ -677,15 +685,19 @@ const ReturnsManagement = () => {
       sortBy,
       currentPage,
     ],
-    queryFn: ({ signal }) => getReturns({
-        status: activeStatus || undefined,
-        search: debouncedSearch || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        ordering: sortBy,
-        page: currentPage,
-        page_size: PAGE_SIZE,
-      }, signal),
+    queryFn: ({ signal }) =>
+      getReturns(
+        {
+          status: activeStatus || undefined,
+          search: debouncedSearch || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          ordering: sortBy,
+          page: currentPage,
+          page_size: PAGE_SIZE,
+        },
+        signal,
+      ),
     keepPreviousData: true,
   });
 
@@ -705,19 +717,31 @@ const ReturnsManagement = () => {
   // --------------------------------------------------
   const { data: pendingCountResponse } = useQuery({
     queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.REQUESTED],
-    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.REQUESTED, page: 1, page_size: 1 }, signal),
+    queryFn: ({ signal }) =>
+      getReturns(
+        { status: RETURN_STATUS.REQUESTED, page: 1, page_size: 1 },
+        signal,
+      ),
   });
   const pendingCount = pendingCountResponse?.data?.count ?? 0;
 
   const { data: approvedCountResponse } = useQuery({
     queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.APPROVED],
-    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.APPROVED, page: 1, page_size: 1 }, signal),
+    queryFn: ({ signal }) =>
+      getReturns(
+        { status: RETURN_STATUS.APPROVED, page: 1, page_size: 1 },
+        signal,
+      ),
   });
   const approvedCount = approvedCountResponse?.data?.count ?? 0;
 
   const { data: rejectedCountResponse } = useQuery({
     queryKey: [...QUERY_KEYS.RETURNS, "count", RETURN_STATUS.REJECTED],
-    queryFn: ({ signal }) => getReturns({ status: RETURN_STATUS.REJECTED, page: 1, page_size: 1 }, signal),
+    queryFn: ({ signal }) =>
+      getReturns(
+        { status: RETURN_STATUS.REJECTED, page: 1, page_size: 1 },
+        signal,
+      ),
   });
   const rejectedCount = rejectedCountResponse?.data?.count ?? 0;
 
@@ -795,6 +819,48 @@ const ReturnsManagement = () => {
   // from the buttons inside ReturnDetailModal.
   const handleRequestDecision = (returnItem, action) => {
     setDecisionTarget({ returnItem, action });
+  };
+
+  // --------------------------------------------------
+  // BULK APPROVE / REJECT — API 53, called once per selected return
+  // (there is no bulk endpoint on the backend). Only returns still
+  // awaiting a decision are eligible: already-decided returns in the
+  // selection are left untouched and reported as skipped, rather than
+  // silently flipping a return that was already resolved.
+  // --------------------------------------------------
+  const selectedPendingReturns = visibleReturns.filter(
+    (r) =>
+      selectedReturnIds.includes(r.id) && r.status === RETURN_STATUS.REQUESTED,
+  );
+  const skippedSelectedCount =
+    selectedReturnIds.length - selectedPendingReturns.length;
+
+  const handleRequestBulkDecision = (action) => {
+    setBulkAction(action);
+  };
+
+  const handleConfirmBulkDecision = async () => {
+    setIsBulkDeciding(true);
+    try {
+      await Promise.all(
+        selectedPendingReturns.map((r) =>
+          updateReturnStatus(r.id, { status: bulkAction }),
+        ),
+      );
+      showSuccess(
+        `${selectedPendingReturns.length} return${selectedPendingReturns.length === 1 ? "" : "s"} ${bulkAction}.`,
+      );
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
+      setSelectedReturnIds([]);
+      setBulkAction(null);
+    } catch (error) {
+      showError(
+        error?.response?.data?.message ||
+          "Failed to update the selected returns.",
+      );
+    } finally {
+      setIsBulkDeciding(false);
+    }
   };
 
   // --------------------------------------------------
@@ -1100,11 +1166,54 @@ const ReturnsManagement = () => {
           RETURNS TABLE — wrapped in its own soft-shadow card so it reads
           as an elevated surface, matching the rest of the redesigned page.
           ================================================================ */}
+      {/* ================================================================
+          BULK ACTION BAR — appears only while one or more rows are
+          checked. Approve/Reject apply only to the still-pending
+          returns within the selection; the count of any already-
+          decided ones that will be skipped is shown for clarity.
+          ================================================================ */}
+      {selectedReturnIds.length > 0 && (
+        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedReturnIds.length} return
+            {selectedReturnIds.length === 1 ? "" : "s"} selected
+            {skippedSelectedCount > 0 && (
+              <span className="text-gray-400">
+                {" "}
+                ({skippedSelectedCount} already decided, will be skipped)
+              </span>
+            )}
+          </span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={selectedPendingReturns.length === 0}
+              onClick={() => handleRequestBulkDecision(RETURN_STATUS.APPROVED)}
+              className="w-full sm:w-auto"
+            >
+              Approve
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={selectedPendingReturns.length === 0}
+              onClick={() => handleRequestBulkDecision(RETURN_STATUS.REJECTED)}
+              className="w-full sm:w-auto"
+            >
+              Reject
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)]">
         <DataTable
           columns={columns}
           data={visibleReturns}
           keyField="id"
+          selectable
+          onSelectionChange={setSelectedReturnIds}
           isLoading={isLoading}
           error={isError}
           onRetry={refetch}
@@ -1154,6 +1263,28 @@ const ReturnsManagement = () => {
             : "danger"
         }
         isLoading={isDeciding}
+      />
+
+      {/* ================================================================
+          BULK APPROVE/REJECT CONFIRMATION — separate modal instance from
+          the single-row one above, driven by bulkAction/selectedReturnIds
+          instead of decisionTarget, so the two flows never interfere.
+          ================================================================ */}
+      <ConfirmModal
+        isOpen={!!bulkAction}
+        onClose={() => setBulkAction(null)}
+        onConfirm={handleConfirmBulkDecision}
+        title={
+          bulkAction === RETURN_STATUS.APPROVED
+            ? "Approve Returns?"
+            : "Reject Returns?"
+        }
+        message={`This will mark ${selectedPendingReturns.length} pending return${selectedPendingReturns.length === 1 ? "" : "s"} as ${bulkAction}. This action cannot be undone.`}
+        confirmLabel={
+          bulkAction === RETURN_STATUS.APPROVED ? "Approve" : "Reject"
+        }
+        variant={bulkAction === RETURN_STATUS.APPROVED ? "primary" : "danger"}
+        isLoading={isBulkDeciding}
       />
     </div>
   );

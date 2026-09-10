@@ -23,9 +23,9 @@ import { getCustomerDetail } from "../../api/customers.api";
 // is clicked
 
 import Avatar from "../ui/Avatar";
-import Badge from "../ui/Badge";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
+import DataTable from "../ui/DataTable";
 import formatPrice from "../../utils/formatPrice";
 
 import CustomerDetailDrawer from "../admin-customers/CustomerDetailDrawer";
@@ -39,9 +39,17 @@ const TROPHY_COLORS = ["text-warning", "text-gray-400", "text-amber-700"];
 // "tier" concept
 
 const TopCustomersTable = ({ customers, isLoading }) => {
-  const topFive = customers.slice(0, 5);
-  // topFive — only the first 5 entries of the already-sorted list are
-  // shown on this dashboard-style widget
+  // This widget is intentionally capped at the top 5 entries of the
+  // already-sorted list — it's a dashboard summary, not the full
+  // customer list, which is why it links out to "View All Customers"
+  // instead of paginating. Because there are never more than 5 rows,
+  // DataTable's own pagination controls stay hidden automatically —
+  // this migration only changes which component renders the table,
+  // not how many rows are shown.
+  const topFive = customers.slice(0, 5).map((customer, index) => ({
+    ...customer,
+    rank: index,
+  }));
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   // selectedCustomerId — which customer's eye icon was clicked; null
@@ -61,6 +69,59 @@ const TopCustomersTable = ({ customers, isLoading }) => {
     // enabled — only runs once a customer id is actually selected,
     // so opening this widget never fires an unnecessary request
   });
+
+  const columns = [
+    {
+      key: "rank",
+      label: "Rank",
+      render: (row) => (
+        <AiOutlineTrophy
+          className={`w-4 h-4 ${TROPHY_COLORS[row.rank] || "text-gray-200"}`}
+        />
+      ),
+    },
+    {
+      key: "name",
+      label: "Customer",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Avatar name={row.name} size="sm" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {row.name}
+            </p>
+            <p className="text-xs text-gray-400 truncate">{row.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "total_orders",
+      label: "Orders",
+    },
+    {
+      key: "total_spent",
+      label: "Total Spent",
+      render: (row) => (
+        <span className="font-semibold text-gray-900">
+          {formatPrice(row.total_spent)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <button
+          onClick={() => setSelectedCustomerId(row.id)}
+          className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
+          aria-label={`View ${row.name}`}
+        >
+          <AiOutlineEye className="w-4 h-4" />
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4">
@@ -90,91 +151,7 @@ const TopCustomersTable = ({ customers, isLoading }) => {
           description="Top spenders will appear here once customers place orders."
         />
       ) : (
-        // Data state — the actual ranked table of top 5 customers
-        <div className="overflow-x-auto">
-          {/* overflow-x-auto — lets the table scroll horizontally on
-              narrow screens instead of breaking the page layout */}
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Rank
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Customer
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Orders
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Total Spent
-                </th>
-                {/* "Status" column REMOVED — replaced with "Actions" below */}
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {topFive.map((customer, index) => (
-                <tr
-                  key={customer.id}
-                  // key — unique per row, required by React for list rendering
-                  className="border-b border-gray-50 hover:bg-gray-50/50"
-                  // hover:bg-gray-50/50 — subtle row highlight on hover
-                >
-                  <td className="px-3 py-3">
-                    {/* Trophy icon — colored gold/silver/bronze for the
-                        top 3 ranks, plain gray for ranks 4 and 5 */}
-                    <AiOutlineTrophy
-                      className={`w-4 h-4 ${TROPHY_COLORS[index] || "text-gray-200"}`}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      {/* Avatar — initials-based circle using the customer's name */}
-                      <Avatar name={customer.name} size="sm" />
-                      <div className="min-w-0">
-                        {/* min-w-0 lets the truncate classes below actually
-                            work inside this flex container */}
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {customer.name}
-                        </p>
-                        <p className="text-xs text-gray-400 truncate">
-                          {customer.email}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-sm text-gray-700">
-                    {customer.total_orders}
-                    {/* Real total_orders field from the customer object */}
-                  </td>
-                  <td className="px-3 py-3 text-sm font-semibold text-gray-900">
-                    {formatPrice(customer.total_spent)}
-                    {/* Real total_spent field, formatted as currency */}
-                  </td>
-                  <td className="px-3 py-3">
-                    {/* Actions column — eye icon opens the shared detail
-                        drawer for this exact customer, same behaviour as
-                        the /admin/customers page's Actions column */}
-                    <button
-                      onClick={() => setSelectedCustomerId(customer.id)}
-                      // Sets this row's id as selected, which triggers the
-                      // detail query above and opens the drawer below
-                      className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
-                      // Same icon-button styling used on the main Customers page
-                      aria-label={`View ${customer.name}`}
-                      // Screen-reader label since the button only shows an icon
-                    >
-                      <AiOutlineEye className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={columns} data={topFive} keyField="id" />
       )}
 
       {/* Detail drawer — same shared component used on /admin/customers,

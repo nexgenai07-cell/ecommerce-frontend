@@ -50,6 +50,24 @@ const QrPaymentQueue = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectReasonError, setRejectReasonError] = useState("");
 
+  // Bulk selection — array of order_number values currently checked in
+  // the table, driven by DataTable's built-in selection support. This
+  // is independent of approveTarget/rejectTarget above, which still
+  // drive the single-row Approve/Reject flow unchanged.
+  const [selectedOrderNumbers, setSelectedOrderNumbers] = useState([]);
+
+  // Bulk approve confirmation state.
+  const [confirmBulkApproveOpen, setConfirmBulkApproveOpen] = useState(false);
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
+
+  // Bulk reject state — a single shared reason is required and applied
+  // to every selected order, since rejectQrPayment() has no way to
+  // accept a different reason per order in one request.
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState("");
+  const [bulkRejectReasonError, setBulkRejectReasonError] = useState("");
+  const [isBulkRejecting, setIsBulkRejecting] = useState(false);
+
   // =============================================
   // GET QR PENDING PAYMENTS — GET /api/v1/admin/payments/qr/pending/
   // =============================================
@@ -111,6 +129,70 @@ const QrPaymentQueue = () => {
       orderNumber: rejectTarget,
       reason: rejectReason.trim(),
     });
+  };
+
+  // =============================================
+  // BULK APPROVE — same approve endpoint, called once per selected
+  // order (there is no bulk endpoint on the backend).
+  // =============================================
+  const handleConfirmBulkApprove = async () => {
+    setIsBulkApproving(true);
+    try {
+      await Promise.all(
+        selectedOrderNumbers.map((orderNumber) =>
+          approveQrPayment(orderNumber),
+        ),
+      );
+      showSuccess(
+        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} approved.`,
+      );
+      invalidateQueue();
+      setSelectedOrderNumbers([]);
+      setConfirmBulkApproveOpen(false);
+    } catch (error) {
+      showError(
+        error?.response?.data?.message ||
+          "Failed to approve the selected payments.",
+      );
+    } finally {
+      setIsBulkApproving(false);
+    }
+  };
+
+  // =============================================
+  // BULK REJECT — same reject endpoint, called once per selected order
+  // with the one shared reason typed below. The reason is mandatory —
+  // the backend 400s without it, same as the single-row flow.
+  // =============================================
+  const handleConfirmBulkReject = async () => {
+    if (!bulkRejectReason.trim()) {
+      setBulkRejectReasonError(
+        "A reason is required to reject these payments.",
+      );
+      return;
+    }
+    setIsBulkRejecting(true);
+    try {
+      await Promise.all(
+        selectedOrderNumbers.map((orderNumber) =>
+          rejectQrPayment(orderNumber, bulkRejectReason.trim()),
+        ),
+      );
+      showSuccess(
+        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} rejected. Customers have been notified.`,
+      );
+      invalidateQueue();
+      setSelectedOrderNumbers([]);
+      setBulkRejectOpen(false);
+      setBulkRejectReason("");
+    } catch (error) {
+      showError(
+        error?.response?.data?.message ||
+          "Failed to reject the selected payments.",
+      );
+    } finally {
+      setIsBulkRejecting(false);
+    }
   };
 
   const columns = [
@@ -225,11 +307,51 @@ const QrPaymentQueue = () => {
     <div className="flex flex-col gap-6">
       <PageHeader icon={<AiOutlineQrcode />} title="QR Payment Verification" />
 
+      {/* Bulk action bar — appears only while one or more rows are
+          checked. Approve applies immediately per order; Reject opens
+          a modal for the one shared reason sent to every selected
+          order (the backend requires a reason and has no per-order
+          bulk variant). */}
+      {selectedOrderNumbers.length > 0 && (
+        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedOrderNumbers.length} payment
+            {selectedOrderNumbers.length === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<HiOutlineCheck className="w-3.5 h-3.5" />}
+              onClick={() => setConfirmBulkApproveOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              Approve
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              leftIcon={<HiOutlineXMark className="w-3.5 h-3.5" />}
+              onClick={() => {
+                setBulkRejectReason("");
+                setBulkRejectReasonError("");
+                setBulkRejectOpen(true);
+              }}
+              className="w-full sm:w-auto"
+            >
+              Reject
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)]">
         <DataTable
           columns={columns}
           data={payments}
           keyField="order_number"
+          selectable
+          onSelectionChange={setSelectedOrderNumbers}
           isLoading={isLoading}
           error={isError}
           onRetry={refetch}
@@ -292,6 +414,68 @@ const QrPaymentQueue = () => {
               isLoading={rejectMutation.isPending}
             >
               Reject Payment
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk approve confirmation — separate modal instance from the
+          single-row one above, driven by selectedOrderNumbers instead
+          of approveTarget, so the two flows never interfere. */}
+      <ConfirmModal
+        isOpen={confirmBulkApproveOpen}
+        onClose={() => setConfirmBulkApproveOpen(false)}
+        onConfirm={handleConfirmBulkApprove}
+        title="Approve these payments?"
+        message={`${selectedOrderNumbers.length} order${selectedOrderNumbers.length === 1 ? "" : "s"} will be marked as paid and confirmed. This releases each order's reserved stock into a final sale.`}
+        confirmLabel="Approve"
+        variant="primary"
+        isLoading={isBulkApproving}
+      />
+
+      {/* Bulk reject — one shared reason is required and sent to every
+          selected order. */}
+      <Modal
+        isOpen={bulkRejectOpen}
+        onClose={() => setBulkRejectOpen(false)}
+        title="Reject Selected Payments"
+        size="sm"
+        closeOnBackdrop={!isBulkRejecting}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-500">
+            <span className="font-semibold text-gray-800">
+              {selectedOrderNumbers.length} order
+              {selectedOrderNumbers.length === 1 ? "" : "s"}
+            </span>{" "}
+            will stay pending — each customer can re-upload a corrected
+            screenshot. This same reason is sent to all of them.
+          </p>
+          <Textarea
+            label="Reason for rejection"
+            required
+            placeholder="e.g. Screenshot doesn't match the order amount"
+            value={bulkRejectReason}
+            onChange={(e) => {
+              setBulkRejectReason(e.target.value);
+              if (e.target.value.trim()) setBulkRejectReasonError("");
+            }}
+            error={bulkRejectReasonError}
+          />
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => setBulkRejectOpen(false)}
+              disabled={isBulkRejecting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmBulkReject}
+              isLoading={isBulkRejecting}
+            >
+              Reject Payments
             </Button>
           </div>
         </div>

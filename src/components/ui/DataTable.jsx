@@ -1,9 +1,3 @@
-// Reusable DataTable component — main table component for the admin panel
-// Search, filter, sort, pagination, and bulk select are all built-in
-// Only needs a columns config array and a data array from outside
-// Used for products, orders, customers, discounts — everywhere
-// Fully responsive — horizontally scrollable on mobile
-
 import { useState } from "react";
 // useState — manages local state for search input, sort config, and selected row ids
 
@@ -197,9 +191,12 @@ const DataTable = ({
       )}
 
       {/* Table wrapper — enables horizontal scroll on mobile when table is wider than screen */}
-      <div className="w-full overflow-x-auto rounded-xl border border-gray-100">
+      <div className="w-full overflow-x-auto rounded-xl border border-gray-100 scrollbar-hide">
         {/* overflow-x-auto: allows the table to scroll horizontally on narrow viewports */}
         {/* rounded-xl + border: card-style container wrapping the entire table */}
+        {/* scrollbar-hide: hides the native scrollbar, matching every other
+            horizontally-scrollable element in the app (still fully scrollable,
+            just no visible scrollbar track) */}
 
         <table className="w-full text-sm">
           {/* w-full: table stretches to fill the scroll container */}

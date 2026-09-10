@@ -16,11 +16,17 @@ import {
 // filter card, and table actions comes from this single icon set so
 // the whole page keeps one consistent visual language.
 
-import { getAdminOrders, filterAdminOrders } from "../../api/orders.api";
+import {
+  getAdminOrders,
+  filterAdminOrders,
+  updateOrderStatus,
+} from "../../api/orders.api";
 // getAdminOrders    — API 47: GET /api/v1/admin/orders/ (no filters active)
 // filterAdminOrders — API 48: GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
 // Both now correctly forward `page`, and `ordering` is confirmed
 // working on the filter endpoint (see the backend fix notes below).
+// updateOrderStatus — API 49: PUT /api/v1/admin/orders/{id}/status/, used
+// below to drive the bulk status-update action bar.
 
 import { exportReport } from "../../api/analytics.api";
 // exportReport — `type: "orders"` is now a confirmed accepted value
@@ -36,6 +42,7 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already used
@@ -73,6 +80,21 @@ const SORT_OPTIONS = [
   { value: "total_amount", label: "Amount: Low to High" },
   { value: "order_number", label: "Order Number: A-Z" },
   { value: "-order_number", label: "Order Number: Z-A" },
+];
+
+// --------------------------------------------------
+// BULK STATUS OPTIONS — the subset of ORDER_STATUS values that are
+// safe to apply in bulk with a single click. PENDING is excluded
+// because it isn't a forward transition, and CANCELLED is excluded
+// because updateOrderStatus() requires a cancellation_reason (and, for
+// QR-paid orders, manual refund details) that only makes sense
+// collected per order, not applied identically to a mixed batch.
+// --------------------------------------------------
+const BULK_STATUS_OPTIONS = [
+  { value: ORDER_STATUS.CONFIRMED, label: "Confirmed" },
+  { value: ORDER_STATUS.SHIPPED, label: "Shipped" },
+  { value: ORDER_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
+  { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
 ];
 
 const PAGE_SIZE = 10;
@@ -132,6 +154,17 @@ const OrderManagement = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Bulk selection — array of order_number values currently checked in
+  // the table, driven by DataTable's built-in selection support.
+  const [selectedOrderNumbers, setSelectedOrderNumbers] = useState([]);
+  // Which status the bulk action bar's dropdown currently has chosen —
+  // sent as the target status when the admin confirms the bulk update.
+  const [bulkTargetStatus, setBulkTargetStatus] = useState(
+    ORDER_STATUS.SHIPPED,
+  );
+  const [confirmBulkStatusOpen, setConfirmBulkStatusOpen] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
   const debouncedPhoneSearch = useDebounce(phoneSearch, 400);
@@ -260,6 +293,40 @@ const OrderManagement = () => {
       showError("Failed to export orders. Please try again.");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // BULK STATUS UPDATE — API 49, called once per selected order (there
+  // is no bulk endpoint on the backend). Uses Promise.allSettled so one
+  // failing order doesn't stop the rest of the batch from going
+  // through, then reports how many succeeded and how many failed.
+  // --------------------------------------------------
+  const handleBulkStatusUpdate = async () => {
+    setIsBulkUpdating(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedOrderNumbers.map((orderNumber) =>
+          updateOrderStatus(orderNumber, { status: bulkTargetStatus }),
+        ),
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+
+      if (succeeded > 0) {
+        showSuccess(
+          `${succeeded} order${succeeded === 1 ? "" : "s"} updated to "${bulkTargetStatus}".${failed > 0 ? ` ${failed} failed.` : ""}`,
+        );
+      }
+      if (succeeded === 0) {
+        showError("Failed to update the selected orders.");
+      }
+
+      refetch();
+      setSelectedOrderNumbers([]);
+      setConfirmBulkStatusOpen(false);
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -451,6 +518,37 @@ const OrderManagement = () => {
       </div>
 
       {/* ================================================================
+          BULK ACTION BAR — appears only while one or more rows are
+          checked. Lets the admin move every selected order to the same
+          target status in one action. Stacks vertically on narrow
+          screens, sits on one line from the small breakpoint upward.
+          ================================================================ */}
+      {selectedOrderNumbers.length > 0 && (
+        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedOrderNumbers.length} order
+            {selectedOrderNumbers.length === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Select
+              options={BULK_STATUS_OPTIONS}
+              value={bulkTargetStatus}
+              onChange={(e) => setBulkTargetStatus(e.target.value)}
+              className="sm:w-48"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setConfirmBulkStatusOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              Update Status
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================
           ORDERS TABLE
           ================================================================ */}
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)]">
@@ -458,6 +556,8 @@ const OrderManagement = () => {
           columns={columns}
           data={visibleOrders}
           keyField="order_number"
+          selectable
+          onSelectionChange={setSelectedOrderNumbers}
           isLoading={isLoading}
           error={isError}
           onRetry={refetch}
@@ -467,6 +567,20 @@ const OrderManagement = () => {
           onPageChange={setCurrentPage}
         />
       </div>
+
+      {/* ================================================================
+          BULK STATUS UPDATE CONFIRMATION
+          ================================================================ */}
+      <ConfirmModal
+        isOpen={confirmBulkStatusOpen}
+        onClose={() => setConfirmBulkStatusOpen(false)}
+        onConfirm={handleBulkStatusUpdate}
+        title="Update Order Status?"
+        message={`This will move ${selectedOrderNumbers.length} order${selectedOrderNumbers.length === 1 ? "" : "s"} to "${bulkTargetStatus}" and notify each customer. Orders that aren't eligible for this transition will be skipped and reported individually.`}
+        confirmLabel="Update Status"
+        variant="primary"
+        isLoading={isBulkUpdating}
+      />
     </div>
   );
 };

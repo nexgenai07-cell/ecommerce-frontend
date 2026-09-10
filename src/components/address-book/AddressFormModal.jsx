@@ -1,6 +1,3 @@
-// ============================================================
-// ADDRESS FORM MODAL
-// ============================================================
 // Shared "Add Address" / "Edit Address" modal used by the Address
 // Book page and reused from Checkout's "add new address" flow.
 // Handles both create and edit in one component — when
@@ -47,13 +44,20 @@ const addressSchema = z.object({
     .trim()
     .min(1, "Address is required")
     .min(5, "Please enter a complete address")
-    .max(150, "Address is too long"),
+    .max(150, "Address is too long")
+    .regex(
+      /^[A-Za-z0-9\s,.#/'-]+$/,
+      "Address can only contain letters, numbers, and , . # / ' -",
+    )
+    .refine((val) => /[A-Za-z]/.test(val), "Please enter a complete address")
+    .refine((val) => !/(.)\1{3,}/.test(val), "Please enter a valid address"),
   city: z
     .string()
     .trim()
     .min(1, "City is required")
     .max(60, "City name is too long")
-    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters"),
+    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters")
+    .refine((val) => !/(.)\1{3,}/.test(val), "Please enter a valid city name"),
   province: z.string().trim().optional(),
   // Optional on the backend — but if the customer does type something,
   // it should still look like a real Pakistani postal code.
@@ -65,7 +69,9 @@ const addressSchema = z.object({
       (val) => !val || /^\d{5}$/.test(val),
       "Postal code must be exactly 5 digits",
     ),
-  // Optional on the backend — validated only when non-empty.
+  // Optional on the backend — validated only when non-empty. Anchored
+  // regex already rejects letters/symbols outright since the whole
+  // string has to match the digits-only pattern.
   phone: z
     .string()
     .trim()
@@ -73,6 +79,10 @@ const addressSchema = z.object({
     .refine(
       (val) => !val || /^(\+92|0)[0-9]{10}$/.test(val),
       "Invalid Pakistani phone number",
+    )
+    .refine(
+      (val) => !val || !/(\d)\1{5,}/.test(val),
+      "Please enter a valid phone number",
     ),
   is_default: z.boolean().optional(),
 });
@@ -308,9 +318,17 @@ const AddressFormModal = ({
           </label>
           <input
             type="tel"
+            inputMode="tel"
+            maxLength={13}
             placeholder="03XXXXXXXXX"
             autoComplete="tel"
             {...register("phone")}
+            onChange={(e) => {
+              e.target.value = e.target.value
+                .replace(/[^\d+]/g, "")
+                .replace(/(?!^)\+/g, "");
+              register("phone").onChange(e);
+            }}
             className={`
               w-full px-4 py-2.5 text-sm rounded-xl border bg-white
               placeholder:text-gray-300 text-gray-900

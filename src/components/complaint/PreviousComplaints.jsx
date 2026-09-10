@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ROUTES } from "../../constants/routes";
-// Import filter, download, and left/right arrow icons from the react-icons Ant Design icon set
+// Import filter and download icons from the react-icons Ant Design icon set
 import { AiOutlineFilter, AiOutlineDownload } from "react-icons/ai";
 // Import a history-clock icon for the gradient header badge, from the "bs" (Bootstrap) icon set
 import { BsClockHistory } from "react-icons/bs";
@@ -19,9 +19,10 @@ import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 import formatDate from "../../utils/formatDate";
 // Import a utility function "cn" used to conditionally join/merge Tailwind class names
 import cn from "../../utils/cn";
-// Import the shared numbered Pagination component used everywhere else in
-// the app — replaces the old arrow-only Prev/Next buttons below
-import Pagination from "../ui/Pagination";
+// Import the shared DataTable component used across the admin panel — the
+// table and its numbered pagination footer are now both driven by this,
+// instead of a plain <table> plus a separately-rendered Pagination control
+import DataTable from "../ui/DataTable";
 
 // Status badge colors
 // Define a lookup object mapping each complaint status to its display label and badge styling classes
@@ -77,7 +78,7 @@ const PreviousComplaints = () => {
   // Calculate the total number of complaints fetched
   const totalComplaints = allComplaints.length;
   // Calculate the total number of pages needed based on total complaints and how many fit per page (rounded up)
-  const totalPages = Math.ceil(totalComplaints / PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(totalComplaints / PER_PAGE));
 
   // Paginated complaints
   // Slice the full complaints array down to just the items that belong on the current page
@@ -85,6 +86,87 @@ const PreviousComplaints = () => {
     (currentPage - 1) * PER_PAGE,
     currentPage * PER_PAGE,
   );
+
+  // Table column configuration for DataTable
+  const columns = [
+    {
+      key: "id",
+      label: "ID",
+      // Cell displaying the complaint's ID, prefixed with "#CP-" for a ticket-style format
+      render: (row) => (
+        <span className="font-semibold text-gray-800 whitespace-nowrap">
+          #CP-{row.id}
+        </span>
+      ),
+    },
+    {
+      key: "type",
+      label: "Type",
+      // Cell displaying the complaint's type, with capitalized first letter styling
+      render: (row) => (
+        <span className="text-gray-500 capitalize whitespace-nowrap">
+          {row.type}
+        </span>
+      ),
+    },
+    {
+      key: "subject",
+      label: "Subject",
+      className: "max-w-50",
+      // Cell displaying a short subject preview, capped at a max width.
+      // Paragraph clamped to a single line (with ellipsis if too long);
+      // strips the "Subject: " label the form prepends server-side,
+      // showing only the actual subject content
+      render: (row) => (
+        <p className="text-gray-600 line-clamp-1">
+          {row.message?.split("\n")[0]?.replace(/^Subject:\s*/i, "") ||
+            row.message}
+        </p>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (row) => {
+        // Look up the styling/label config for this complaint's status,
+        // falling back to the "OPEN" config if status is unrecognized
+        const statusConfig =
+          STATUS_CONFIG[row.status] || STATUS_CONFIG[COMPLAINT_STATUS.OPEN];
+        return (
+          <span
+            className={cn(
+              "px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wide whitespace-nowrap",
+              statusConfig.className,
+            )}
+          >
+            {statusConfig.label}
+          </span>
+        );
+      },
+    },
+    {
+      key: "created_at",
+      label: "Date",
+      render: (row) => (
+        <span className="text-gray-400 whitespace-nowrap">
+          {formatDate(row.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Action",
+      // Navigates to the Complaint Detail page (API 56) for this specific complaint
+      render: (row) => (
+        <Link
+          to={ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", row.id)}
+          className="text-sm text-primary font-semibold hover:underline whitespace-nowrap"
+        >
+          View
+        </Link>
+      ),
+    },
+  ];
 
   // If data has finished loading and there are no complaints at all, render nothing (hide this component entirely)
   if (!isLoading && allComplaints.length === 0) return null;
@@ -147,118 +229,14 @@ const PreviousComplaints = () => {
           ))}
         </div>
       ) : (
-        // Wrapper enabling horizontal scrolling for the table on narrow screens, so columns don't break the layout;
-        // shows a native scrollbar so the user knows there's more content to scroll to
-        <div className="overflow-x-auto">
-          {/* The actual table element, taking full width with small base text size */}
-          <table className="w-full text-sm">
-            {/* Table header section */}
-            <thead>
-              {/* Header row — soft gradient tint instead of a flat gray, ties into the page's brand color */}
-              <tr className="border-b border-gray-100 bg-linear-to-r from-primary-50/60 to-transparent">
-                {/* Map over an array of column title strings to render one header cell per column (last one is the "View" action column) */}
-                {["ID", "Type", "Subject", "Status", "Date", "Action"].map(
-                  (col) => (
-                    <th
-                      key={col}
-                      className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            {/* Table body section, with thin divider lines between each row */}
-            <tbody className="divide-y divide-gray-50">
-              {/* Map over the current page's complaints to render one table row per complaint */}
-              {paginatedComplaints.map((complaint) => {
-                // Look up the styling/label config for this complaint's status, falling back to the "OPEN" config if status is unrecognized
-                const statusConfig =
-                  STATUS_CONFIG[complaint.status] ||
-                  STATUS_CONFIG[COMPLAINT_STATUS.OPEN];
-
-                // Return the JSX for this individual complaint's table row
-                return (
-                  <tr
-                    key={complaint.id}
-                    // Row hover now tints emerald instead of plain gray, tying it back to the brand color
-                    className="hover:bg-primary-50/40 transition-colors duration-150"
-                  >
-                    {/* ID */}
-                    {/* Cell displaying the complaint's ID, prefixed with "#CP-" for a ticket-style format */}
-                    <td className="px-5 py-4 font-semibold text-gray-800 whitespace-nowrap">
-                      #CP-{complaint.id}
-                    </td>
-
-                    {/* Type */}
-                    {/* Cell displaying the complaint's type, with capitalized first letter styling */}
-                    <td className="px-5 py-4 text-gray-500 capitalize whitespace-nowrap">
-                      {complaint.type}
-                    </td>
-
-                    {/* Subject — from message */}
-                    {/* Cell displaying a short subject preview, capped at a max width */}
-                    <td className="px-5 py-4 text-gray-600 max-w-50">
-                      {/* Paragraph clamped to a single line (with ellipsis if too long); strips the "Subject: " label the form prepends server-side, showing only the actual subject content */}
-                      <p className="line-clamp-1">
-                        {complaint.message
-                          ?.split("\n")[0]
-                          ?.replace(/^Subject:\s*/i, "") || complaint.message}
-                      </p>
-                    </td>
-
-                    {/* Status badge */}
-                    {/* Cell containing the status badge */}
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      {/* Pill-shaped badge showing the status label, with dynamic coloring based on the statusConfig looked up above */}
-                      <span
-                        className={cn(
-                          "px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wide",
-                          statusConfig.className,
-                        )}
-                      >
-                        {statusConfig.label}
-                      </span>
-                    </td>
-
-                    {/* Date */}
-                    {/* Cell displaying the complaint's creation date, formatted via the formatDate utility */}
-                    <td className="px-5 py-4 text-gray-400 whitespace-nowrap">
-                      {formatDate(complaint.created_at)}
-                    </td>
-
-                    {/* View link */}
-                    {/* Navigates to the Complaint Detail page (API 56) for this specific complaint */}
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      <Link
-                        to={ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(
-                          ":id",
-                          complaint.id,
-                        )}
-                        className="text-sm text-primary font-semibold hover:underline"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination footer — same numbered Pagination component used
-          everywhere else in the app instead of plain arrow-only Prev/Next.
-          Only rendered once loading has actually finished (kept from the
-          original gating) — Pagination itself hides when totalPages <= 1,
-          so an empty/zero-complaint state shows no footer at all. */}
-      {!isLoading && (
-        <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/30">
-          <Pagination
+        <div className="p-4">
+          <DataTable
+            columns={columns}
+            data={paginatedComplaints}
+            keyField="id"
             currentPage={currentPage}
             totalPages={totalPages}
+            totalResults={totalComplaints}
             onPageChange={setCurrentPage}
           />
         </div>

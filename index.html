@@ -30,6 +30,14 @@
       rel="stylesheet"
     />
     <!-- Loads two Google Fonts: Inter (weights 400/500/600/700 for UI text) and JetBrains Mono (weights 400/500 for code display); display=swap prevents invisible text during font load -->
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Google Identity Services (GIS) library: provides window.google.accounts.id, -->
+    <!-- which is used on the Login and Register pages to render the official Google -->
+    <!-- Sign-In button and to handle the OAuth ID token exchange. Loaded with -->
+    <!-- async/defer so it never blocks the initial page render; the Google Sign-In -->
+    <!-- hook (src/hooks/useGoogleSignIn.js) safely waits for this script to finish -->
+    <!-- loading before it tries to use it. -->
   </head>
   <body>
     <!-- Body section: contains everything visible on the page -->

@@ -1,6 +1,3 @@
-// ============================================================
-// RecentPostsPerformanceTable — SOCIAL DASHBOARD SUB-COMPONENT
-// ============================================================
 // Shows the most recent posts with real engagement data — for a SMALL
 // bounded list like this (5-10 rows), fetching each post's real
 // Analytics (API 86) individually is a reasonable, real technique
@@ -28,6 +25,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import Badge from "../ui/Badge";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
+import DataTable from "../ui/DataTable";
 
 const STATUS_VARIANT = {
   [SOCIAL_POST_STATUS.PUBLISHED]: "success",
@@ -65,6 +63,94 @@ const RecentPostsPerformanceTable = () => {
     .forEach((post, index) => {
       analyticsByPostId[post.id] = analyticsQueries[index]?.data?.data;
     });
+
+  // Each post is paired with its own analytics (if any) before being
+  // handed to DataTable, so the Engagement and Reach columns can read
+  // row.analytics directly instead of looking it up separately.
+  const tableRows = recentPosts.map((post) => ({
+    ...post,
+    analytics: analyticsByPostId[post.id],
+  }));
+
+  const columns = [
+    {
+      key: "caption",
+      label: "Post Preview",
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <img
+            src={row.image_url || "/placeholder-product.svg"}
+            alt=""
+            className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+          />
+          <p className="text-gray-900 truncate max-w-[180px]">{row.caption}</p>
+        </div>
+      ),
+    },
+    {
+      key: "platform",
+      label: "Platform",
+      // Rendered explicitly (rather than via a column-level className)
+      // so the "capitalize" styling only ever touches this cell's text
+      // and never the header label above it, which already has its
+      // own fixed "uppercase" styling from DataTable.
+      render: (row) => <span className="capitalize">{row.platform}</span>,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (row) => (
+        <Badge
+          label={row.status}
+          variant={STATUS_VARIANT[row.status] || "gray"}
+          size="sm"
+          rounded
+        />
+      ),
+    },
+    {
+      key: "engagement",
+      label: "Engagement",
+      render: (row) =>
+        row.analytics ? (
+          <>
+            <span className="font-medium">{row.analytics.likes}</span> likes,{" "}
+            <span className="font-medium">{row.analytics.comments}</span> comm.
+          </>
+        ) : (
+          <span className="text-gray-300">—</span>
+        ),
+    },
+    {
+      key: "reach",
+      label: "Reach",
+      render: (row) =>
+        row.analytics ? (
+          row.analytics.reach
+        ) : (
+          <span className="text-gray-300">—</span>
+        ),
+    },
+    {
+      key: "scheduled_at",
+      label: "Date",
+      render: (row) => (row.scheduled_at ? formatDate(row.scheduled_at) : "—"),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: () => (
+        <div className="flex items-center gap-1">
+          <Link
+            to={ROUTES.ADMIN_SOCIAL_POSTS}
+            className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
+          >
+            <AiOutlineEye className="w-4 h-4" />
+          </Link>
+        </div>
+      ),
+    },
+  ];
 
   const handleExport = async () => {
     try {
@@ -105,7 +191,7 @@ const RecentPostsPerformanceTable = () => {
         <div className="py-16 flex items-center justify-center">
           <Spinner size="lg" />
         </div>
-      ) : recentPosts.length === 0 ? (
+      ) : tableRows.length === 0 ? (
         <div className="py-8">
           <EmptyState
             variant="noResults"
@@ -114,103 +200,8 @@ const RecentPostsPerformanceTable = () => {
           />
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Post Preview
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Platform
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Engagement
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Reach
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Date
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentPosts.map((post) => {
-                const analytics = analyticsByPostId[post.id];
-                return (
-                  <tr
-                    key={post.id}
-                    className="border-b border-gray-50 hover:bg-gray-50/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={post.image_url || "/placeholder-product.svg"}
-                          alt=""
-                          className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
-                        />
-                        <p className="text-sm text-gray-900 truncate max-w-[180px]">
-                          {post.caption}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                      {post.platform}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        label={post.status}
-                        variant={STATUS_VARIANT[post.status] || "gray"}
-                        size="sm"
-                        rounded
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {analytics ? (
-                        <>
-                          <span className="font-medium">{analytics.likes}</span>{" "}
-                          likes,{" "}
-                          <span className="font-medium">
-                            {analytics.comments}
-                          </span>{" "}
-                          comm.
-                        </>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {analytics ? (
-                        analytics.reach
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {post.scheduled_at ? formatDate(post.scheduled_at) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Link
-                          to={ROUTES.ADMIN_SOCIAL_POSTS}
-                          className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
-                        >
-                          <AiOutlineEye className="w-4 h-4" />
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="p-4">
+          <DataTable columns={columns} data={tableRows} keyField="id" />
         </div>
       )}
     </div>

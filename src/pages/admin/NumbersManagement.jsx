@@ -15,6 +15,7 @@ import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import Avatar from "../../components/ui/Avatar";
 import StatsCard from "../../components/ui/StatsCard";
+import DataTable from "../../components/ui/DataTable";
 import ManualEntryModal from "../../components/admin-whatsapp/ManualEntryModal";
 
 const PAGE_SIZE = 10;
@@ -22,6 +23,7 @@ const PAGE_SIZE = 10;
 const NumbersManagement = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // --------------------------------------------------
@@ -49,7 +51,8 @@ const NumbersManagement = () => {
   const customerLookupQueries = useQueries({
     queries: allSessions.map((session) => ({
       queryKey: ["whatsappNumbers", "customerLookup", session.phone_number],
-      queryFn: ({ signal }) => getCustomers({ search: session.phone_number, page_size: 1 }, signal),
+      queryFn: ({ signal }) =>
+        getCustomers({ search: session.phone_number, page_size: 1 }, signal),
       staleTime: 1000 * 60 * 5,
     })),
   });
@@ -82,7 +85,27 @@ const NumbersManagement = () => {
       })
     : allSessions;
 
-  const visibleSessions = filteredSessions.slice(0, PAGE_SIZE);
+  // Real pagination over the filtered list. Previously this always
+  // took the first PAGE_SIZE rows of filteredSessions regardless of
+  // page, so anything past row 10 was permanently unreachable. The
+  // slice now moves with currentPage, matching how every other admin
+  // table in this project paginates.
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredSessions.length / PAGE_SIZE),
+  );
+  const visibleSessions = filteredSessions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    // A new search term changes which rows match, so the page count
+    // can shrink. Resetting to page 1 avoids landing on a page number
+    // that no longer exists for the new filtered result set.
+    setCurrentPage(1);
+  };
 
   // Real per-row chat count — only for the small, currently-VISIBLE
   // page of rows (not all sessions at once), matching the same
@@ -90,21 +113,83 @@ const NumbersManagement = () => {
   const chatCountQueries = useQueries({
     queries: visibleSessions.map((session) => ({
       queryKey: ["whatsappNumbers", "chatCount", session.phone_number],
-      queryFn: ({ signal }) => getWhatsAppLogs({ phone_number: session.phone_number }, signal),
+      queryFn: ({ signal }) =>
+        getWhatsAppLogs({ phone_number: session.phone_number }, signal),
     })),
   });
 
+  // Rows are pre-enriched with the customer record and chat count
+  // before being handed to DataTable, so each column's render function
+  // can read everything it needs straight off the row object.
+  const tableRows = visibleSessions.map((session, index) => ({
+    ...session,
+    customer: findCustomer(session.phone_number),
+    chatCount: extractListData(chatCountQueries[index]?.data).length,
+  }));
+
+  const columns = [
+    {
+      key: "customer",
+      label: "Customer",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Avatar name={row.customer?.name || row.phone_number} size="sm" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {row.customer?.name || "Unknown"}
+            </p>
+            {row.customer?.email && (
+              <p className="text-xs text-gray-400 truncate">
+                {row.customer.email}
+              </p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "phone_number",
+      label: "Phone Number",
+    },
+    {
+      key: "chatCount",
+      label: "Total Chats",
+    },
+    {
+      key: "last_active",
+      label: "Last Active",
+      render: (row) => formatRelativeTime(row.last_active),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: () => (
+        <Badge label="Active" variant="success" size="sm" rounded />
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <button
+          onClick={() => navigate(ROUTES.ADMIN_WHATSAPP_LOGS)}
+          className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
+          aria-label="View conversation"
+        >
+          <AiOutlineEye className="w-4 h-4" />
+        </button>
+      ),
+    },
+  ];
+
   const handleExport = () => {
     downloadCsv(
-      visibleSessions.map((session, index) => {
-        const customer = findCustomer(session.phone_number);
-        return {
-          name: customer?.name || "Unknown",
-          phone: session.phone_number,
-          total_chats: extractListData(chatCountQueries[index]?.data).length,
-          last_active: session.last_active,
-        };
-      }),
+      tableRows.map((row) => ({
+        name: row.customer?.name || "Unknown",
+        phone: row.phone_number,
+        total_chats: row.chatCount,
+        last_active: row.last_active,
+      })),
       [
         { key: "name", label: "Customer" },
         { key: "phone", label: "Phone Number" },
@@ -165,97 +250,20 @@ const NumbersManagement = () => {
         <Input
           placeholder="Filter by name or number..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearchChange}
         />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Customer
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Phone Number
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Total Chats
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Last Active
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleSessions.map((session, index) => {
-                const customer = findCustomer(session.phone_number);
-                const chatCount = extractListData(
-                  chatCountQueries[index]?.data,
-                ).length;
-                return (
-                  <tr
-                    key={session.phone_number}
-                    className="border-b border-gray-50 hover:bg-gray-50/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          name={customer?.name || session.phone_number}
-                          size="sm"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {customer?.name || "Unknown"}
-                          </p>
-                          {customer?.email && (
-                            <p className="text-xs text-gray-400 truncate">
-                              {customer.email}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {session.phone_number}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {chatCount}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {formatRelativeTime(session.last_active)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        label="Active"
-                        variant="success"
-                        size="sm"
-                        rounded
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(ROUTES.ADMIN_WHATSAPP_LOGS)}
-                        className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
-                        aria-label="View conversation"
-                      >
-                        <AiOutlineEye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={columns}
+        data={tableRows}
+        keyField="phone_number"
+        isLoading={isLoading}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalResults={filteredSessions.length}
+        onPageChange={setCurrentPage}
+      />
 
       <ManualEntryModal
         isOpen={isModalOpen}

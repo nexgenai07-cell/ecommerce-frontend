@@ -1,4 +1,3 @@
-// React state + lifecycle hooks
 import { useState, useEffect } from "react";
 // React Query — used to fetch the category list from the backend
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +32,21 @@ export const DEFAULT_FILTERS = {
   minPrice: "", // Minimum price string (kept as string to match the input value)
   maxPrice: "", // Maximum price string
   inStock: false, // Whether "In Stock Only" toggle is on
+};
+
+// Bounds and step used by both the numeric inputs and the range slider below.
+const PRICE_FLOOR = 0;
+const PRICE_CEILING = 100000;
+const PRICE_STEP = 1000;
+
+// Keeps whatever the user types down to digits only, so a "-" (negative),
+// "e", "+", "." or any other character can never end up in the price
+// fields — no need to rely on native number-input validation, which lets
+// invalid characters sit in the field until blur.
+const sanitizePriceInput = (raw) => {
+  const digitsOnly = raw.replace(/[^0-9]/g, "");
+  // Drop leading zeros ("00450" -> "450") without turning "" into "0"
+  return digitsOnly.replace(/^0+(?=\d)/, "");
 };
 
 // ----------------------------------------------------------------------------
@@ -170,6 +184,71 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
     local.maxPrice ||
     local.inStock;
 
+  // Typing handlers — every keystroke is sanitized so a negative sign,
+  // decimal point, or letter can never land in the field.
+  const handleMinPriceChange = (e) => {
+    setLocal({ ...local, minPrice: sanitizePriceInput(e.target.value) });
+  };
+  const handleMaxPriceChange = (e) => {
+    setLocal({ ...local, maxPrice: sanitizePriceInput(e.target.value) });
+  };
+
+  // On blur, enforce min <= max (an empty field means "no bound" on that
+  // side, so it never gets clamped against the other one).
+  const handleMinPriceBlur = () => {
+    const min = local.minPrice === "" ? null : Number(local.minPrice);
+    const max = local.maxPrice === "" ? null : Number(local.maxPrice);
+    const newLocal =
+      min !== null && max !== null && min > max
+        ? { ...local, minPrice: String(max) }
+        : local;
+    setLocal(newLocal);
+    onFiltersChange(newLocal);
+  };
+  const handleMaxPriceBlur = () => {
+    const min = local.minPrice === "" ? null : Number(local.minPrice);
+    const max = local.maxPrice === "" ? null : Number(local.maxPrice);
+    const newLocal =
+      min !== null && max !== null && max < min
+        ? { ...local, maxPrice: String(min) }
+        : local;
+    setLocal(newLocal);
+    onFiltersChange(newLocal);
+  };
+
+  // Slider values, resolved from the (possibly empty) local price strings.
+  // An empty minPrice means the slider's lower handle sits at the floor;
+  // an empty maxPrice means the upper handle sits at the ceiling.
+  const sliderMinVal =
+    local.minPrice === ""
+      ? PRICE_FLOOR
+      : Math.min(Number(local.minPrice), PRICE_CEILING);
+  const sliderMaxVal =
+    local.maxPrice === ""
+      ? PRICE_CEILING
+      : Math.min(Number(local.maxPrice), PRICE_CEILING);
+  const minPercent = (sliderMinVal / PRICE_CEILING) * 100;
+  const maxPercent = (sliderMaxVal / PRICE_CEILING) * 100;
+
+  // Dragging the lower handle can never cross past the upper handle
+  // (kept at least one step below it), and vice versa — this is what lets
+  // any sub-range (e.g. Rs. 1000 - Rs. 2000) actually be selected.
+  const handleMinSlider = (e) => {
+    const val = Math.min(Number(e.target.value), sliderMaxVal - PRICE_STEP);
+    const newLocal = { ...local, minPrice: String(Math.max(PRICE_FLOOR, val)) };
+    setLocal(newLocal);
+    onFiltersChange(newLocal);
+  };
+  const handleMaxSlider = (e) => {
+    const val = Math.max(Number(e.target.value), sliderMinVal + PRICE_STEP);
+    const newLocal = {
+      ...local,
+      maxPrice: String(Math.min(PRICE_CEILING, val)),
+    };
+    setLocal(newLocal);
+    onFiltersChange(newLocal);
+  };
+
   return (
     // Outer panel card. On desktop this sits inside a `sticky` sidebar, so
     // `max-h-[calc(100vh-6.5rem)]` + `overflow-y-auto` makes the PANEL itself
@@ -263,20 +342,22 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
         expanded={priceExpanded}
         onToggle={() => setPriceExpanded(!priceExpanded)}
       >
-        {/* Min / Max numeric inputs */}
+        {/* Min / Max numeric inputs — plain text inputs (not type="number")
+            so every keystroke can be sanitized in JS; this is what keeps
+            a "-" out of the field instead of just failing validity on blur. */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">
               Rs.
             </span>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="0"
               value={local.minPrice}
-              // Typing only updates the local draft — no API call yet
-              onChange={(e) => setLocal({ ...local, minPrice: e.target.value })}
-              // API call fires only once the user leaves the field
-              onBlur={() => onFiltersChange(local)}
+              onChange={handleMinPriceChange}
+              onBlur={handleMinPriceBlur}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
             />
           </div>
@@ -286,31 +367,56 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
               Rs.
             </span>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="50k+"
               value={local.maxPrice}
-              onChange={(e) => setLocal({ ...local, maxPrice: e.target.value })}
-              onBlur={() => onFiltersChange(local)}
+              onChange={handleMaxPriceChange}
+              onBlur={handleMaxPriceBlur}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
             />
           </div>
         </div>
 
-        {/* Range slider — mirrors/updates the maxPrice field, applies instantly */}
-        <div className="flex flex-col gap-1.5 pt-1">
-          <input
-            type="range"
-            min="0"
-            max="100000"
-            step="1000"
-            value={local.maxPrice || 100000}
-            onChange={(e) => {
-              const newLocal = { ...local, maxPrice: e.target.value };
-              setLocal(newLocal);
-              onFiltersChange(newLocal);
-            }}
-            className="w-full accent-primary cursor-pointer"
-          />
+        {/* Dual-handle range slider — the lower handle now moves too, so a
+            sub-range like Rs. 1,000 - Rs. 2,000 is actually selectable
+            instead of the track always starting from zero. Two native
+            range inputs are stacked on top of a visual track; see
+            .price-slider rules in index.css for how only their thumbs
+            stay clickable. */}
+        <div className="flex flex-col gap-2 pt-2">
+          <div className="price-slider relative">
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-gray-100" />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-linear-to-r from-primary to-primary-dark"
+              style={{ left: `${minPercent}%`, right: `${100 - maxPercent}%` }}
+            />
+            <input
+              type="range"
+              min={PRICE_FLOOR}
+              max={PRICE_CEILING}
+              step={PRICE_STEP}
+              value={sliderMinVal}
+              onChange={handleMinSlider}
+              className="price-slider-input"
+              style={{
+                zIndex: sliderMinVal >= sliderMaxVal - PRICE_STEP ? 5 : 3,
+              }}
+              aria-label="Minimum price"
+            />
+            <input
+              type="range"
+              min={PRICE_FLOOR}
+              max={PRICE_CEILING}
+              step={PRICE_STEP}
+              value={sliderMaxVal}
+              onChange={handleMaxSlider}
+              className="price-slider-input"
+              style={{ zIndex: 4 }}
+              aria-label="Maximum price"
+            />
+          </div>
           <div className="flex justify-between text-xs text-gray-400">
             <span>Rs. 0</span>
             <span>Rs. 100k+</span>
@@ -319,25 +425,36 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
       </FilterSection>
 
       {/* ===== IN STOCK ONLY TOGGLE ===== */}
-      <div className="flex items-center justify-between pt-4">
-        <span className="flex items-center gap-2 text-sm font-bold text-gray-800">
-          <AiOutlineCheckCircle className="w-4 h-4 text-primary" />
-          In Stock Only
+      <div className="flex items-center justify-between gap-3 mt-1 pt-4">
+        <span className="flex items-center gap-2.5">
+          <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-linear-to-br from-primary to-primary-dark text-white shadow-sm shadow-primary/25 shrink-0">
+            <AiOutlineCheckCircle className="w-4 h-4" />
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-sm font-bold text-gray-800">
+              In Stock Only
+            </span>
+            <span className="text-[11px] text-gray-400">
+              Hide unavailable items
+            </span>
+          </span>
         </span>
-        {/* Custom switch — toggles the inStock boolean and applies instantly */}
+        {/* Custom "luxury" switch — see .luxury-toggle rules in index.css
+            for the gradient fill and spring-style thumb motion. */}
         <button
           onClick={() => applyFilters({ ...local, inStock: !local.inStock })}
-          className={cn(
-            "relative w-11 h-6 rounded-full transition-all duration-300 shrink-0",
-            local.inStock ? "bg-primary" : "bg-gray-200",
-          )}
+          aria-pressed={local.inStock}
+          aria-label="Toggle in stock only"
+          className={cn("luxury-toggle", local.inStock && "luxury-toggle--on")}
         >
-          <span
-            className={cn(
-              "absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300",
-              local.inStock ? "translate-x-5" : "translate-x-0.5",
-            )}
-          />
+          <span className="luxury-toggle__thumb">
+            <AiOutlineCheck
+              className={cn(
+                "luxury-toggle__icon",
+                local.inStock ? "opacity-100 scale-100" : "opacity-0 scale-50",
+              )}
+            />
+          </span>
         </button>
       </div>
     </div>

@@ -16,17 +16,22 @@ import { getBestSellers } from "../../api/analytics.api";
 // Input -> shared input component, used here twice for the two date pickers
 import Input from "../../components/ui/Input";
 
+import cn from "../../utils/cn";
+// cn — merges Tailwind class strings, used to style the active/inactive
+// quick-range chip buttons below (same helper Sales Report uses for
+// the exact same purpose)
+
 // PageHeader -> the SAME shared gradient icon + title header already
-// used on every other admin screen (Dashboard, Orders, Revenue
-// Report...). Added here so Products Performance finally matches the
-// rest of the panel instead of using its own plain <h1>.
+// used on every other admin screen (Dashboard, Orders, Sales Report,
+// Revenue Report...) — kept exactly as-is here so this page matches
+// the rest of the panel.
 import PageHeader from "../../components/shared/PageHeader";
 
-// ProductPerformanceStatsCards -> the small "Top Products Units Sold" /
-// "Best Selling Product" KPI card row
+// ProductPerformanceStatsCards -> the KPI card row (units sold,
+// total revenue, best seller)
 import ProductPerformanceStatsCards from "../../components/admin-analytics/ProductPerformanceStatsCards";
 
-// TopProductsRevenueList -> the horizontal-bar list showing the top 4
+// TopProductsRevenueList -> the horizontal-bar list showing the top
 // products by revenue, with a "View full list" link at the bottom
 import TopProductsRevenueList from "../../components/admin-analytics/TopProductsRevenueList";
 
@@ -34,42 +39,69 @@ import TopProductsRevenueList from "../../components/admin-analytics/TopProducts
 // fetched product with its rank, units sold, and revenue
 import ProductsPerformanceTable from "../../components/admin-analytics/ProductsPerformanceTable";
 
-// getDefaultRange -> works out the two starting date values the page
-// opens with: the 1st day of the current month through today. This
-// runs once when the component first mounts.
+// getDefaultRange -> the 1st day of the current month through today
 const getDefaultRange = () => {
   const now = new Date();
-  // now -> the current date/time at the moment the page loads
-
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  // firstOfMonth -> the 1st calendar day of the current month
-
   return {
     startDate: firstOfMonth.toISOString().slice(0, 10),
-    // .toISOString().slice(0, 10) -> converts the Date object into the
-    // "YYYY-MM-DD" string format that both the <Input type="date"> and
-    // the API's start_date/end_date query params expect
-
     endDate: now.toISOString().slice(0, 10),
-    // endDate -> today's date, in the same "YYYY-MM-DD" string format
   };
+};
+
+// --------------------------------------------------
+// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips under the date
+// pickers (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
+// Same preset set and same live-computed-from-today approach as the
+// Sales Report page, so both pages behave identically.
+// --------------------------------------------------
+const getPresetRanges = () => {
+  const now = new Date();
+  const toISO = (date) => date.toISOString().slice(0, 10);
+  const today = toISO(now);
+
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(now.getDate() - 6);
+
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 29);
+
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  // Day 0 of the current month rolls back to the last day of the month before it
+
+  return [
+    { label: "Today", startDate: today, endDate: today },
+    { label: "Last 7 Days", startDate: toISO(sevenDaysAgo), endDate: today },
+    { label: "Last 30 Days", startDate: toISO(thirtyDaysAgo), endDate: today },
+    { label: "This Month", startDate: toISO(thisMonthStart), endDate: today },
+    {
+      label: "Last Month",
+      startDate: toISO(lastMonthStart),
+      endDate: toISO(lastMonthEnd),
+    },
+  ];
 };
 
 // ProductsPerformance -> the main page component rendered at
 // ROUTES.ADMIN_ANALYTICS_PRODUCTS ("/admin/analytics/products")
 const ProductsPerformance = () => {
   const defaultRange = getDefaultRange();
-  // defaultRange -> computed once per render; used only to seed the
-  // two pieces of state below on first mount
-
   const [startDate, setStartDate] = useState(defaultRange.startDate);
-  // startDate -> the currently selected range start, drives every
-  // fetch on this page; setStartDate updates it whenever the first
-  // date <Input> changes
-
   const [endDate, setEndDate] = useState(defaultRange.endDate);
-  // endDate -> the currently selected range end; setEndDate updates it
-  // whenever the second date <Input> changes
+
+  // Recomputed on every render so "Today" always means today, not the
+  // day the component first mounted
+  const presetRanges = getPresetRanges();
+
+  // Applies a preset's start/end dates in one tap — both date inputs
+  // update together so every section on the page refetches in sync
+  const handleSelectPreset = (preset) => {
+    setStartDate(preset.startDate);
+    setEndDate(preset.endDate);
+  };
 
   // Shared source for BOTH the "Top Products by Revenue" bar list and
   // the full table below — fetched once here (limit: 50, a deliberate
@@ -77,63 +109,91 @@ const ProductsPerformance = () => {
   // for why this isn't pretending to cover the entire 254-product catalog)
   const { data: response, isLoading } = useQuery({
     queryKey: ["productsPerformance", "list", startDate, endDate],
-    // queryKey -> uniquely identifies this request; whenever startDate
-    // or endDate changes, TanStack Query automatically refetches with
-    // the new values and re-renders the page with fresh data
-
-    queryFn: ({ signal }) => getBestSellers({ start_date: startDate, end_date: endDate, limit: 50 }, signal),
-    // queryFn -> the actual network call, passing the currently
-    // selected date range plus a fixed limit of 50 products
+    queryFn: ({ signal }) =>
+      getBestSellers(
+        { start_date: startDate, end_date: endDate, limit: 50 },
+        signal,
+      ),
   });
 
   const products = response?.data || [];
-  // products -> the real array of product rows once loaded; falls back
-  // to an empty array while loading or if the request fails, so every
-  // child component below can safely call .map()/.slice() on it
-  // without needing its own null-check
+  // products -> falls back to an empty array while loading or if the
+  // request fails, so every child component below can safely call
+  // .map()/.slice() on it without needing its own null-check
 
   return (
     <div className="flex flex-col gap-6">
       {/* ================================================================
           PAGE HEADER — shared gradient icon + title component, matching
-          every other admin screen (Dashboard, Orders, Revenue Report...).
-          The date-range pickers are passed in as `actions` so they
-          render on the right side of the header (and wrap below the
-          title on narrow screens, since PageHeader's outer row is
-          flex-wrap) — exactly the same layout pattern already used on
-          the Revenue Report page.
+          every other admin screen. The date-range pickers sit on the
+          right side of the header row, with the quick-range chips
+          placed directly BELOW them (same layout Sales Report uses)
+          instead of off to the side, so picking a precise date and
+          tapping a quick preset both happen in the same visual spot.
           ================================================================ */}
       <PageHeader
         icon={<AiOutlineTrophy />}
         title="Products Performance"
         actions={
-          // Date row — stacks into a single column on mobile (flex-col,
-          // each field full width) and becomes one horizontal row from
-          // the sm breakpoint up, so it never overflows the header on a
-          // phone screen. w-full on mobile lets the fields below
-          // stretch full-width; sm:w-auto lets the whole block shrink
-          // back to its natural size once it becomes one horizontal line.
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-            <div className="w-full sm:w-37.5 shrink-0">
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                aria-label="Start date"
-              />
+          // w-full on mobile so the block below can stack full-width;
+          // sm:w-auto lets it shrink back to its natural size once the
+          // date row switches to a single horizontal line
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            {/* Date row — stacks into a single column on mobile
+                (flex-col, each field full width) and becomes one
+                horizontal row from the sm breakpoint up */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
+              <div className="w-full sm:w-37.5 shrink-0">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  aria-label="Start date"
+                />
+              </div>
+
+              {/* Separator dash — hidden on mobile where the fields
+                  stack vertically instead of sitting side by side */}
+              <span className="text-gray-300 hidden sm:inline">-</span>
+
+              <div className="w-full sm:w-37.5 shrink-0">
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  aria-label="End date"
+                />
+              </div>
             </div>
 
-            {/* Separator dash — hidden on mobile where the fields stack
-                vertically instead of sitting side by side */}
-            <span className="text-gray-300 hidden sm:inline">-</span>
+            {/* ==========================================================
+                QUICK-RANGE CHIPS — one-tap shortcuts sitting directly
+                below the date pickers, exactly like Sales Report.
+                Horizontally scrollable with the scrollbar hidden so
+                all five chips stay reachable even on a narrow phone
+                screen without breaking the layout.
+                ========================================================== */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+              {presetRanges.map((preset) => {
+                const isActive =
+                  preset.startDate === startDate && preset.endDate === endDate;
 
-            <div className="w-full sm:w-37.5 shrink-0">
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                aria-label="End date"
-              />
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => handleSelectPreset(preset)}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 border",
+                      isActive
+                        ? "bg-linear-to-r from-primary to-primary-dark text-white border-transparent shadow-sm shadow-primary/25"
+                        : "bg-white text-gray-500 border-gray-200 hover:text-gray-700 hover:bg-gray-50",
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         }
@@ -148,23 +208,11 @@ const ProductsPerformance = () => {
           ratings/reviews system exists anywhere in the documented API. */}
 
       {/* ================================================================
-          TOP PRODUCTS BY REVENUE — WIDTH FIX (starts from the left,
-          70% wide on large screens)
-          This used to sit inside a `grid grid-cols-1 lg:grid-cols-2`
-          wrapper as the ONLY child, which meant it silently occupied
-          just ONE of the two grid columns (roughly half the page width
-          on large screens) while the second column sat empty and
-          invisible. That's why the card looked narrow.
-          Fixed by dropping the leftover 2-column grid entirely and
-          giving the card a simple percentage width instead:
-          "w-full" -> full width on mobile so it never looks squeezed,
-          "lg:w-[70%]" -> from the laptop breakpoint up the card takes
-          exactly 70% of the available page width. There is NO
-          "mx-auto" here on purpose — without it the block is NOT
-          centered, so it starts flush from the left edge of the page
-          (matching every other left-aligned section on this screen)
-          instead of floating in the middle. */}
-      <div className="w-full lg:w-[85%]">
+          TOP PRODUCTS BY REVENUE — now full width (w-full), instead of
+          being capped to a percentage of the page — matches the rest
+          of this page's sections, which all run edge-to-edge.
+          ================================================================ */}
+      <div className="w-full">
         <TopProductsRevenueList products={products} isLoading={isLoading} />
         {/* "Sales by Category" donut from the original design is NOT
             included — same gap already flagged on the Sales Report

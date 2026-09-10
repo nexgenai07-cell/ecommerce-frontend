@@ -8,7 +8,7 @@ import formatDate from "../../utils/formatDate"; // Converts ISO date string int
 import { Link } from "react-router-dom"; // Navigates to the Return Detail page when "View" is clicked
 import { ROUTES } from "../../constants/routes"; // Route path constants, used for the "View" link below
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
-import Pagination from "../ui/Pagination"; // Same numbered prev/next pagination control used everywhere else in the app — replaces the old arrow-only Prev/Next buttons below
+import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel — its built-in pagination footer replaces the standalone Pagination control this file used before
 
 // How many returns to show per page
 const PER_PAGE = 4;
@@ -37,13 +37,80 @@ const PreviousReturns = () => {
   );
 
   const totalReturns = allReturns.length;
-  const totalPages = Math.ceil(totalReturns / PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(totalReturns / PER_PAGE));
 
   // Slice down to just the current page's rows
   const paginatedReturns = allReturns.slice(
     (currentPage - 1) * PER_PAGE,
     currentPage * PER_PAGE,
   );
+
+  // Table column configuration for DataTable
+  const columns = [
+    {
+      key: "id",
+      label: "ID",
+      // Return ID — prefixed for a ticket-style format, matching the #CP- convention used for complaints
+      render: (row) => (
+        <span className="font-semibold text-gray-800 whitespace-nowrap">
+          #RET-{row.id}
+        </span>
+      ),
+    },
+    {
+      key: "order_number",
+      label: "Order ID",
+      render: (row) => (
+        <span className="text-gray-500 whitespace-nowrap">
+          {row.order_number}
+        </span>
+      ),
+    },
+    {
+      key: "reason",
+      label: "Reason",
+      className: "max-w-55",
+      // Truncated to one line so long text doesn't break the row
+      render: (row) => (
+        <p className="text-gray-600 line-clamp-1">{row.reason}</p>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      // Color auto-resolved via getStatusColor (requested/approved/rejected)
+      render: (row) => (
+        <Badge
+          label={row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+          status={row.status}
+          size="sm"
+          rounded
+        />
+      ),
+    },
+    {
+      key: "created_at",
+      label: "Filed On",
+      render: (row) => (
+        <span className="text-gray-400 whitespace-nowrap">
+          {formatDate(row.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Action",
+      // Navigates to the Return Detail page (API 66) for this specific return
+      render: (row) => (
+        <Link
+          to={ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", row.id)}
+          className="text-sm text-primary font-semibold hover:underline whitespace-nowrap"
+        >
+          View
+        </Link>
+      ),
+    },
+  ];
 
   // Once loading is done, hide the card entirely if the customer has no return history
   if (!isLoading && allReturns.length === 0) return null;
@@ -80,93 +147,14 @@ const PreviousReturns = () => {
           ))}
         </div>
       ) : (
-        // Table wrapper — overflow-x-auto keeps columns intact on narrow screens, shows a
-        // native horizontal scrollbar so the user knows there's more content to scroll to
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              {/* Header row — soft gradient tint instead of a flat gray, ties into the page's brand color */}
-              <tr className="border-b border-gray-100 bg-linear-to-r from-primary-50/60 to-transparent">
-                {[
-                  "ID",
-                  "Order ID",
-                  "Reason",
-                  "Status",
-                  "Filed On",
-                  "Action",
-                ].map((col) => (
-                  <th
-                    key={col}
-                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {paginatedReturns.map((ret) => (
-                <tr
-                  key={ret.id}
-                  // Row hover now tints emerald instead of plain gray, tying it back to the brand color
-                  className="hover:bg-primary-50/40 transition-colors duration-150"
-                >
-                  {/* Return ID — prefixed for a ticket-style format, matching #CMP- convention used for complaints */}
-                  <td className="px-5 py-4 font-semibold text-gray-800 whitespace-nowrap">
-                    #RET-{ret.id}
-                  </td>
-
-                  {/* Linked order number */}
-                  <td className="px-5 py-4 text-gray-500 whitespace-nowrap">
-                    {ret.order_number}
-                  </td>
-
-                  {/* Reason — truncated to one line so long text doesn't break the row */}
-                  <td className="px-5 py-4 text-gray-600 max-w-55">
-                    <p className="line-clamp-1">{ret.reason}</p>
-                  </td>
-
-                  {/* Status badge — color auto-resolved via getStatusColor (requested/approved/rejected) */}
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <Badge
-                      label={
-                        ret.status.charAt(0).toUpperCase() + ret.status.slice(1)
-                      }
-                      status={ret.status}
-                      size="sm"
-                      rounded
-                    />
-                  </td>
-
-                  {/* Filed-on date */}
-                  <td className="px-5 py-4 text-gray-400 whitespace-nowrap">
-                    {formatDate(ret.created_at)}
-                  </td>
-
-                  {/* View link — navigates to the Return Detail page (API 66) for this specific return */}
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <Link
-                      to={ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", ret.id)}
-                      className="text-sm text-primary font-semibold hover:underline"
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination footer — same numbered Pagination component used
-          everywhere else in the app instead of plain arrow-only Prev/Next.
-          Pagination itself already hides when totalPages <= 1. */}
-      {!isLoading && totalReturns > 0 && (
-        <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/30">
-          <Pagination
+        <div className="p-4">
+          <DataTable
+            columns={columns}
+            data={paginatedReturns}
+            keyField="id"
             currentPage={currentPage}
             totalPages={totalPages}
+            totalResults={totalReturns}
             onPageChange={setCurrentPage}
           />
         </div>

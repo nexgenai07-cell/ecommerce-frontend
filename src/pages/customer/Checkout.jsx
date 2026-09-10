@@ -721,10 +721,24 @@ const Checkout = () => {
       // had a product id to restore with, so onSuccess can tell the
       // customer honestly if anything couldn't be brought back.
       const totalItems = orderSnapshot?.items?.length || 0;
-      return { fullyRestored: restorableItems.length === totalItems };
+
+      // Fetch the now-restored cart directly here (rather than just
+      // invalidating the CART query below) so its data is ready to hand
+      // straight to React Query's cache BEFORE we navigate. Relying on
+      // invalidateQueries alone only schedules a background refetch —
+      // navigate(ROUTES.CART) would fire before that refetch resolves,
+      // so the Cart page briefly mounts with its old, empty cached cart
+      // (from when checkout cleared it) and only pops in the restored
+      // items once the background refetch finally completes.
+      const freshCart = await getCart();
+
+      return {
+        fullyRestored: restorableItems.length === totalItems,
+        freshCart,
+      };
     },
 
-    onSuccess: ({ fullyRestored }) => {
+    onSuccess: ({ fullyRestored, freshCart }) => {
       showSuccess(
         fullyRestored
           ? "Order cancelled. Your cart is waiting for you."
@@ -732,9 +746,11 @@ const Checkout = () => {
       );
       setShowCancelModal(false);
 
-      // The items were just re-added above, but that happened outside
-      // React Query's own cache — refetch so the Cart page shows them.
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      // Write the already-fetched, up-to-date cart straight into the
+      // query cache instead of just invalidating it — this guarantees
+      // the Cart page has the correct items the instant it mounts below,
+      // with no empty-then-populated flash.
+      queryClient.setQueryData(QUERY_KEYS.CART, freshCart);
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
 
