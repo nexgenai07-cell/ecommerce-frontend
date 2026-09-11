@@ -1,6 +1,3 @@
-// ============================================================
-// OrderStatsCards — ORDER MANAGEMENT SUB-COMPONENT
-// ============================================================
 // Source: API 85 Orders Analytics (GET /api/v1/analytics/orders/),
 // which returns { total, by_status: [{ status, count }] } — every
 // number on every card here comes directly from that one real
@@ -72,7 +69,7 @@ const OrderStatsCards = () => {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="flex flex-wrap gap-2">
       {cards.map((card) => (
         <StatsCard
           key={card.title}

@@ -1026,13 +1026,21 @@ const ReturnsManagement = () => {
       />
 
       {/* ================================================================
-          STAT CARDS — all four are now real counts computed straight from
-          Real backend `count` values, one lightweight request per stat
-          (see above) — accurate across the ENTIRE return history, not
-          just whatever page happens to be loaded. Fully responsive: 1
-          column on mobile, 2 on small screens, 4 on large.
+          STAT CARDS — all four counts are read directly from the
+          backend's `count` field, one lightweight request per stat, so
+          the figures reflect the entire return history rather than just
+          the currently loaded page.
+
+          Layout: a flex-wrap row, matching the KPI row on the main
+          Dashboard, instead of a fixed-column grid. StatsCard sizes
+          itself to its own content (title + value), so forcing it into
+          an even grid column leaves a large empty area beside each
+          card on wider screens. A wrapping flex row lets every card
+          keep its natural width, sit close to its neighbour, and drop
+          to the next line on narrower viewports without any manual
+          breakpoint tuning.
           ================================================================ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex flex-wrap gap-2">
         <StatsCard
           title="Total Returns"
           value={grandTotalCount}

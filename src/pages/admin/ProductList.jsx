@@ -23,6 +23,7 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
+import downloadCsv from "../../utils/downloadCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -290,6 +291,41 @@ const ProductList = () => {
     }
   };
 
+  const handleExport = () => {
+    const rows = activeProducts.map((product) => {
+      const available = product.available_stock ?? product.total_stock ?? 0;
+      const stockHealth =
+        available === 0
+          ? "Out of Stock"
+          : available <= 5
+            ? "Low Stock"
+            : "In Stock";
+      return {
+        name: product.name,
+        sku: product.sku || "",
+        category: product.category?.name || "",
+        price: product.price,
+        stock: product.total_stock ?? 0,
+        stockHealth,
+        onWebsite: product.is_active ? "Yes" : "No",
+      };
+    });
+
+    downloadCsv(
+      rows,
+      [
+        { key: "name", label: "Product Name" },
+        { key: "sku", label: "SKU" },
+        { key: "category", label: "Category" },
+        { key: "price", label: "Price" },
+        { key: "stock", label: "Stock" },
+        { key: "stockHealth", label: "Stock Health" },
+        { key: "onWebsite", label: "On Website" },
+      ],
+      "products",
+    );
+  };
+
   const columns = [
     {
       key: "product",
@@ -450,7 +486,11 @@ const ProductList = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical rhythm tightened (gap-6 -> gap-2) so the stats cards, the
+    // filters/export toolbar, and the products table below it all sit much
+    // closer together -- addresses the "too much distance above/below the
+    // buttons row" feedback. Purely spacing, no structural change.
+    <div className="flex flex-col gap-2">
       {/* Page header — uses the shared PageHeader component so this
           page matches every other admin screen's title styling. */}
       <PageHeader
@@ -482,6 +522,7 @@ const ProductList = () => {
         onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
+        onExport={handleExport}
       />
 
       {/* Bulk action bar — only shown once at least one row is selected */}

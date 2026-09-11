@@ -193,7 +193,9 @@ const Pagination = ({
       transition={{ duration: 0.3, ease: "easeOut" }} // Smooth entrance, not too slow or snappy
       className={cn(
         // Wraps onto its own row on narrow screens instead of overflowing.
-        "flex flex-wrap items-center justify-center gap-1.5 sm:gap-2",
+        // justify-end pushes the whole control to the right side of its
+        // container instead of sitting centered.
+        "flex flex-wrap items-center justify-end gap-1.5 sm:gap-2",
         isCompact
           ? "px-2 py-1.5 sm:px-3 sm:py-2"
           : "shadow-lg bg-white rounded-2xl border border-gray-100 px-2 py-2 sm:px-3 sm:py-3",
@@ -336,26 +338,8 @@ const Pagination = ({
       {/* Rows-per-page dropdown */}
       {showPageSizeSelector && (
         <div className="flex items-center gap-1.5 shrink-0">
-          <label
-            htmlFor="pagination-page-size"
-            className={cn(
-              "hidden items-center gap-1 whitespace-nowrap rounded-full bg-primary-50 font-bold uppercase tracking-wide text-primary-dark sm:inline-flex",
-              isCompact ? "text-[9px] px-2 py-0.5" : "text-[10px] px-2.5 py-1",
-            )}
-          >
-            {isCompact ? "Rows" : "Rows / page"}
-          </label>
-
-          {/* Mobile-only short label */}
-          <label
-            htmlFor="pagination-page-size"
-            className={cn(
-              "text-gray-500 sm:hidden font-bold",
-              isCompact ? "text-[10px]" : "text-xs",
-            )}
-          >
-            Rows
-          </label>
+          {/* "Rows" / "Rows / page" text labels removed per request —
+              the select itself (with the page size number) is enough. */}
 
           {/* Select wrapper */}
           <div className="group relative">
@@ -364,7 +348,9 @@ const Pagination = ({
               value={isCustomOpen ? "custom" : pageSize}
               onChange={handleSelectChange}
               className={cn(
-                "appearance-none cursor-pointer rounded-full border-2 bg-linear-to-b from-primary-50 to-white font-bold text-black shadow-sm outline-none transition-all duration-200",
+                // text-center so the selected value (10 / 20 / 50 / 100 / Custom)
+                // sits in the middle of the pill instead of hugging the left edge.
+                "appearance-none cursor-pointer text-center rounded-full border-2 bg-linear-to-b from-primary-50 to-white font-bold text-black shadow-sm outline-none transition-all duration-200",
                 "border-gray-300 hover:border-primary hover:bg-primary-50 hover:shadow-sm",
                 "focus:border-primary focus:shadow-md focus:ring-4 focus:ring-primary-100",
                 isCompact

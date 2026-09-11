@@ -13,11 +13,10 @@ const PageHeader = ({ icon, title, actions = null }) => {
     // title when there isn't enough horizontal room (small phone screens).
     <div className="flex items-center justify-between gap-3 flex-wrap">
       {/* Left side: gradient icon badge + title, grouped together */}
-      <div className="flex items-center gap-3">
-        {/* Gradient circular icon badge — identical classes to the
-            customer-facing "Submit a Complaint" header so the brand look is
-            consistent between the customer site and the admin panel. */}
-        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-lg shadow-primary/30 shrink-0">
+      <div className="flex items-center gap-2.5">
+        {/* Gradient circular icon badge — kept in the same brand gradient
+            as before, just scaled down to a compact size. */}
+        <div className="w-9 h-9 rounded-xl bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-md shadow-primary/25 shrink-0">
           {/* shrink-0 -> the icon badge never gets squeezed, even if the
               title text next to it is long */}
 
@@ -25,10 +24,10 @@ const PageHeader = ({ icon, title, actions = null }) => {
               use whichever react-icons icon fits that page (e.g. orders
               cart icon, products box icon, etc.). Always rendered white so
               it pops against the emerald gradient background. */}
-          <span className="text-white w-7 h-7 flex items-center justify-center text-lg [&>svg]:w-7 [&>svg]:h-7">
+          <span className="text-white w-4.5 h-4.5 flex items-center justify-center [&>svg]:w-4.5 [&>svg]:h-4.5">
             {icon}
-            {/* [&>svg]:w-7 [&>svg]:h-7 -> forces whatever svg icon is
-                passed in to render at exactly 28px, regardless of the
+            {/* [&>svg]:w-4.5 [&>svg]:h-4.5 -> forces whatever svg icon is
+                passed in to render at exactly 18px, regardless of the
                 icon library's own default size */}
           </span>
         </div>
@@ -36,11 +35,15 @@ const PageHeader = ({ icon, title, actions = null }) => {
         {/* Page title only — no subtitle/description line under it,
             intentionally, per the requirement to skip the helper text shown
             in the reference image. */}
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+        <h1
+          className="text-lg sm:text-xl font-bold text-gray-900"
+          style={{ fontFamily: '"Times New Roman", Times, serif' }}
+        >
           {title}
-          {/* text-2xl on mobile, text-3xl from the sm breakpoint up ->
-              slightly smaller heading on narrow phone screens so it
-              doesn't crowd the icon badge next to it */}
+          {/* text-lg on mobile, text-xl from the sm breakpoint up ->
+              compact heading that stays proportional to the smaller
+              icon badge next to it. Font set to Times New Roman per
+              request, applied only to this page title text. */}
         </h1>
       </div>
 

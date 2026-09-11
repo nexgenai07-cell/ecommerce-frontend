@@ -42,11 +42,11 @@ const ProductStatsCards = ({
   ];
 
   return (
-    // flex-wrap (not a full-width grid) + a capped max-width per card below
-    // is what stops these three cards from stretching edge-to-edge across
-    // the page — they sit together as a compact row and wrap naturally on
-    // narrow screens instead of each card ballooning to fill its column.
-    <div className="flex flex-wrap gap-3">
+    // flex-wrap — cards sit side by side and wrap naturally on narrow
+    // screens. StatsCard now carries its own fixed width/height, so
+    // every card here already matches every other stats card in the
+    // admin panel — no per-page width overrides needed.
+    <div className="flex flex-wrap gap-2">
       {cards.map((card) => (
         <StatsCard
           key={card.key}
@@ -56,15 +56,6 @@ const ProductStatsCards = ({
           iconBg={card.iconBg}
           iconColor={card.iconColor}
           trend={card.trend}
-          compact
-          // compact=true switches StatsCard to its smaller padding/icon/
-          // text sizing (see components/ui/StatsCard.jsx) — visibly
-          // shorter cards than the full-size Dashboard KPI cards.
-          className="flex-1 S max-w-57.5"
-          // flex-1 + basis-[170px]: cards share available space evenly but
-          // never shrink below a readable 170px
-          // max-w-[230px]: hard ceiling so a wide viewport can't stretch
-          // any single card into a huge empty-looking block
         />
       ))}
     </div>

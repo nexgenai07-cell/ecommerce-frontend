@@ -1,6 +1,3 @@
-// ============================================================
-// InventoryStatsCards — INVENTORY ALERTS SUB-COMPONENT
-// ============================================================
 // All 4 numbers here are REAL, cross-referenced from 2 real endpoints:
 // - Products List (API 16) gives the true total catalog count
 // - Inventory Alerts (API 74) gives exactly which products are
@@ -58,7 +55,7 @@ const InventoryStatsCards = () => {
   const isLoading = isAlertsLoading || isProductsLoading;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="flex flex-wrap gap-2">
       <StatsCard
         title="Out of Stock"
         value={isLoading ? "—" : outOfStockCount}

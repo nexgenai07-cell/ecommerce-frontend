@@ -39,12 +39,16 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
   const { data: currentResponse, isLoading } = useQuery({
     queryKey: ["revenueReport", "current", startDate, endDate],
     // queryKey -> uniquely identifies this request for caching/refetching
-    queryFn: ({ signal }) => getRevenueReport({
-        start_date: startDate,
-        end_date: endDate,
-        period: "daily",
-        // period: "daily" -> one data point per day for an accurate total
-      }, signal),
+    queryFn: ({ signal }) =>
+      getRevenueReport(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          period: "daily",
+          // period: "daily" -> one data point per day for an accurate total
+        },
+        signal,
+      ),
   });
 
   const previousRange = getPreviousPeriodRange(startDate, endDate);
@@ -56,11 +60,15 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
       previousRange.startDate,
       previousRange.endDate,
     ],
-    queryFn: ({ signal }) => getRevenueReport({
-        start_date: previousRange.startDate,
-        end_date: previousRange.endDate,
-        period: "daily",
-      }, signal),
+    queryFn: ({ signal }) =>
+      getRevenueReport(
+        {
+          start_date: previousRange.startDate,
+          end_date: previousRange.endDate,
+          period: "daily",
+        },
+        signal,
+      ),
   });
 
   const currentRevenue = sumRevenue(currentResponse?.data?.data || []);
@@ -71,29 +79,11 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
   // growth -> the "+521.1%" style string, reused by both cards below
 
   return (
-    // ================================================================
-    // CARD WIDTH FIX (mobile): plain "grid-cols-2" applies at every
-    // screen size, so these 2 cards sit side by side instead of
-    // stacking full-width on phones.
-    //
-    // CARD WIDTH FIX (laptop/desktop) — NEW: same root cause as the
-    // Sales cards above — the admin panel's content area has no
-    // max-width, so on a laptop these 2 cards were each stretching to
-    // roughly half of ~1100px+ (about 550px wide, much bigger than
-    // intended). Compared against the customer-facing Account
-    // Dashboard's own stat cards (DashboardStats.jsx), which stay
-    // around ~280px each because they sit inside the site's capped
-    // 1280px Container. Added "lg:max-w-lg" (512px) here so from the
-    // laptop breakpoint up, this 2-card row is capped at 512px total
-    // -> exactly 256px per card, matching the Sales cards' width
-    // above and staying in the same size range as the customer
-    // dashboard cards, instead of stretching across the whole screen.
-    // ================================================================
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:max-w-lg">
+    // flex-wrap — StatsCard now carries its own fixed width/height, so
+    // this row already matches every other stats row in the admin
+    // panel without needing a page-specific max-width cap.
+    <div className="flex flex-wrap gap-2">
       <StatsCard
-        compact
-        // compact -> smaller footprint (less padding, smaller icon/value
-        // text) and a stronger resting shadow so the card visibly "lifts"
         title="Gross Revenue"
         value={isLoading ? "—" : formatPrice(currentRevenue)}
         // shows an em-dash placeholder while the real number is loading
@@ -106,7 +96,6 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
         trendLabel="vs last period"
       />
       <StatsCard
-        compact
         title="Revenue Growth"
         value={growth || "—"}
         // shows the growth % as the main value itself for this card;

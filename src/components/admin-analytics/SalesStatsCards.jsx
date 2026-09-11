@@ -51,13 +51,17 @@ const SalesStatsCards = ({ startDate, endDate }) => {
     queryKey: ["salesReport", "current", startDate, endDate],
     // queryKey -> uniquely identifies this request so React Query knows
     // when to refetch (whenever startDate/endDate change)
-    queryFn: ({ signal }) => getSalesReport({
-        start_date: startDate,
-        end_date: endDate,
-        period: "daily",
-        // period: "daily" -> ask the API for one data point per day so
-        // the totals below are accurate for any custom range
-      }, signal),
+    queryFn: ({ signal }) =>
+      getSalesReport(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          period: "daily",
+          // period: "daily" -> ask the API for one data point per day so
+          // the totals below are accurate for any custom range
+        },
+        signal,
+      ),
   });
 
   // Previous period — same length, immediately before the current one
@@ -69,11 +73,15 @@ const SalesStatsCards = ({ startDate, endDate }) => {
       previousRange.startDate,
       previousRange.endDate,
     ],
-    queryFn: ({ signal }) => getSalesReport({
-        start_date: previousRange.startDate,
-        end_date: previousRange.endDate,
-        period: "daily",
-      }, signal),
+    queryFn: ({ signal }) =>
+      getSalesReport(
+        {
+          start_date: previousRange.startDate,
+          end_date: previousRange.endDate,
+          period: "daily",
+        },
+        signal,
+      ),
   });
 
   const currentPoints = currentResponse?.data?.data || [];
@@ -99,32 +107,11 @@ const SalesStatsCards = ({ startDate, endDate }) => {
   // previousAOV -> average order value for the earlier comparison range
 
   return (
-    // ================================================================
-    // CARD WIDTH FIX (mobile): grid-cols-2 gives 2 cards per row on
-    // phones instead of the old full-width single column.
-    // sm:grid-cols-3 restores the normal 3-in-a-row layout from the
-    // small-tablet breakpoint up.
-    //
-    // CARD WIDTH FIX (laptop/desktop) — NEW: the admin panel's main
-    // content area has NO max-width of its own (unlike the customer
-    // site, which wraps everything in a <Container> capped at 1280px).
-    // That meant on a real laptop screen this 3-column grid was
-    // stretching to fill the ENTIRE available content width (~1100px+
-    // once the sidebar is accounted for), making each card roughly
-    // 350-400px wide. Checked the customer-facing Account Dashboard's
-    // own stat cards (DashboardStats.jsx) for a sizing reference —
-    // those sit inside the site-wide 1280px Container and use a
-    // 4-column grid, which naturally keeps each card around ~280px.
-    // Added "lg:max-w-3xl" (768px) here so from the laptop breakpoint
-    // up, this 3-card row is capped at 768px total -> ~256px per card,
-    // the same comfortable ballpark as the customer dashboard cards,
-    // instead of stretching across the whole screen.
-    // ================================================================
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 lg:max-w-3xl [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1">
+    // flex-wrap — StatsCard now carries its own fixed width/height, so
+    // this row already matches every other stats row in the admin
+    // panel without needing a page-specific max-width cap.
+    <div className="flex flex-wrap gap-2">
       <StatsCard
-        compact
-        // compact -> smaller footprint (less padding, smaller icon/value
-        // text) and a stronger resting shadow so the card visibly "lifts"
         title="Total Sales"
         value={isLoading ? "—" : formatPrice(currentRevenue)}
         // shows an em-dash placeholder while the real number is loading
@@ -139,7 +126,6 @@ const SalesStatsCards = ({ startDate, endDate }) => {
         // trendLabel -> small gray text next to the trend badge
       />
       <StatsCard
-        compact
         title="Total Orders"
         value={isLoading ? "—" : currentOrders}
         icon={<AiOutlineShoppingCart />}
@@ -151,7 +137,6 @@ const SalesStatsCards = ({ startDate, endDate }) => {
         trendLabel="vs last period"
       />
       <StatsCard
-        compact
         title="Avg Order Value"
         value={isLoading ? "—" : formatPrice(currentAOV)}
         icon={<AiOutlineCreditCard />}

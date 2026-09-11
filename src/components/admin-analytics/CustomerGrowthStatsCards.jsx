@@ -32,9 +32,9 @@ import formatPrice from "../../utils/formatPrice";
 // formatPrice — converts a raw number into "Rs. X,XXX" display format
 
 import StatsCard from "../ui/StatsCard";
-// StatsCard — the shared KPI card component; supports a `compact`
-// prop for a visibly smaller footprint, and a `className` prop for
-// extra outer styling (used below to set a fixed narrow width)
+// StatsCard — the shared KPI card component; carries its own fixed
+// width/height so it automatically matches every other stats card in
+// the admin panel, no per-page sizing needed.
 
 const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
   // startDate / endDate — the currently selected date range, passed
@@ -62,14 +62,18 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
     queryKey: ["customerGrowth", "newInRange", startDate, endDate],
     // queryKey includes startDate/endDate — changing the date range
     // triggers a fresh fetch and its own separate cache entry
-    queryFn: ({ signal }) => getCustomerGrowth({
-        start_date: startDate,
-        // start_date — beginning of the selected date range
-        end_date: endDate,
-        // end_date — end of the selected date range
-        period: "monthly",
-        // period — groups the returned data points by month
-      }, signal),
+    queryFn: ({ signal }) =>
+      getCustomerGrowth(
+        {
+          start_date: startDate,
+          // start_date — beginning of the selected date range
+          end_date: endDate,
+          // end_date — end of the selected date range
+          period: "monthly",
+          // period — groups the returned data points by month
+        },
+        signal,
+      ),
   });
   const growthPoints = growthResponse?.data || [];
   // growthPoints — falls back to an empty array while loading, so
@@ -98,11 +102,9 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
       : 0;
 
   return (
-    // flex + flex-wrap — cards now sit side by side at their OWN
-    // width (set per-card below) instead of being force-stretched to
-    // fill three equal grid columns. flex-wrap lets them drop to a
-    // new line on narrow screens instead of overflowing.
-    <div className="flex flex-wrap gap-4">
+    // flex-wrap — cards sit side by side and drop to a new line on
+    // narrow screens instead of overflowing.
+    <div className="flex flex-wrap gap-2">
       <StatsCard
         title="Total Customers"
         // Card label shown above the value
@@ -114,15 +116,6 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
         // Light emerald icon background
         iconColor="text-primary"
         // Emerald icon color, matches the brand token
-        compact
-        // compact — renders the smaller variant: tighter padding,
-        // smaller icon box, smaller value text — reduces the card's
-        // height
-        className="w-full sm:w-56 shrink-0"
-        // w-full on mobile (full-width row, stacked), sm:w-56 (224px)
-        // from the small breakpoint up — this is what actually shrinks
-        // the card's WIDTH once cards sit in a row. shrink-0 stops
-        // flexbox from squeezing it any narrower than that.
       />
       <StatsCard
         title="New Customers"
@@ -140,10 +133,6 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
         // "in selected range" only rendered via `trend` — StatsCard's
         // trendLabel silently does nothing without a `trend` value
         // alongside it (a mistake fixed here before delivery)
-        compact
-        // compact — same smaller card variant as the others
-        className="w-full sm:w-56 shrink-0"
-        // Same fixed narrow width as the other two cards
       />
       <StatsCard
         title="Avg. Lifetime Value"
@@ -156,10 +145,6 @@ const CustomerGrowthStatsCards = ({ startDate, endDate }) => {
         // Light green icon background
         iconColor="text-success"
         // Green icon color
-        compact
-        // compact — same smaller card variant as the others
-        className="w-full sm:w-56 shrink-0"
-        // Same fixed narrow width as the other two cards
       />
     </div>
   );

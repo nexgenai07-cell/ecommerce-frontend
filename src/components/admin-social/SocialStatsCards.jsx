@@ -1,4 +1,3 @@
-// ============================================================
 // SocialStatsCards — SOCIAL DASHBOARD SUB-COMPONENT
 // ============================================================
 // Only 2 of the design's 4 cards survive with real data — "Total
@@ -19,7 +18,8 @@ import StatsCard from "../ui/StatsCard";
 const SocialStatsCards = () => {
   const { data: publishedResponse, isLoading: isPublishedLoading } = useQuery({
     queryKey: ["socialDashboard", "published"],
-    queryFn: ({ signal }) => getSocialPosts({ status: SOCIAL_POST_STATUS.PUBLISHED }, signal),
+    queryFn: ({ signal }) =>
+      getSocialPosts({ status: SOCIAL_POST_STATUS.PUBLISHED }, signal),
   });
   const publishedPosts = extractListData(publishedResponse);
   const totalPublished =
@@ -27,14 +27,15 @@ const SocialStatsCards = () => {
 
   const { data: scheduledResponse, isLoading: isScheduledLoading } = useQuery({
     queryKey: ["socialDashboard", "scheduled"],
-    queryFn: ({ signal }) => getSocialPosts({ status: SOCIAL_POST_STATUS.SCHEDULED }, signal),
+    queryFn: ({ signal }) =>
+      getSocialPosts({ status: SOCIAL_POST_STATUS.SCHEDULED }, signal),
   });
   const scheduledPosts = extractListData(scheduledResponse);
   const totalScheduled =
     scheduledResponse?.data?.count ?? scheduledPosts.length;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="flex flex-wrap gap-2">
       <StatsCard
         title="Total Published"
         value={isPublishedLoading ? "—" : totalPublished}

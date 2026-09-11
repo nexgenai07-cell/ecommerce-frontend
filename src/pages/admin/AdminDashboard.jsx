@@ -56,7 +56,7 @@ const AdminDashboard = () => {
           ROW 1 — KPI Cards
           4 real metrics from API 82.
           ========================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="flex flex-wrap gap-2">
         {/* NOTE: "trend" / "trendLabel" props (the small "+12% vs last
             period" / "Urgent" text under the value) were intentionally
             removed from all 4 cards below, per Rimi's request — the

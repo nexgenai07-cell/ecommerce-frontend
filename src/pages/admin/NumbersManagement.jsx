@@ -245,11 +245,17 @@ const NumbersManagement = () => {
         </div>
       </div>
       {/* Note: "Total WhatsApp Users" and "Blocked Numbers" stat cards
-          from the design are NOT included — see the flags shared
-          before this code: neither is computable, and no blocking
-          system exists anywhere in the API. */}
+          from the design are not included here, since neither figure
+          is computable and no blocking system exists anywhere in the
+          API. */}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Layout: a flex-wrap row rather than a two-column grid.
+          StatsCard sizes itself to its own content, so a grid column
+          stretches far wider than the card and leaves a visible gap
+          beside it on anything wider than a phone screen. A wrapping
+          flex row keeps the two cards close together and still drops
+          to a single column on narrow screens. */}
+      <div className="flex flex-wrap gap-2">
         <StatsCard
           title="Active Sessions"
           value={isLoading ? "—" : allSessions.length}

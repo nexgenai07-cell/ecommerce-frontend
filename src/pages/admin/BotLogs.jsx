@@ -30,7 +30,13 @@ const BotLogs = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Layout: a flex-wrap row rather than a two-column grid.
+          StatsCard sizes itself to its own content, so a grid column
+          stretches far wider than the card and leaves a visible gap
+          beside it once the viewport is wider than a phone screen. A
+          wrapping flex row keeps the two cards close together and
+          still drops to a single column on narrow screens. */}
+      <div className="flex flex-wrap gap-2">
         <StatsCard
           title="Active Now"
           value={isLoading ? "—" : activeSessions.length}

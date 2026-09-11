@@ -55,11 +55,14 @@ const CustomerStatsCards = () => {
         // Loops until either a customer outside this month is found,
         // or the backend runs out of pages — whichever comes first
         while (true) {
-          const response = await getCustomers({
-            ordering: "-created_at",
-            page,
-            page_size: 50,
-          }, signal);
+          const response = await getCustomers(
+            {
+              ordering: "-created_at",
+              page,
+              page_size: 50,
+            },
+            signal,
+          );
           const results = extractListData(response);
           if (results.length === 0) break;
 
@@ -94,10 +97,7 @@ const CustomerStatsCards = () => {
   const isLoading = isLoadingTotal || isLoadingNewThisMonth;
 
   return (
-    // flex + flex-wrap instead of a stretching grid — each card now
-    // takes only as much width as it needs (capped below), so they
-    // sit compactly next to each other instead of filling the row
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-2">
       {/* Total Customers — the real, confirmed total */}
       <StatsCard
         title="Total Customers"
@@ -107,15 +107,6 @@ const CustomerStatsCards = () => {
         icon={<AiOutlineTeam />}
         iconBg="bg-primary-50"
         iconColor="text-primary"
-        compact
-        // compact=true — StatsCard's built-in smaller variant: tighter
-        // padding (p-3.5 instead of p-5), smaller icon box (36px
-        // instead of 48px), smaller value text (text-xl instead of
-        // text-2xl) — this is what actually reduces the card's height
-
-        // Fixed width cap instead of stretching to fill the grid
-        // column — w-full on mobile (stacked), fixed 208px on sm+
-        className="w-full sm:w-52 shadow-[0_8px_22px_-8px_rgba(16,24,40,0.18)] hover:shadow-[0_12px_26px_-8px_rgba(16,24,40,0.24)] hover:-translate-y-0.5"
       />
 
       {/* New This Month — real backend data, computed via the bounded
@@ -126,8 +117,6 @@ const CustomerStatsCards = () => {
         icon={<AiOutlineUserAdd />}
         iconBg="bg-info-light"
         iconColor="text-info"
-        compact
-        className="w-full sm:w-52 shadow-[0_8px_22px_-8px_rgba(16,24,40,0.18)] hover:shadow-[0_12px_26px_-8px_rgba(16,24,40,0.24)] hover:-translate-y-0.5"
       />
     </div>
   );
