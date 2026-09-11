@@ -66,7 +66,11 @@ const STATUS_TABS = [
   { key: "healthy", label: "Healthy" },
 ];
 
-const PAGE_SIZE = 12;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100 and every other admin
+// list page in the project.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const InventoryAlerts = () => {
   const navigate = useNavigate();
@@ -86,6 +90,19 @@ const InventoryAlerts = () => {
   // search — raw text typed into the filter box BEFORE debouncing
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many products are shown per page, controlled by the
+  // "Rows per page" dropdown in the table footer. Used both as the
+  // `page_size` sent to the backend for the single-status view, and as
+  // the client-side slice size for the merged multi-status view.
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
   // currentPage — which page of the current view is being shown
 
   const [isExporting, setIsExporting] = useState(false);
@@ -177,6 +194,7 @@ const InventoryAlerts = () => {
       categoryId,
       singleStatus,
       currentPage,
+      pageSize,
     ],
     queryFn: ({ signal }) =>
       searchProducts(
@@ -185,7 +203,7 @@ const InventoryAlerts = () => {
           category_id: categoryId || undefined,
           status: singleStatus,
           page: currentPage,
-          page_size: PAGE_SIZE,
+          page_size: pageSize,
         },
         signal,
       ),
@@ -224,8 +242,13 @@ const InventoryAlerts = () => {
         );
         const firstResults = extractListData(first);
         const totalCount = first?.data?.count ?? firstResults.length;
-        const pageSize = firstResults.length || 1;
-        const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
+        // Local chunk size for this exhaustive-fetch loop only — always
+        // pulls in fixed batches of up to 100 (the backend's page_size
+        // cap) regardless of the admin's chosen "Rows per page" value,
+        // since this loop must collect every matching product before
+        // the outer `pageSize` state slices it for display.
+        const resultChunkSize = firstResults.length || 1;
+        const totalPages = Math.max(Math.ceil(totalCount / resultChunkSize), 1);
 
         const remainingPages = Array.from(
           { length: Math.max(totalPages - 1, 0) },
@@ -272,8 +295,8 @@ const InventoryAlerts = () => {
   if (needsMultiStatusMerge) {
     activeTotalCount = mergedProducts.length;
     activeProducts = mergedProducts.slice(
-      (currentPage - 1) * PAGE_SIZE,
-      currentPage * PAGE_SIZE,
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize,
     );
     activeIsLoading = isLoadingMerged;
     activeIsError = false;
@@ -284,17 +307,17 @@ const InventoryAlerts = () => {
     activeIsError = isErrorServer;
   }
 
-  const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / PAGE_SIZE));
+  const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
 
   const refetch = () => {
     refetchServer();
   };
 
-  // Whenever the search term, category, or status tabs change, jump
-  // back to page 1
+  // Whenever the search term, category, status tabs, or rows-per-page
+  // selection change, jump back to page 1
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, categoryId, activeTabs]);
+  }, [debouncedSearch, categoryId, activeTabs, pageSize]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -389,9 +412,13 @@ const InventoryAlerts = () => {
         <Button
           size="sm"
           variant="primary"
-          onClick={() =>
-            navigate(ROUTES.ADMIN_PRODUCT_EDIT.replace(":id", row.id))
-          }
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which navigates to the same page — avoids a
+            // redundant double navigation when the button itself is clicked
+            navigate(ROUTES.ADMIN_PRODUCT_EDIT.replace(":id", row.id));
+          }}
         >
           Restock
         </Button>
@@ -495,6 +522,11 @@ const InventoryAlerts = () => {
         columns={columns}
         data={activeProducts}
         keyField="id"
+        onRowClick={(row) =>
+          navigate(ROUTES.ADMIN_PRODUCT_EDIT.replace(":id", row.id))
+        }
+        // Opens the same product edit page as the Restock button when any
+        // part of the row is clicked
         isLoading={activeIsLoading}
         error={activeIsError}
         onRetry={refetch}
@@ -502,6 +534,9 @@ const InventoryAlerts = () => {
         totalPages={activeTotalPages}
         totalResults={activeTotalCount}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
       />
     </div>
   );

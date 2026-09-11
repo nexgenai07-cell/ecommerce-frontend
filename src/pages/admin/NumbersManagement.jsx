@@ -18,13 +18,28 @@ import StatsCard from "../../components/ui/StatsCard";
 import DataTable from "../../components/ui/DataTable";
 import ManualEntryModal from "../../components/admin-whatsapp/ManualEntryModal";
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const NumbersManagement = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many WhatsApp numbers are shown per page, controlled
+  // by the "Rows per page" dropdown in the table footer. The session
+  // list is filtered client-side above, so this only affects the slice
+  // taken below — no network request is re-fired.
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // --------------------------------------------------
   // The numbers table is built from API 94 (currently active
@@ -85,18 +100,13 @@ const NumbersManagement = () => {
       })
     : allSessions;
 
-  // Real pagination over the filtered list. Previously this always
-  // took the first PAGE_SIZE rows of filteredSessions regardless of
-  // page, so anything past row 10 was permanently unreachable. The
-  // slice now moves with currentPage, matching how every other admin
-  // table in this project paginates.
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredSessions.length / PAGE_SIZE),
-  );
+  // Real pagination over the filtered list, sized by the currently
+  // selected `pageSize` and moving with `currentPage`, matching how
+  // every other admin table in this project paginates.
+  const totalPages = Math.max(1, Math.ceil(filteredSessions.length / pageSize));
   const visibleSessions = filteredSessions.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   const handleSearchChange = (e) => {
@@ -172,7 +182,13 @@ const NumbersManagement = () => {
       label: "Actions",
       render: (row) => (
         <button
-          onClick={() => navigate(ROUTES.ADMIN_WHATSAPP_LOGS)}
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which navigates to the same logs page — avoids a
+            // redundant double navigation when the icon itself is clicked
+            navigate(ROUTES.ADMIN_WHATSAPP_LOGS);
+          }}
           className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           aria-label="View conversation"
         >
@@ -258,11 +274,17 @@ const NumbersManagement = () => {
         columns={columns}
         data={tableRows}
         keyField="phone_number"
+        onRowClick={() => navigate(ROUTES.ADMIN_WHATSAPP_LOGS)}
+        // Opens the same conversation log page as the eye icon when any
+        // part of the row is clicked
         isLoading={isLoading}
         currentPage={currentPage}
         totalPages={totalPages}
         totalResults={filteredSessions.length}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       <ManualEntryModal

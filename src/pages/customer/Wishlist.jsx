@@ -10,6 +10,7 @@ import useAuth from "../../hooks/useAuth"; // Custom hook that exposes isAuthent
 import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAddItem to sync the local cart UI state immediately
 import useFlyToIcon from "../../hooks/useFlyToIcon"; // flyToCart — fires the "fly into the cart" animation for a given image element + photo
 import { showSuccess, showError } from "../../components/ui/Toast"; // Toast notification helpers for mutation feedback
+import Button from "../../components/ui/Button"; // Shared button component — used by the bulk-select action bar
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
 import WishlistHeader from "../../components/wishlist/WishlistHeader"; // Page heading + item count pill + Share and Add All to Cart buttons
 import WishlistCard from "../../components/wishlist/WishlistCard"; // Single product card with remove, add to cart, stock status, price
@@ -50,6 +51,13 @@ const Wishlist = () => {
   // being added. This flag is only ever set true/false by
   // handleAddAllToCart itself below.
   const [isAddingAll, setIsAddingAll] = useState(false);
+
+  // Bulk-select state for the "Remove Selected" / "Add Selected to Cart"
+  // action bar — a Set of wishlist item ids (item.id, not product.id),
+  // matching how removeMutation already identifies entries.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [isBulkRemoving, setIsBulkRemoving] = useState(false);
+  const [isAddingSelected, setIsAddingSelected] = useState(false);
 
   const startLoading = (productId) =>
     setLoadingProductIds((prev) => new Set(prev).add(productId));
@@ -297,6 +305,84 @@ const Wishlist = () => {
     setIsAddingAll(false); // Add All button goes back to normal only now, once the whole batch is done
   };
 
+  // =============================================
+  // BULK SELECTION HELPERS
+  // =============================================
+  const toggleSelect = (itemId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  const isAllSelected =
+    wishlistItems.length > 0 && selectedIds.size === wishlistItems.length;
+
+  const toggleSelectAll = () => {
+    setSelectedIds(
+      isAllSelected ? new Set() : new Set(wishlistItems.map((i) => i.id)),
+    );
+  };
+
+  const selectedItems = wishlistItems.filter((i) => selectedIds.has(i.id));
+
+  // handleRemoveSelected — removes every selected wishlist entry, one
+  // after another, reusing the same optimistic-cache removeMutation
+  // used by each card's own remove button, so the shared wishlist
+  // cache (navbar badge, product cards) stays correct throughout.
+  const handleRemoveSelected = async () => {
+    setIsBulkRemoving(true);
+    try {
+      for (const item of selectedItems) {
+        await removeMutation.mutateAsync(item.id);
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setIsBulkRemoving(false);
+    }
+  };
+
+  // handleAddSelectedToCart — adds every SELECTED in-stock item to the
+  // cart, one after another. Mirrors handleAddAllToCart above, just
+  // scoped to the current selection instead of the whole wishlist.
+  const handleAddSelectedToCart = async () => {
+    const inStock = selectedItems.filter(
+      (i) => (i.product.available_stock ?? 0) > 0,
+    );
+
+    if (inStock.length === 0) {
+      showError("No in-stock items in your selection");
+      return;
+    }
+
+    setIsAddingSelected(true);
+    setLoadingProductIds(new Set(inStock.map((i) => i.product.id)));
+
+    inStock.forEach((item) => {
+      flyToCart(
+        imageRefsMap.current[item.product.id],
+        item.product.primary_image || "/placeholder-product.svg",
+      );
+    });
+
+    for (const item of inStock) {
+      try {
+        await addToCartMutation.mutateAsync(item.product.id);
+      } finally {
+        stopLoading(item.product.id);
+      }
+    }
+
+    showSuccess(`${inStock.length} items added to cart!`);
+    setIsAddingSelected(false);
+    setSelectedIds(new Set());
+  };
+
   return (
     // Outer wrapper — relative + overflow-hidden hosts the decorative ambient
     // gradient glow behind the header without letting it bleed into the navbar
@@ -357,6 +443,49 @@ const Wishlist = () => {
             </div>
           )}
 
+          {/* ── Bulk-select bar ──────────────────────────────────────────────────────
+              "Select all" checkbox always visible once there's at least one item;
+              the Remove/Add to Cart action buttons only appear once something is
+              actually checked, so the bar doesn't take up space for nothing. */}
+          {!isLoading && wishlistItems.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl border border-gray-100 px-4 py-3 shadow-sm">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} selected`
+                  : "Select all"}
+              </label>
+
+              {selectedIds.size > 0 && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAddSelectedToCart}
+                    isLoading={isAddingSelected}
+                    className="w-full sm:w-auto"
+                  >
+                    Add to Cart
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleRemoveSelected}
+                    isLoading={isBulkRemoving}
+                    className="w-full sm:w-auto"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Wishlist product grid ─────────────────────────────────────────────────
               Shown only after loading completes and there is at least one saved item
               AnimatePresence mode="popLayout" animates cards out smoothly when removed
@@ -373,6 +502,8 @@ const Wishlist = () => {
                     onAddToCart={(productId) => handleAddToCart(productId)} // fires add-to-cart for just this one product
                     isAddingToCart={loadingProductIds.has(item.product.id)} // true ONLY for the card whose own product id is currently loading
                     registerImageRef={registerImageRef} // collects this card's image node for "Add All to Cart"
+                    isSelected={selectedIds.has(item.id)} // true when this card's bulk-select checkbox is checked
+                    onToggleSelect={toggleSelect} // toggles this card's id in/out of the selection
                   />
                 ))}
               </div>

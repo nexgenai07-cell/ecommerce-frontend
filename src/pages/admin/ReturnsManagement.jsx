@@ -131,9 +131,10 @@ const SORT_OPTIONS = [
   { value: "-customer_name", label: "Customer Name: Z-A" },
 ];
 
-// How many rows to show per page — matches the page size confirmed
-// working on the backend.
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // ============================================================
 // ReturnDetailModal — sub-component rendered at the bottom of this file.
@@ -625,6 +626,10 @@ const ReturnsManagement = () => {
   // default ordering never changes for the admin.
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many returns the backend returns per page, controlled
+  // by the "Rows per page" dropdown in the table footer. Sent to the
+  // backend as `page_size` alongside `page` on every request.
 
   const [decisionTarget, setDecisionTarget] = useState(null);
   // { returnItem, action: "approved" | "rejected" } — drives the confirm
@@ -684,6 +689,7 @@ const ReturnsManagement = () => {
       endDate,
       sortBy,
       currentPage,
+      pageSize,
     ],
     queryFn: ({ signal }) =>
       getReturns(
@@ -694,7 +700,7 @@ const ReturnsManagement = () => {
           end_date: endDate || undefined,
           ordering: sortBy,
           page: currentPage,
-          page_size: PAGE_SIZE,
+          page_size: pageSize,
         },
         signal,
       ),
@@ -703,7 +709,7 @@ const ReturnsManagement = () => {
 
   const visibleReturns = extractListData(returnsResponse);
   const totalCount = returnsResponse?.data?.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   // `visibleReturns` is now always exactly one real, already-filtered,
   // already-sorted page straight from the backend — no more client-side
   // re-filtering, re-sorting, or re-slicing on top of it.
@@ -755,12 +761,13 @@ const ReturnsManagement = () => {
   const approvalRate =
     decidedCount > 0 ? Math.round((approvedCount / decidedCount) * 100) : null;
 
-  // Whenever any filter or sort changes, jump back to page 1 —
-  // staying on, say, page 3 of a now-much-smaller filtered result set
-  // would otherwise show an empty page.
+  // Whenever any filter, sort, or rows-per-page selection changes,
+  // jump back to page 1 — staying on, say, page 3 of a now-much-
+  // smaller/differently-sized result set would otherwise show an
+  // empty page.
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeStatus, debouncedSearch, startDate, endDate, sortBy]);
+  }, [activeStatus, debouncedSearch, startDate, endDate, sortBy, pageSize]);
 
   const handleTabChange = (statusKey) => {
     setActiveStatus(statusKey);
@@ -946,7 +953,13 @@ const ReturnsManagement = () => {
               "Decided" text that used to sit here for already-decided
               rows. */}
           <button
-            onClick={() => setDetailTarget(row)}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Stops this click from also bubbling up to the row's own
+              // onClick, which opens the same modal — avoids a redundant
+              // double open when the icon itself is clicked
+              setDetailTarget(row);
+            }}
             className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
             aria-label={`View return #RET-${row.id}`}
           >
@@ -962,18 +975,25 @@ const ReturnsManagement = () => {
               <Button
                 size="sm"
                 variant="primary"
-                onClick={() =>
-                  handleRequestDecision(row, RETURN_STATUS.APPROVED)
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Critical here — without this, clicking Approve would
+                  // also trigger the row's onClick and pop open the detail
+                  // modal right on top of the decision being made
+                  handleRequestDecision(row, RETURN_STATUS.APPROVED);
+                }}
               >
                 Approve
               </Button>
               <Button
                 size="sm"
                 variant="danger"
-                onClick={() =>
-                  handleRequestDecision(row, RETURN_STATUS.REJECTED)
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Same reasoning as Approve above — keeps Reject from
+                  // also opening the detail modal
+                  handleRequestDecision(row, RETURN_STATUS.REJECTED);
+                }}
               >
                 Reject
               </Button>
@@ -1212,6 +1232,9 @@ const ReturnsManagement = () => {
           columns={columns}
           data={visibleReturns}
           keyField="id"
+          onRowClick={(row) => setDetailTarget(row)}
+          // Opens the same read-only detail modal as the eye icon when any
+          // part of the row is clicked
           selectable
           onSelectionChange={setSelectedReturnIds}
           isLoading={isLoading}
@@ -1221,6 +1244,9 @@ const ReturnsManagement = () => {
           totalPages={totalPages}
           totalResults={totalCount}
           onPageChange={setCurrentPage}
+          pageSize={pageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={setPageSize}
         />
       </div>
 

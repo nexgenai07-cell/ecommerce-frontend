@@ -40,7 +40,9 @@ const SORTERS = {
     (Number(a.product_count) || 0) - (Number(b.product_count) || 0),
 };
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 /**
  * Renders a single category's thumbnail cell in the table.
@@ -93,6 +95,19 @@ const CategoryManagement = () => {
   });
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many categories are shown per page, controlled by the
+  // "Rows per page" dropdown in the table footer. Categories are
+  // filtered/sorted client-side above, so this only affects the slice
+  // taken below — no network request is re-fired.
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // Single-category deletion flow, triggered from a row's delete icon.
   const [categoryToDelete, setCategoryToDelete] = useState(null);
@@ -177,11 +192,11 @@ const CategoryManagement = () => {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredCategories.length / PAGE_SIZE),
+    Math.ceil(filteredCategories.length / pageSize),
   );
   const paginatedCategories = filteredCategories.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // --------------------------------------------------
@@ -404,6 +419,9 @@ const CategoryManagement = () => {
               totalPages={totalPages}
               totalResults={filteredCategories.length}
               onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         )}

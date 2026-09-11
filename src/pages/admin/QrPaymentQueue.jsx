@@ -1,5 +1,3 @@
-// ADMIN QR PAYMENT VERIFICATION QUEUE
-// ============================================================
 // Every QR (Easypaisa/JazzCash) order currently at payment.status:
 // "under_review" — the customer has uploaded a screenshot and is
 // waiting on a manual decision. This is a pure manual-verification
@@ -36,11 +34,26 @@ import ConfirmModal from "../../components/ui/ConfirmModal";
 import Modal from "../../components/ui/Modal";
 import Textarea from "../../components/ui/Textarea";
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const QrPaymentQueue = () => {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many pending QR payments the backend returns per
+  // page, controlled by the "Rows per page" dropdown in the table
+  // footer. Sent to the backend as `page_size` alongside `page`.
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // Which order the Approve confirmation is currently open for.
   const [approveTarget, setApproveTarget] = useState(null);
@@ -72,14 +85,14 @@ const QrPaymentQueue = () => {
   // GET QR PENDING PAYMENTS — GET /api/v1/admin/payments/qr/pending/
   // =============================================
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [...QUERY_KEYS.QR_PENDING_PAYMENTS, currentPage],
+    queryKey: [...QUERY_KEYS.QR_PENDING_PAYMENTS, currentPage, pageSize],
     queryFn: ({ signal }) =>
-      getQrPendingPayments({ page: currentPage, page_size: PAGE_SIZE }, signal),
+      getQrPendingPayments({ page: currentPage, page_size: pageSize }, signal),
   });
 
   const payments = extractListData(data);
   const totalCount = data?.data?.count ?? payments.length;
-  const totalPages = Math.max(Math.ceil(totalCount / PAGE_SIZE), 1);
+  const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
 
   const invalidateQueue = () =>
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.QR_PENDING_PAYMENTS });
@@ -359,6 +372,9 @@ const QrPaymentQueue = () => {
           totalPages={totalPages}
           totalResults={totalCount}
           onPageChange={setCurrentPage}
+          pageSize={pageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={handlePageSizeChange}
         />
       </div>
 

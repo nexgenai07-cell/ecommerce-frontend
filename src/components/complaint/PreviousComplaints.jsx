@@ -2,7 +2,7 @@
 import { useState } from "react";
 // Import the useQuery hook from React Query for fetching and caching server data
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants/routes";
 // Import filter and download icons from the react-icons Ant Design icon set
 import { AiOutlineFilter, AiOutlineDownload } from "react-icons/ai";
@@ -49,13 +49,31 @@ const STATUS_CONFIG = {
   },
 };
 
-// Define how many complaints should be shown per page in the pagination
-const PER_PAGE = 4;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the pattern used across the admin tables. The first option
+// is also the default page size when the page first loads.
+const PAGE_SIZE_OPTIONS = [4, 10, 20];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // Define the PreviousComplaints functional component (no props required)
 const PreviousComplaints = () => {
+  const navigate = useNavigate();
+  // navigate — drives the whole-row click, sending the customer to the same
+  // Complaint Detail page the row's own "View" link already goes to
+
   // State holding the currently active pagination page number, starting at page 1
   const [currentPage, setCurrentPage] = useState(1);
+  // State holding how many complaints are shown per page, controlled by
+  // the "Rows per page" dropdown in the DataTable's pagination footer
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Called when the customer picks a different "rows per page" value.
+  // Resets back to page 1 as well, since staying on a deep page number
+  // could land past the end of the newly-sized result set.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // =============================================
   // COMPLAINTS API
@@ -78,13 +96,13 @@ const PreviousComplaints = () => {
   // Calculate the total number of complaints fetched
   const totalComplaints = allComplaints.length;
   // Calculate the total number of pages needed based on total complaints and how many fit per page (rounded up)
-  const totalPages = Math.max(1, Math.ceil(totalComplaints / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalComplaints / pageSize));
 
   // Paginated complaints
   // Slice the full complaints array down to just the items that belong on the current page
   const paginatedComplaints = allComplaints.slice(
-    (currentPage - 1) * PER_PAGE,
-    currentPage * PER_PAGE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // Table column configuration for DataTable
@@ -160,6 +178,10 @@ const PreviousComplaints = () => {
       render: (row) => (
         <Link
           to={ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", row.id)}
+          onClick={(e) => e.stopPropagation()}
+          // Stops this click from also bubbling up to the row's own
+          // onClick, which navigates to the same page — avoids a
+          // redundant double navigation when the link itself is clicked
           className="text-sm text-primary font-semibold hover:underline whitespace-nowrap"
         >
           View
@@ -234,10 +256,18 @@ const PreviousComplaints = () => {
             columns={columns}
             data={paginatedComplaints}
             keyField="id"
+            onRowClick={(row) =>
+              navigate(ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", row.id))
+            }
+            // Opens the same Complaint Detail page as the row's own "View"
+            // link when any part of the row is clicked
             currentPage={currentPage}
             totalPages={totalPages}
             totalResults={totalComplaints}
             onPageChange={setCurrentPage}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageSizeChange={handlePageSizeChange}
           />
         </div>
       )}

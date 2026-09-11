@@ -5,17 +5,35 @@ import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key
 import { getReturns } from "../../api/returns.api"; // API 51 — GET /api/v1/returns/
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — handles both flat-array and paginated API response shapes
 import formatDate from "../../utils/formatDate"; // Converts ISO date string into a readable format e.g. "Jun 29, 2026"
-import { Link } from "react-router-dom"; // Navigates to the Return Detail page when "View" is clicked
+import { Link, useNavigate } from "react-router-dom"; // Link navigates to the Return Detail page when "View" is clicked; useNavigate drives the whole-row click
 import { ROUTES } from "../../constants/routes"; // Route path constants, used for the "View" link below
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
 import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel — its built-in pagination footer replaces the standalone Pagination control this file used before
 
-// How many returns to show per page
-const PER_PAGE = 4;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the pattern used across the admin tables. The first option
+// is also the default page size when the page first loads.
+const PAGE_SIZE_OPTIONS = [4, 10, 20];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const PreviousReturns = () => {
+  const navigate = useNavigate();
+  // navigate — drives the whole-row click, sending the customer to the same
+  // Return Detail page the row's own "View" link already goes to
+
   // Current pagination page, starting at page 1
   const [currentPage, setCurrentPage] = useState(1);
+  // How many returns are shown per page, controlled by the "Rows per
+  // page" dropdown in the DataTable's pagination footer
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Called when the customer picks a different "rows per page" value.
+  // Resets back to page 1 as well, since staying on a deep page number
+  // could land past the end of the newly-sized result set.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // =============================================
   // RETURNS API
@@ -37,12 +55,12 @@ const PreviousReturns = () => {
   );
 
   const totalReturns = allReturns.length;
-  const totalPages = Math.max(1, Math.ceil(totalReturns / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalReturns / pageSize));
 
   // Slice down to just the current page's rows
   const paginatedReturns = allReturns.slice(
-    (currentPage - 1) * PER_PAGE,
-    currentPage * PER_PAGE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // Table column configuration for DataTable
@@ -104,6 +122,10 @@ const PreviousReturns = () => {
       render: (row) => (
         <Link
           to={ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", row.id)}
+          onClick={(e) => e.stopPropagation()}
+          // Stops this click from also bubbling up to the row's own
+          // onClick, which navigates to the same page — avoids a
+          // redundant double navigation when the link itself is clicked
           className="text-sm text-primary font-semibold hover:underline whitespace-nowrap"
         >
           View
@@ -152,10 +174,18 @@ const PreviousReturns = () => {
             columns={columns}
             data={paginatedReturns}
             keyField="id"
+            onRowClick={(row) =>
+              navigate(ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", row.id))
+            }
+            // Opens the same Return Detail page as the row's own "View"
+            // link when any part of the row is clicked
             currentPage={currentPage}
             totalPages={totalPages}
             totalResults={totalReturns}
             onPageChange={setCurrentPage}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageSizeChange={handlePageSizeChange}
           />
         </div>
       )}

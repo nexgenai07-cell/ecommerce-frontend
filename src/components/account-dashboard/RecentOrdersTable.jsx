@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload
+import { Link, useNavigate } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload; useNavigate drives the whole-row click
 import { BsTruck } from "react-icons/bs"; // Truck icon for the Shipped "Track" button
 import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared status constants used to decide which action button to show
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
@@ -8,6 +8,10 @@ import OrderStatusBadge from "../shared/OrderStatusBadge"; // Reusable colored p
 import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel, now also used here
 
 const RecentOrdersTable = ({ orders }) => {
+  const navigate = useNavigate();
+  // navigate — drives the whole-row click; mirrors exactly what each row's own
+  // Track link/button already does below, per order status
+
   // NOTE ON MOBILE LAYOUT: this component used to render two entirely
   // separate layouts — a <table> for sm+ screens and a hand-built card
   // list for mobile. DataTable only renders one, horizontally
@@ -68,6 +72,10 @@ const RecentOrdersTable = ({ orders }) => {
           return (
             <Link
               to={ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number)}
+              onClick={(e) => e.stopPropagation()}
+              // Stops this click from also bubbling up to the row's own
+              // onClick, which navigates to the same page — avoids a
+              // redundant double navigation when the link itself is clicked
               className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:border-primary/40 hover:bg-primary-50 hover:text-primary-dark transition-all"
             >
               Track
@@ -83,6 +91,10 @@ const RecentOrdersTable = ({ orders }) => {
                 ":id",
                 row.order_number,
               )}
+              onClick={(e) => e.stopPropagation()}
+              // Stops this click from also bubbling up to the row's own
+              // onClick, which navigates to the same page — avoids a
+              // redundant double navigation when the link itself is clicked
               className="
                 flex items-center gap-1.5 w-fit px-3 py-1.5 text-xs font-semibold rounded-lg
                 bg-linear-to-r from-primary to-primary-dark text-white
@@ -107,6 +119,19 @@ const RecentOrdersTable = ({ orders }) => {
     },
   ];
 
+  // Mirrors the per-row Track action above so clicking anywhere on a row does
+  // exactly what its own button would do — no action for statuses that don't
+  // have a destination page yet (Pending, Confirmed, Cancelled)
+  const handleRowClick = (row) => {
+    if (row.status === ORDER_STATUS.DELIVERED) {
+      navigate(ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number));
+    } else if (row.status === ORDER_STATUS.SHIPPED) {
+      navigate(ROUTES.ACCOUNT_ORDER_TRACKING.replace(":id", row.order_number));
+    }
+    // Pending / Confirmed / Cancelled — intentionally does nothing, matching
+    // the disabled "Wait" label shown in that same cell
+  };
+
   return (
     // Card wrapper — white background, rounded corners, border, clips table overflow cleanly
     // shadow-sm at rest + hover:shadow-xl + hover:-translate-y-1 gives the
@@ -129,7 +154,14 @@ const RecentOrdersTable = ({ orders }) => {
           "No orders yet" case that used to be a hand-written empty row /
           empty div in each of the two old layouts. */}
       <div className="p-4">
-        <DataTable columns={columns} data={orders} keyField="order_number" />
+        <DataTable
+          columns={columns}
+          data={orders}
+          keyField="order_number"
+          onRowClick={handleRowClick}
+          // Opens the same Track/detail page as the row's own action
+          // button when any part of the row is clicked
+        />
       </div>
     </div>
   );

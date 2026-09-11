@@ -1,17 +1,7 @@
-// Shows the most recent posts with real engagement data — for a SMALL
-// bounded list like this (5-10 rows), fetching each post's real
-// Analytics (API 86) individually is a reasonable, real technique
-// (unlike trying to aggregate analytics across the ENTIRE post
-// history for the stat cards above, which isn't feasible). Uses
-// useQueries (not a loop of useQuery, which would break React's rules
-// of hooks) to fire all these small requests in parallel.
-//
-// "Published by AI Assistant"/"Published by Admin" from the design
-// was REMOVED — no created_by/published_by field exists on the post
-// object anywhere in the documented API.
-
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+// useNavigate — drives the whole-row click, which sends the admin to the
+// same posts list page the eye icon links to
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDownload } from "react-icons/ai";
 
 import { getSocialPosts, getPostAnalytics } from "../../api/social.api";
@@ -35,6 +25,10 @@ const STATUS_VARIANT = {
 };
 
 const RecentPostsPerformanceTable = () => {
+  const navigate = useNavigate();
+  // navigate — used for the whole-row click so it can push the admin to
+  // the posts list page exactly like the eye icon's <Link> already does
+
   const { data: postsResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POSTS,
     queryFn: ({ signal }) => getSocialPosts({}, signal),
@@ -143,6 +137,10 @@ const RecentPostsPerformanceTable = () => {
         <div className="flex items-center gap-1">
           <Link
             to={ROUTES.ADMIN_SOCIAL_POSTS}
+            onClick={(e) => e.stopPropagation()}
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which navigates to the same page — avoids a
+            // redundant double navigation when the icon itself is clicked
             className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           >
             <AiOutlineEye className="w-4 h-4" />
@@ -201,7 +199,14 @@ const RecentPostsPerformanceTable = () => {
         </div>
       ) : (
         <div className="p-4">
-          <DataTable columns={columns} data={tableRows} keyField="id" />
+          <DataTable
+            columns={columns}
+            data={tableRows}
+            keyField="id"
+            onRowClick={() => navigate(ROUTES.ADMIN_SOCIAL_POSTS)}
+            // Opens the same posts list page as the eye icon when any part
+            // of the row is clicked
+          />
         </div>
       )}
     </div>

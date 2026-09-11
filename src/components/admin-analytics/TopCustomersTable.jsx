@@ -113,7 +113,13 @@ const TopCustomersTable = ({ customers, isLoading }) => {
       label: "Actions",
       render: (row) => (
         <button
-          onClick={() => setSelectedCustomerId(row.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which opens the same drawer — avoids a redundant
+            // double open when the icon itself is clicked
+            setSelectedCustomerId(row.id);
+          }}
           className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           aria-label={`View ${row.name}`}
         >
@@ -151,7 +157,14 @@ const TopCustomersTable = ({ customers, isLoading }) => {
           description="Top spenders will appear here once customers place orders."
         />
       ) : (
-        <DataTable columns={columns} data={topFive} keyField="id" />
+        <DataTable
+          columns={columns}
+          data={topFive}
+          keyField="id"
+          onRowClick={(row) => setSelectedCustomerId(row.id)}
+          // Opens the same detail drawer as the eye icon when any part of
+          // the row is clicked
+        />
       )}
 
       {/* Detail drawer — same shared component used on /admin/customers,

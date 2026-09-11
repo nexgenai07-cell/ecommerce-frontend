@@ -22,9 +22,11 @@ import {
   AiOutlineDelete, // Trash icon used on the "Clear Cart" button
 } from "react-icons/ai";
 
-import { getCart, clearCart } from "../../api/cart.api";
+import { getCart, clearCart, removeCartItem } from "../../api/cart.api";
 // getCart() → GET /api/v1/cart/ — fetches every item currently in the cart.
 // clearCart() → DELETE /api/v1/cart/clear/ — removes every item at once.
+// removeCartItem() → DELETE /api/v1/cart/remove/{item_id}/ — removes one
+// specific item, used below to power "Remove Selected".
 
 import { getProducts } from "../../api/products.api";
 // getProducts() fetches product listings — used here to populate the
@@ -38,8 +40,11 @@ import useFlyToIcon from "../../hooks/useFlyToIcon";
 // dismissAllFromCart — plays the "every item pops out of the cart at once"
 // animation when the whole cart is cleared.
 
-import { showSuccess } from "../../components/ui/Toast";
-// Helper function that displays a green success toast popup.
+import { showSuccess, showError } from "../../components/ui/Toast";
+// Helper functions that display green (success) / red (error) toast popups.
+
+import Button from "../../components/ui/Button";
+// Shared button component — used by the "Remove Selected" bulk action bar.
 
 import { ROUTES } from "../../constants/routes";
 // Shared route path constants — e.g. ROUTES.LOGIN, ROUTES.CART, ROUTES.PRODUCTS.
@@ -100,6 +105,15 @@ const Cart = () => {
   // Boolean state controlling whether the "Clear Cart?" confirmation modal
   // is currently open on screen.
   const [showClearModal, setShowClearModal] = useState(false);
+
+  // Bulk-select state for the "Remove Selected" action bar — a Set of
+  // cart item ids (item.id, matching what removeCartItem expects).
+  // NOTE: there is no bulk/partial checkout endpoint documented on the
+  // backend (checkout() always converts the ENTIRE cart into an order),
+  // so selection here is intentionally scoped to bulk removal only —
+  // not "select items to check out".
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [isBulkRemoving, setIsBulkRemoving] = useState(false);
 
   // --------------------------------------------------------------------------
   // QUERY: Fetch Cart Data
@@ -174,6 +188,68 @@ const Cart = () => {
 
   // Only keep the first 4 results, so the recommendation grid stays compact.
   const recommendedProducts = recommendedData?.data?.results?.slice(0, 4) || [];
+
+  // --------------------------------------------------------------------------
+  // BULK SELECTION HELPERS
+  // --------------------------------------------------------------------------
+  const toggleSelect = (itemId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  const isAllSelected =
+    cartItems.length > 0 && selectedIds.size === cartItems.length;
+
+  const toggleSelectAll = () => {
+    setSelectedIds(
+      isAllSelected ? new Set() : new Set(cartItems.map((i) => i.id)),
+    );
+  };
+
+  // handleRemoveSelected — removes every selected cart item, one after
+  // another, via the same removeCartItem endpoint each row's own trash
+  // button uses, then invalidates the cart query once at the end so the
+  // subtotal/total and navbar badge all pick up the final state in one
+  // refetch rather than one per item.
+  const handleRemoveSelected = async () => {
+    setIsBulkRemoving(true);
+    try {
+      const idsToRemove = [...selectedIds];
+      let failedCount = 0;
+      for (const itemId of idsToRemove) {
+        try {
+          await removeCartItem(itemId);
+        } catch {
+          // Continues removing the rest of the selection even if one
+          // item fails — a single stale/already-removed row shouldn't
+          // block the others. Counted below so the final toast is
+          // honest about a partial failure instead of always claiming
+          // full success.
+          failedCount += 1;
+        }
+      }
+      const removedCount = idsToRemove.length - failedCount;
+      if (removedCount > 0) {
+        showSuccess(
+          `${removedCount} item${removedCount === 1 ? "" : "s"} removed from cart${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
+        );
+      }
+      if (removedCount === 0) {
+        showError("Failed to remove the selected items. Please try again.");
+      }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      setSelectedIds(new Set());
+    } finally {
+      setIsBulkRemoving(false);
+    }
+  };
 
   // --------------------------------------------------------------------------
   // MUTATION: Clear Cart
@@ -430,17 +506,60 @@ const Cart = () => {
           {cartItems.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
               <div className="lg:col-span-2 flex flex-col gap-4">
+                {/* Bulk-select bar — "Select all" checkbox always visible with
+                    more than one item; "Remove Selected" only appears once
+                    something is actually checked. There is no bulk-checkout
+                    action here since the backend's checkout endpoint always
+                    converts the entire cart, not a chosen subset. */}
+                {cartItems.length > 1 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl border border-gray-100 px-4 py-3 shadow-sm">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 accent-primary cursor-pointer"
+                      />
+                      {selectedIds.size > 0
+                        ? `${selectedIds.size} selected`
+                        : "Select all"}
+                    </label>
+
+                    {selectedIds.size > 0 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={handleRemoveSelected}
+                        isLoading={isBulkRemoving}
+                        className="w-full sm:w-auto"
+                      >
+                        Remove Selected
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-4 max-h-130 overflow-y-auto scrollbar-hide pr-1">
                   <AnimatePresence mode="popLayout">
                     {cartItems.map((item) => (
                       <CartItem
                         key={item.id}
                         item={item}
-                        onRemove={() => {
+                        onRemove={(id) => {
+                          setSelectedIds((prev) => {
+                            if (!prev.has(id)) return prev;
+                            const next = new Set(prev);
+                            next.delete(id);
+                            return next;
+                          });
                           queryClient.invalidateQueries({
                             queryKey: QUERY_KEYS.CART,
                           });
                         }}
+                        isSelected={selectedIds.has(item.id)}
+                        onToggleSelect={
+                          cartItems.length > 1 ? toggleSelect : undefined
+                        }
                       />
                     ))}
                   </AnimatePresence>

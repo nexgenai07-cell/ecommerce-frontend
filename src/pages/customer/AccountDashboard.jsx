@@ -17,7 +17,7 @@ import DashboardStats from "../../components/account-dashboard/DashboardStats"; 
 import RecentOrdersTable from "../../components/account-dashboard/RecentOrdersTable"; // Table showing the 3 most recent orders
 import WishlistPreview from "../../components/account-dashboard/WishlistPreview"; // Preview of the first 3 wishlist items with Add to Cart
 import RecentNotifications from "../../components/account-dashboard/RecentNotifications"; // Preview of the 3 most recent notifications with mark-as-read
-import ActiveTickets from "../../components/account-dashboard/ActiveTickets"; // Table of open returns and complaints — hidden when empty; paginates internally
+import ActiveTickets from "../../components/account-dashboard/ActiveTickets"; // Single ticket table — reused twice below, once for complaints and once for returns
 import { SkeletonAccountDashboard } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the orders data is loading — mirrors this exact page's sections
 
 const AccountDashboard = () => {
@@ -105,62 +105,67 @@ const AccountDashboard = () => {
   // through the normalizer defensively for the same reason as returns.
   const complaints = extractListData(complaintsData);
 
-  // activeTickets — merges pending returns and open complaints into one unified list
-  // Returns are prefixed with #TIC-, complaints with #CMP- to distinguish them visually
-  // Full list is passed down (NOT sliced here) — ActiveTickets paginates it internally
-  // with the shared Pagination component, same pattern used on OrderHistory/NotificationHistory
-  const activeTickets = [
-    // Map pending return requests into the shared ticket shape
-    ...returns
-      .filter((r) => r.status === RETURN_STATUS.REQUESTED) // compares against the
-      // constant (real value "pending") instead of a hardcoded string — see the
-      // NOTE in constants/statusTypes.js for why "requested" never matched real data
-      .map((r) => ({
-        id: `#TIC-${r.id}`, // prefixed ticket ID for display
-        type: "Return Request", // human-readable type label
-        // Returns are always tied to an order per the API contract (API 51 always
-        // returns order_number), so this reference is never empty in practice
-        reference: r.order_number,
-        status: r.status, // raw status string passed to the table
-        // NOTE: "updated_at" is NOT a field on the Return object — confirmed against
-        // real Network-tab responses (API 51), which only expose id, order, order_number,
-        // reason, resolved_at, status, created_at. Using created_at as the filed-on date.
-        expectedResolution: r.created_at,
-        // Route to this specific return's detail page (API 66) — uses the return's
-        // raw numeric id, not the "#TIC-" prefixed display id above.
-        linkTo: ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", r.id),
-      })),
-    // Map open (non-closed) complaints into the shared ticket shape
-    ...complaints
-      .filter((c) => c.status !== "closed")
-      .map((c) => ({
-        id: `#CMP-${c.id}`, // prefixed complaint ID for display
-        type: "Complaint", // human-readable type label
-        // Real complaint responses (confirmed via Network tab, API 55) expose BOTH
-        // "order" (raw FK id, e.g. 9) and "order_number" (human-readable, e.g. "ORD-2026-00009").
-        // Previously this read the raw "order" FK directly, which the app never displays
-        // anywhere else (order_number is the app-wide convention — same fix already
-        // applied to ComplaintDetail/OrderDetail components). A complaint filed with
-        // type "other" often isn't linked to any order at all (order/order_number both
-        // null) — in that case we fall back to the complaint's own category (e.g.
-        // "Payment", "Product") via the shared getComplaintTypeLabel util, so the column
-        // is never a dead blank cell — it always shows something the customer can act on.
-        reference: c.order_number || getComplaintTypeLabel(c.type),
-        status: c.status, // raw status string passed to the table
-        // NOTE: "updated_at" is NOT a field on the Complaint object either — confirmed
-        // against real Network-tab responses (API 55), which only expose id, customer,
-        // customer_name, message, order, order_number, resolved_by_name, response,
-        // status, type, created_at. Using created_at as the filed-on date.
-        expectedResolution: c.created_at,
-        // Route to this specific complaint's detail page (API 56) — uses the
-        // complaint's raw numeric id, not the "#CMP-" prefixed display id above.
-        linkTo: ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", c.id),
-      })),
-  ].sort(
-    (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),
-  ); // most-recently-filed-first, across BOTH returns and complaints together —
-  // without this, returns always list before complaints regardless of date,
-  // since they're just concatenated above
+  // activeReturns / activeComplaints — kept as two separate lists (previously
+  // merged into one combined "activeTickets" array) so the dashboard can show
+  // two side-by-side tables instead of one combined table. Each is sorted
+  // most-recently-filed-first on its own.
+  //
+  // activeReturns intentionally shows EVERY return regardless of status (not
+  // just ones still awaiting review) — per explicit request, so an
+  // Approved/Rejected return still shows up here the same way it does on the
+  // full Returns page's "Previous Returns" table, instead of disappearing
+  // from the dashboard the moment a decision is made.
+  const activeReturns = returns
+    .map((r) => ({
+      id: `#TIC-${r.id}`, // prefixed ticket ID for display
+      type: "Return Request", // human-readable type label
+      // Returns are always tied to an order per the API contract (API 51 always
+      // returns order_number), so this reference is never empty in practice
+      reference: r.order_number,
+      status: r.status, // raw status string passed to the table
+      // NOTE: "updated_at" is NOT a field on the Return object — confirmed against
+      // real Network-tab responses (API 51), which only expose id, order, order_number,
+      // reason, resolved_at, status, created_at. Using created_at as the filed-on date.
+      expectedResolution: r.created_at,
+      // Route to this specific return's detail page (API 66) — uses the return's
+      // raw numeric id, not the "#TIC-" prefixed display id above.
+      linkTo: ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", r.id),
+    }))
+    .sort(
+      (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),
+    );
+
+  // activeComplaints intentionally shows EVERY complaint regardless of status
+  // (including closed ones) — per explicit request, so a closed complaint
+  // still shows up here the same way a decided return now does above,
+  // instead of disappearing from the dashboard once it's closed.
+  const activeComplaints = complaints
+    .map((c) => ({
+      id: `#CMP-${c.id}`, // prefixed complaint ID for display
+      type: "Complaint", // human-readable type label
+      // Real complaint responses (confirmed via Network tab, API 55) expose BOTH
+      // "order" (raw FK id, e.g. 9) and "order_number" (human-readable, e.g. "ORD-2026-00009").
+      // Previously this read the raw "order" FK directly, which the app never displays
+      // anywhere else (order_number is the app-wide convention — same fix already
+      // applied to ComplaintDetail/OrderDetail components). A complaint filed with
+      // type "other" often isn't linked to any order at all (order/order_number both
+      // null) — in that case we fall back to the complaint's own category (e.g.
+      // "Payment", "Product") via the shared getComplaintTypeLabel util, so the column
+      // is never a dead blank cell — it always shows something the customer can act on.
+      reference: c.order_number || getComplaintTypeLabel(c.type),
+      status: c.status, // raw status string passed to the table
+      // NOTE: "updated_at" is NOT a field on the Complaint object either — confirmed
+      // against real Network-tab responses (API 55), which only expose id, customer,
+      // customer_name, message, order, order_number, resolved_by_name, response,
+      // status, type, created_at. Using created_at as the filed-on date.
+      expectedResolution: c.created_at,
+      // Route to this specific complaint's detail page (API 56) — uses the
+      // complaint's raw numeric id, not the "#CMP-" prefixed display id above.
+      linkTo: ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", c.id),
+    }))
+    .sort(
+      (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),
+    );
 
   // ── Loading state ───────────────────────────────────────────────────────────
   // Show a full-page skeleton while the primary orders query is still in flight
@@ -256,9 +261,32 @@ const AccountDashboard = () => {
               />
             </div>
 
-            {/* ── Active Complaints & Returns table ────────────────────────────────
-                Renders nothing when activeTickets is empty — no empty card shown    */}
-            <ActiveTickets tickets={activeTickets} />
+            {/* ── Complaints + Returns — side by side on desktop ────────────────
+                Split into two separate tables (previously one combined table),
+                each showing its full history (not just still-open items) —
+                so each type is easier to scan on its own; each renders nothing
+                when its own list is empty. Single column on mobile, 2-column
+                grid on lg+ screens, same pattern as the Wishlist/Notifications
+                row above. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+              {/* items-stretch: makes both tables always match height, whichever
+                  has less data — their pagination footers line up at the same
+                  bottom edge instead of one floating higher than the other */}
+              <ActiveTickets
+                tickets={activeComplaints}
+                title="Complaints"
+                showType={false}
+                // showType=false hides the redundant "Type" column — every
+                // row in this table is already a complaint
+              />
+              <ActiveTickets
+                tickets={activeReturns}
+                title="Returns"
+                showType={false}
+                // showType=false hides the redundant "Type" column — every
+                // row in this table is already a return request
+              />
+            </div>
           </div>
         </Container>
       </motion.div>

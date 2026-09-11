@@ -23,8 +23,11 @@ import EmptyState from "../../components/ui/EmptyState";
 // Import a reusable error-state component (with retry button) shown when the API call fails — same pattern used in OrderDetail.jsx, ProductDetail.jsx, OrderTracking.jsx
 import ErrorState from "../../components/ui/ErrorState";
 
-// Define how many notifications should be shown per page
-const PER_PAGE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the pattern used across the admin tables. The first option
+// is also the default page size when the page first loads.
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // Date group label nikalna
 // Helper function that determines which date group a notification belongs to ("TODAY", "YESTERDAY", or "OLDER") based on its timestamp
@@ -77,6 +80,17 @@ const NotificationHistory = () => {
   const [activeTab, setActiveTab] = useState("all");
   // State holding the current pagination page number, starting at page 1
   const [currentPage, setCurrentPage] = useState(1);
+  // State holding how many notifications are requested per page, controlled
+  // by the "Rows per page" dropdown rendered inside the Pagination control
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Called when the customer picks a different "rows per page" value.
+  // Resets back to page 1 as well, since staying on a deep page number
+  // could land past the end of the newly-sized result set.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // =============================================
   // NOTIFICATIONS API — GET /api/v1/notifications/
@@ -92,23 +106,31 @@ const NotificationHistory = () => {
     isError, // true if the fetch threw an error (network drop, 500, expired session, etc.) — must be handled separately from "no data"
     refetch, // passed to ErrorState so the user can retry the failed request without a full page reload
   } = useQuery({
-    // Unique cache key under which this query's data is stored/retrieved
-    queryKey: [...QUERY_KEYS.NOTIFICATIONS, activeTab, currentPage],
-    queryFn: ({ signal }) => getNotifications({
-        // "all" and "unread" aren't real `type` values — only order/
-        // promotion/system are, so only forward activeTab as `type`
-        // when it's actually one of those three
-        type:
-          activeTab === "all" || activeTab === "unread" ? undefined : activeTab,
-        is_read: activeTab === "unread" ? false : undefined,
-        page: currentPage,
-        page_size: PER_PAGE,
-      }, signal),
+    // Unique cache key under which this query's data is stored/retrieved —
+    // pageSize is included so switching the rows-per-page dropdown fetches
+    // (and caches) its own distinct page of results
+    queryKey: [...QUERY_KEYS.NOTIFICATIONS, activeTab, currentPage, pageSize],
+    queryFn: ({ signal }) =>
+      getNotifications(
+        {
+          // "all" and "unread" aren't real `type` values — only order/
+          // promotion/system are, so only forward activeTab as `type`
+          // when it's actually one of those three
+          type:
+            activeTab === "all" || activeTab === "unread"
+              ? undefined
+              : activeTab,
+          is_read: activeTab === "unread" ? false : undefined,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
     staleTime: 1000 * 60 * 1, // 1 minute — notifications frequently update
     refetchInterval: 1000 * 60 * 2, // Har 2 minute pe auto refresh
   });
 
-  // The current page's notifications — always exactly PER_PAGE (or
+  // The current page's notifications — always exactly pageSize (or
   // fewer, on the last page) real, already-filtered rows straight from
   // the backend.
   const notifications = notificationsResponse?.data?.results || [];
@@ -125,7 +147,7 @@ const NotificationHistory = () => {
   // `count` field, matching exactly what's been server-filtered by the
   // current tab (type/is_read)
   const totalCount = notificationsResponse?.data?.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // Date groups
   // Organize the current page's notifications into date-based groups (TODAY/YESTERDAY/OLDER) for grouped rendering
@@ -270,62 +292,80 @@ const NotificationHistory = () => {
             </div>
           )}
 
-          {/* Notifications grouped by date */}
-          {/* Only render the grouped notification lists if loading has finished, there was no error, and there's at least one group with items */}
-          {!isLoading && !isError && groupedNotifications.length > 0 && (
-            // AnimatePresence with "popLayout" mode allows items to animate smoothly as the list changes, removing items from layout flow immediately rather than waiting for their exit animation
-            <AnimatePresence mode="popLayout">
-              {/* Outer vertical flex container stacking each date group section with gap spacing */}
-              <div className="flex flex-col gap-6">
-                {/* Map over each date group (e.g., TODAY, YESTERDAY, OLDER) to render its label and notification items */}
-                {groupedNotifications.map((group) => (
-                  // Animated wrapper for this date group: fades in and slides up slightly from below on mount
-                  <motion.div
-                    key={group.label}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex flex-col gap-3"
-                  >
-                    {/* Date group label */}
-                    {/* The group's heading text (e.g., "TODAY"), styled small, bold, uppercase, light gray, with wide letter spacing */}
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                      {group.label}
-                    </p>
+          {/* Notifications grouped by date, plus pagination — merged into one card */}
+          {/* Both the grouped list and its pagination footer live inside one
+              shared white card so they read as a single unit, matching the
+              merged-box look DataTable already gives every admin table.
+              The outer condition matches the pagination's own original
+              gating (totalCount > 0) so the footer's visibility is unchanged
+              from before; the grouped list itself still only renders when
+              groupedNotifications actually has items.
+              NOTE: totalResults is not passed to <Pagination /> below — it
+              doesn't accept or render that prop (confirmed in Pagination.jsx),
+              so passing it would be dead code with zero effect on the UI.    */}
+          {!isLoading && !isError && totalCount > 0 && (
+            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white">
+              {groupedNotifications.length > 0 && (
+                // AnimatePresence with "popLayout" mode allows items to animate smoothly as the list changes, removing items from layout flow immediately rather than waiting for their exit animation
+                <AnimatePresence mode="popLayout">
+                  {/* Outer vertical flex container stacking each date group section with gap spacing */}
+                  <div className="flex flex-col gap-6 p-4 sm:p-5">
+                    {/* Map over each date group (e.g., TODAY, YESTERDAY, OLDER) to render its label and notification items */}
+                    {groupedNotifications.map((group) => (
+                      // Animated wrapper for this date group: fades in and slides up slightly from below on mount
+                      <motion.div
+                        key={group.label}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex flex-col gap-3"
+                      >
+                        {/* Date group label */}
+                        {/* The group's heading text (e.g., "TODAY"), styled small, bold, uppercase, light gray, with wide letter spacing */}
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                          {group.label}
+                        </p>
 
-                    {/* Notifications list */}
-                    {/* Vertical flex container stacking each notification item within this group, with small gap spacing */}
-                    <div className="flex flex-col gap-2">
-                      {/* Map over this group's notification items to render one NotificationItem component per notification */}
-                      {group.items.map((notification) => (
-                        <NotificationItem
-                          key={notification.id}
-                          notification={notification}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </AnimatePresence>
-          )}
+                        {/* Notifications list */}
+                        {/* Vertical flex container stacking each notification item within this group, with small gap spacing */}
+                        <div className="flex flex-col gap-2">
+                          {/* Map over this group's notification items to render one NotificationItem component per notification */}
+                          {group.items.map((notification) => (
+                            <NotificationItem
+                              key={notification.id}
+                              notification={notification}
+                            />
+                          ))}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </AnimatePresence>
+              )}
 
-          {/* Pagination */}
-          {/* Only show pagination controls if data has finished loading, there was no error, and there is more than one page of results
-              NOTE: totalResults is no longer passed here — <Pagination /> doesn't
-              accept or render that prop (confirmed in Pagination.jsx), so passing
-              it was dead code with zero effect on the UI.                      */}
-          {!isLoading && !isError && totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={(page) => {
-                // Update the current page state when the user navigates to a different page
-                setCurrentPage(page);
-                // Smoothly scroll back to the top of the page after changing pages
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            />
+              {/* Pagination footer — variant="compact" strips Pagination's own
+                  card chrome (shadow/border/rounded corners) since this
+                  wrapper already supplies all of that; border-t is what
+                  visually separates the footer from the notification groups
+                  above. Not gated on totalPages > 1, so the "rows per page"
+                  dropdown stays reachable even while everything currently
+                  fits on a single page.                                     */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={(page) => {
+                  // Update the current page state when the user navigates to a different page
+                  setCurrentPage(page);
+                  // Smoothly scroll back to the top of the page after changing pages
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageSizeChange={handlePageSizeChange}
+                variant="compact"
+                className="border-t border-gray-100"
+              />
+            </div>
           )}
         </div>
       </Container>

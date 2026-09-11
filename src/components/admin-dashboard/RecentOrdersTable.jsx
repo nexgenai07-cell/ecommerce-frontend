@@ -119,9 +119,15 @@ const RecentOrdersTable = () => {
       label: "Action",
       render: (row) => (
         <button
-          onClick={() =>
-            navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number))
-          }
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which navigates to the same order page — avoids a
+            // redundant double navigation when the icon itself is clicked
+            navigate(
+              ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number),
+            );
+          }}
           className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           aria-label={`View order ${row.order_number}`}
         >
@@ -151,6 +157,11 @@ const RecentOrdersTable = () => {
         columns={columns}
         data={filteredOrders}
         keyField="order_number"
+        onRowClick={(row) =>
+          navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number))
+        }
+        // Opens the same order detail page as the eye icon when any part
+        // of the row is clicked
         searchable
         searchPlaceholder="Filter orders..."
         onSearch={setSearchTerm}

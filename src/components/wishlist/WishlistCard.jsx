@@ -11,6 +11,8 @@ const WishlistCard = ({
   registerImageRef, // function — (productId, imgNode) => void, forwarded straight
   // through to ProductCard so the Wishlist page can collect every card's
   // image element for the "Add All to Cart" simultaneous flight animation
+  isSelected, // boolean — whether this card's bulk-select checkbox is checked
+  onToggleSelect, // function — called with item.id when the checkbox is toggled
 }) => {
   const product = item.product;
 
@@ -23,7 +25,25 @@ const WishlistCard = ({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.2 }}
+      className="relative"
     >
+      {/* Bulk-select checkbox — sits in the corner gap outside the card's
+          own rounded edge and image, so it never overlaps the discount
+          badge or remove button ProductCard already renders inside its
+          image area. */}
+      <label
+        className="absolute -top-2 -left-2 z-20 w-6 h-6 rounded-full bg-white shadow-md border border-gray-200 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(item.id)}
+          className="w-3.5 h-3.5 accent-primary cursor-pointer"
+          aria-label={`Select ${product?.name || "item"}`}
+        />
+      </label>
+
       <ProductCard
         product={product}
         // Passing these three turns ProductCard into "controlled" mode:

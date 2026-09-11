@@ -34,6 +34,9 @@ const DataTable = ({
   totalPages = 1, // Total number of pages — passed through to Pagination component
   totalResults = 0, // Total record count across all pages — shown in Pagination summary
   onPageChange, // Handler called with new page number when user clicks a page button
+  pageSize, // Currently selected rows-per-page value — forwarded to Pagination; the rows-per-page dropdown only renders when this and onPageSizeChange are both provided
+  pageSizeOptions, // Selectable rows-per-page values — forwarded to Pagination
+  onPageSizeChange, // Handler called with the new rows-per-page value when the user changes the dropdown
 
   // --- Bulk selection ---
   selectable = false, // When true, renders checkboxes on every row and a "select all" header checkbox
@@ -47,6 +50,9 @@ const DataTable = ({
   // --- Callbacks ---
   onSearch, // Called with the current search string whenever the search input changes
   onSort, // Called with { field, direction } whenever a sortable column header is clicked
+  onRowClick, // Optional — called with the full row object when a row is clicked anywhere
+  // outside its interactive controls; lets a page open the same detail view/modal that
+  // its row-level "eye" action opens, without requiring a click on the icon itself
 
   className = "", // Extra Tailwind classes applied to the outermost wrapper div
 }) => {
@@ -190,226 +196,276 @@ const DataTable = ({
         </div>
       )}
 
-      {/* Table wrapper — enables horizontal scroll on mobile when table is wider than screen */}
-      <div className="w-full overflow-x-auto rounded-xl border border-gray-100 scrollbar-hide">
-        {/* overflow-x-auto: allows the table to scroll horizontally on narrow viewports */}
-        {/* rounded-xl + border: card-style container wrapping the entire table */}
-        {/* scrollbar-hide: hides the native scrollbar, matching every other
-            horizontally-scrollable element in the app (still fully scrollable,
-            just no visible scrollbar track) */}
+      {/* Table wrapper — enables horizontal scroll on mobile when table is wider than screen.
+          Also now hosts the pagination footer INSIDE this same card, instead of it floating
+          as a separate box below — border-t on the footer strip is what visually divides them.
+          flex flex-col flex-1: lets this card stretch to fill any extra height its parent
+          gives it (e.g. two DataTables placed side by side in a grid, stretched to match
+          each other's height) — harmless in the normal case where nothing stretches the
+          parent, since flex-grow only has effect when there's actual extra space to fill. */}
+      <div className="w-full overflow-hidden rounded-xl border border-gray-100 shadow-sm flex flex-col flex-1">
+        {/* rounded-xl + border + shadow-sm: single card boundary wrapping the header, rows,
+            AND the pagination footer together, so the whole table reads as one unit */}
 
-        <table className="w-full text-sm">
-          {/* w-full: table stretches to fill the scroll container */}
-          {/* text-sm: base font size for all table content */}
+        <div className="w-full overflow-x-auto scrollbar-hide flex-1">
+          {/* overflow-x-auto: allows the table to scroll horizontally on narrow viewports */}
+          {/* scrollbar-hide: hides the native scrollbar, matching every other
+              horizontally-scrollable element in the app (still fully scrollable,
+              just no visible scrollbar track) */}
+          {/* flex-1: grows to consume any extra vertical space in a stretched card,
+              which pushes the pagination footer below down to the very bottom of the
+              card instead of leaving it floating right under a short table */}
 
-          {/* Table header row */}
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              {/* bg-gray-50: light gray header background distinguishes it from the white body */}
-              {/* border-b border-gray-100: subtle bottom border separates header from first data row */}
+          <table className="w-full text-[11px] sm:text-xs">
+            {/* w-full: table stretches to fill the scroll container */}
+            {/* text-[11px] sm:text-xs: reduced from the previous text-xs/text-sm pairing —
+                the cell content was reading too large relative to the compact row height,
+                so both breakpoints are dropped one notch smaller */}
 
-              {/* Select all checkbox — only rendered in selectable mode */}
-              {selectable && (
-                <th className="w-10 px-4 py-3 text-left">
-                  {/* w-10: narrow fixed column just wide enough for the checkbox */}
-                  <Checkbox
-                    checked={
-                      selectedIds.length === data.length && data.length > 0
-                    }
-                    // Checked only when every row is selected AND there is at least one row
-                    onChange={handleSelectAll}
-                    // Triggers select all / deselect all on click
-                  />
-                </th>
-              )}
+            {/* Table header row — solid brand-gradient background with white uppercase
+                labels, replacing the old plain gray header for a more modern, on-theme look */}
+            <thead>
+              <tr className="bg-linear-to-r from-primary to-primary-dark">
+                {/* bg-linear-to-r from-primary to-primary-dark: same gradient token already
+                    used by the active pagination pill — keeps this consistent with the
+                    rest of the project's brand language instead of introducing a new color */}
 
-              {/* Column header cells — one per column in the columns config */}
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  // key uses the column key — unique across the columns array
-                  onClick={() => col.sortable && handleSort(col.key)}
-                  // Only triggers sort when this specific column has sortable:true
-                  className={cn(
-                    "px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap",
-                    // px-4 py-3: consistent header cell padding
-                    // text-xs font-semibold text-gray-500: small, bold, muted header label style
-                    // uppercase tracking-wider: all-caps with letter spacing — classic table header style
-                    // whitespace-nowrap: prevents header labels from wrapping to a second line
-                    col.sortable &&
-                      "cursor-pointer hover:text-gray-700 select-none",
-                    // cursor-pointer: hand cursor signals this header is clickable
-                    // hover:text-gray-700: darkens label on hover to confirm interactivity
-                    // select-none: prevents text selection when rapidly clicking to sort
-                    col.className,
-                    // Column-specific extra classes from the columns config object
-                  )}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {/* flex + items-center: aligns the label text and sort arrows on the same baseline */}
-                    {/* gap-1.5: small gap between label and sort indicator */}
-                    {col.label}
-                    {/* Renders the column header label text */}
-
-                    {/* Sort arrows — only rendered when this column has sortable:true */}
-                    {col.sortable && (
-                      <span className="flex flex-col gap-0.5">
-                        {/* flex-col: stacks up and down arrows vertically */}
-                        {/* gap-0.5: tight spacing between the two arrows */}
-
-                        {/* Up arrow — highlighted in brand color when this column is sorted ascending */}
-                        <svg
-                          className={cn(
-                            "w-2.5 h-2.5",
-                            // w-2.5 h-2.5: 10px — tiny arrow indicator that doesn't overpower the label
-                            sortConfig.field === col.key &&
-                              sortConfig.direction === "asc"
-                              ? "text-primary" // Active ascending sort — brand color
-                              : "text-gray-300", // Inactive — very muted gray
-                          )}
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M12 5l7 7H5z" />
-                          {/* Solid upward triangle — represents ascending sort direction */}
-                        </svg>
-
-                        {/* Down arrow — highlighted when this column is sorted descending */}
-                        <svg
-                          className={cn(
-                            "w-2.5 h-2.5",
-                            sortConfig.field === col.key &&
-                              sortConfig.direction === "desc"
-                              ? "text-primary" // Active descending sort — brand color
-                              : "text-gray-300", // Inactive — very muted gray
-                          )}
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M12 19l7-7H5z" />
-                          {/* Solid downward triangle — represents descending sort direction */}
-                        </svg>
-                      </span>
-                    )}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          {/* Table body — renders one of four states: loading, error, empty, or data rows */}
-          <tbody className="divide-y divide-gray-50 bg-white">
-            {/* divide-y divide-gray-50: very subtle lines between rows — lighter than header border */}
-            {/* bg-white: white body background contrasts with the gray header */}
-
-            {isLoading ? (
-              // Loading state — full-width skeleton placeholder replaces the data rows
-              <tr>
-                <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                  {/* colSpan spans all data columns plus the optional checkbox column */}
-                  <SkeletonTable rows={5} cols={columns.length} />
-                  {/* 5 skeleton rows matching the number of real columns */}
-                </td>
-              </tr>
-            ) : error ? (
-              // Error state — shown when the data fetch failed
-              <tr>
-                <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                  <div className="py-8 text-center">
-                    {/* py-8: vertical breathing room around the error message */}
-                    <p className="text-sm text-danger">Failed to load data.</p>
-                    {/* text-danger: red text signals the failure clearly */}
-                    {onRetry && (
-                      <button
-                        onClick={onRetry}
-                        className="mt-2 text-sm text-primary hover:underline"
-                        // mt-2: small gap between error text and retry link
-                        // text-primary: brand color signals this is a clickable action
-                        // hover:underline: underline on hover confirms it is interactive
-                      >
-                        Try again
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : data.length === 0 ? (
-              // Empty state — shown when the fetch succeeded but returned zero records
-              <tr>
-                <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                  <EmptyState variant="noResults" />
-                  {/* noResults variant: magnifying glass icon with "No Results Found" message */}
-                </td>
-              </tr>
-            ) : (
-              // Data rows — one <tr> per item in the data array
-              data.map((row) => (
-                <tr
-                  key={row[keyField]}
-                  // key uses the row's unique keyField value for stable React reconciliation
-                  className={cn(
-                    "hover:bg-gray-50 transition-colors duration-100",
-                    // hover:bg-gray-50: subtle row highlight on hover for scannability
-                    // transition-colors duration-100: fast smooth hover color change
-                    selectedIds.includes(row[keyField]) && "bg-primary-50",
-                    // Selected rows get a light emerald background to visually distinguish them
-                  )}
-                >
-                  {/* Row checkbox — only rendered in selectable mode */}
-                  {selectable && (
-                    <td className="w-10 px-4 py-3">
-                      <Checkbox
-                        checked={selectedIds.includes(row[keyField])}
-                        // Checked when this row's id is in the selectedIds array
-                        onChange={() => handleRowSelect(row[keyField])}
-                        // Toggles this row's selection state on click
-                      />
-                    </td>
-                  )}
-
-                  {/* Data cells — one per column in the columns config */}
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={cn(
-                        "px-4 py-3 text-gray-700 whitespace-nowrap",
-                        // px-4 py-3: consistent cell padding matching header cells
-                        // text-gray-700: dark readable text for cell content
-                        // whitespace-nowrap: prevents cell content from wrapping to multiple lines
-                        col.className,
-                        // Column-specific extra classes for alignment or width overrides
-                      )}
-                    >
-                      {
-                        col.render
-                          ? col.render(row)
-                          : // Custom render function provided — called with the full row object.
-                            // Every admin page's column config (ProductList, OrderManagement,
-                            // DiscountManagement, CustomerManagement, ComplaintsManagement,
-                            // ReturnsManagement) writes `render: (row) => ...` expecting the
-                            // whole row, so this must match that contract.
-                            (row[col.key] ?? "-")
-                        // No render function — displays the raw value or a dash if null/undefined
+                {/* Select all checkbox — only rendered in selectable mode */}
+                {selectable && (
+                  <th className="w-9 px-3 py-2 text-left">
+                    {/* w-9 px-3 py-2: narrower, shorter header cell than before — the main
+                        source of the extra vertical height is trimmed here and on every
+                        other header/row cell below */}
+                    <Checkbox
+                      checked={
+                        selectedIds.length === data.length && data.length > 0
                       }
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                      // Checked only when every row is selected AND there is at least one row
+                      onChange={handleSelectAll}
+                      // Triggers select all / deselect all on click
+                    />
+                  </th>
+                )}
 
-      {/* Pagination — only rendered when not loading and there is at least one data row */}
-      {!isLoading && data.length > 0 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalResults={totalResults}
-          onPageChange={onPageChange}
-          // All pagination props passed straight through from DataTable's own props
-        />
-      )}
+                {/* Column header cells — one per column in the columns config */}
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    // key uses the column key — unique across the columns array
+                    onClick={() => col.sortable && handleSort(col.key)}
+                    // Only triggers sort when this specific column has sortable:true
+                    className={cn(
+                      "px-3 py-2 text-left text-[10px] sm:text-[11px] font-bold text-white uppercase tracking-wider whitespace-nowrap",
+                      // px-3 py-2: tighter header cell padding than the old px-4 py-3
+                      // text-[10px] sm:text-[11px] font-bold text-white: small, bold,
+                      // high-contrast label against the gradient background
+                      col.sortable &&
+                        "cursor-pointer hover:text-white/80 select-none",
+                      // cursor-pointer: hand cursor signals this header is clickable
+                      // hover:text-white/80: subtle dim on hover confirms interactivity
+                      // (swapped from hover:text-gray-700, which was invisible on dark bg)
+                      col.className,
+                      // Column-specific extra classes from the columns config object
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {/* flex + items-center: aligns the label text and sort arrows on the same baseline */}
+                      {/* gap-1.5: small gap between label and sort indicator */}
+                      {col.label}
+                      {/* Renders the column header label text */}
+
+                      {/* Sort arrows — only rendered when this column has sortable:true */}
+                      {col.sortable && (
+                        <span className="flex flex-col gap-0.5">
+                          {/* flex-col: stacks up and down arrows vertically */}
+                          {/* gap-0.5: tight spacing between the two arrows */}
+
+                          {/* Up arrow — highlighted in white when this column is sorted ascending */}
+                          <svg
+                            className={cn(
+                              "w-2.5 h-2.5",
+                              // w-2.5 h-2.5: 10px — tiny arrow indicator that doesn't overpower the label
+                              sortConfig.field === col.key &&
+                                sortConfig.direction === "asc"
+                                ? "text-white" // Active ascending sort — full white against the gradient
+                                : "text-white/40", // Inactive — muted white, still readable on the dark header
+                            )}
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 5l7 7H5z" />
+                            {/* Solid upward triangle — represents ascending sort direction */}
+                          </svg>
+
+                          {/* Down arrow — highlighted when this column is sorted descending */}
+                          <svg
+                            className={cn(
+                              "w-2.5 h-2.5",
+                              sortConfig.field === col.key &&
+                                sortConfig.direction === "desc"
+                                ? "text-white" // Active descending sort — full white against the gradient
+                                : "text-white/40", // Inactive — muted white, still readable on the dark header
+                            )}
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 19l7-7H5z" />
+                            {/* Solid downward triangle — represents descending sort direction */}
+                          </svg>
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            {/* Table body — renders one of four states: loading, error, empty, or data rows */}
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {/* divide-y divide-gray-200: a clearly visible light-gray rule under every row —
+                  bumped up from divide-gray-50, which was too faint to actually separate rows */}
+              {/* bg-white: white body background contrasts with the gradient header */}
+
+              {isLoading ? (
+                // Loading state — full-width skeleton placeholder replaces the data rows
+                <tr>
+                  <td colSpan={columns.length + (selectable ? 1 : 0)}>
+                    {/* colSpan spans all data columns plus the optional checkbox column */}
+                    <SkeletonTable rows={5} cols={columns.length} />
+                    {/* 5 skeleton rows matching the number of real columns */}
+                  </td>
+                </tr>
+              ) : error ? (
+                // Error state — shown when the data fetch failed
+                <tr>
+                  <td colSpan={columns.length + (selectable ? 1 : 0)}>
+                    <div className="py-8 text-center">
+                      {/* py-8: vertical breathing room around the error message */}
+                      <p className="text-sm text-danger">
+                        Failed to load data.
+                      </p>
+                      {/* text-danger: red text signals the failure clearly */}
+                      {onRetry && (
+                        <button
+                          onClick={onRetry}
+                          className="mt-2 text-sm text-primary hover:underline"
+                          // mt-2: small gap between error text and retry link
+                          // text-primary: brand color signals this is a clickable action
+                          // hover:underline: underline on hover confirms it is interactive
+                        >
+                          Try again
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : data.length === 0 ? (
+                // Empty state — shown when the fetch succeeded but returned zero records
+                <tr>
+                  <td colSpan={columns.length + (selectable ? 1 : 0)}>
+                    <EmptyState variant="noResults" />
+                    {/* noResults variant: magnifying glass icon with "No Results Found" message */}
+                  </td>
+                </tr>
+              ) : (
+                // Data rows — one <tr> per item in the data array
+                data.map((row, rowIndex) => (
+                  <tr
+                    key={row[keyField]}
+                    // key uses the row's unique keyField value for stable React reconciliation
+                    onClick={() => onRowClick?.(row)}
+                    // Fires the optional row-click handler with the full row object — lets a
+                    // page open the same detail view its "eye" action opens by clicking
+                    // anywhere on the row, not just the small icon
+                    className={cn(
+                      "hover:bg-primary-100 transition-colors duration-100",
+                      // hover:bg-primary-100: stronger, more visible green hover tint —
+                      // the previous hover:bg-primary-50/60 read as almost no color change
+                      // transition-colors duration-100: fast smooth hover color change
+                      rowIndex % 2 === 1 && "bg-gray-50/60",
+                      // Subtle zebra striping on every other row — this, together with the
+                      // shorter cell padding below, is what makes long tables easy to scan
+                      // at a glance without counting rows, matching the reference design
+                      selectedIds.includes(row[keyField]) && "bg-primary-50",
+                      // Selected rows get a light emerald background to visually distinguish
+                      // them — listed last so it wins over the zebra stripe via twMerge
+                      onRowClick && "cursor-pointer",
+                      // Hand cursor signals the whole row is clickable, only when a page
+                      // actually supplies an onRowClick handler
+                    )}
+                  >
+                    {/* Row checkbox — only rendered in selectable mode */}
+                    {selectable && (
+                      <td
+                        className="w-9 px-3 py-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                        // Stops the click from bubbling up to the row's onRowClick handler,
+                        // so ticking a row's checkbox selects it instead of also opening
+                        // that row's detail view
+                      >
+                        <Checkbox
+                          checked={selectedIds.includes(row[keyField])}
+                          // Checked when this row's id is in the selectedIds array
+                          onChange={() => handleRowSelect(row[keyField])}
+                          // Toggles this row's selection state on click
+                        />
+                      </td>
+                    )}
+
+                    {/* Data cells — one per column in the columns config */}
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={cn(
+                          "px-3 py-1.5 text-gray-700 whitespace-nowrap",
+                          // px-3 py-1.5: noticeably shorter row height than the old px-4 py-3 —
+                          // this is the main "choti choti lines" change, applied consistently
+                          // to every admin table through this one shared component
+                          col.className,
+                          // Column-specific extra classes for alignment or width overrides
+                        )}
+                      >
+                        {
+                          col.render
+                            ? col.render(row)
+                            : // Custom render function provided — called with the full row object.
+                              // Every admin page's column config (ProductList, OrderManagement,
+                              // DiscountManagement, CustomerManagement, ComplaintsManagement,
+                              // ReturnsManagement) writes `render: (row) => ...` expecting the
+                              // whole row, so this must match that contract.
+                              (row[col.key] ?? "-")
+                          // No render function — displays the raw value or a dash if null/undefined
+                        }
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination — rendered INSIDE this same card, as a compact footer strip with its
+            own top border, instead of floating separately below the table. variant="compact"
+            strips Pagination's own card chrome (shadow/border/rounded/large padding) since
+            this wrapper already provides all of that. Only used here — every other page that
+            renders <Pagination /> directly (Products, OrderHistory, etc.) is completely
+            unaffected, since "compact" is opt-in and "card" (the original look) stays default. */}
+        {!isLoading && data.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalResults={totalResults}
+            onPageChange={onPageChange}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageSizeChange={onPageSizeChange}
+            variant="compact"
+            className="border-t border-gray-100"
+            // All pagination props passed straight through from DataTable's own props
+          />
+        )}
+      </div>
     </div>
   );
 };

@@ -12,13 +12,30 @@ import EmptyState from "../ui/EmptyState";
 // admin panel
 import DataTable from "../ui/DataTable";
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown.
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+// Capped at 50 (not the usual 100) since the parent page only ever
+// fetches the top 50 products for this date range in the first place.
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // ProductsPerformanceTable -> receives the already-fetched `products`
 // array and the `isLoading` flag from the parent page (ProductsPerformance),
 // it does NOT fetch anything itself
 const ProductsPerformanceTable = ({ products, isLoading }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many ranked products are shown per page, controlled
+  // by the "Rows per page" dropdown in the table footer. Purely a
+  // client-side slice of the already-fetched `products` array — no
+  // extra network request is made when it changes.
+
+  // Resets back to page 1 whenever the rows-per-page value changes, so
+  // staying on a deep page of a now-differently-sized list can't land
+  // on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   // Rank is assigned against the full, API-ordered list (ranked by
   // sales) before pagination slices it down to a page, so "#1" always
@@ -29,10 +46,10 @@ const ProductsPerformanceTable = ({ products, isLoading }) => {
     rank: index + 1,
   }));
 
-  const totalPages = Math.max(1, Math.ceil(rankedProducts.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(rankedProducts.length / pageSize));
   const paginatedProducts = rankedProducts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   const columns = [
@@ -101,6 +118,9 @@ const ProductsPerformanceTable = ({ products, isLoading }) => {
             totalPages={totalPages}
             totalResults={rankedProducts.length}
             onPageChange={setCurrentPage}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onPageSizeChange={handlePageSizeChange}
           />
         </div>
       )}

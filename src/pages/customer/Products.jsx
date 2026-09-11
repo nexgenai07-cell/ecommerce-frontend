@@ -6,7 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 // Icons used in the mobile filter button and the page header badge
 import { AiOutlineFilter, AiOutlineShop } from "react-icons/ai";
 // Custom hook that fetches + client-side paginates the product search results
-import useProductsSearch, { UI_PAGE_SIZE } from "../../hooks/useProductsSearch";
+import useProductsSearch, {
+  UI_PAGE_SIZE_OPTIONS,
+  DEFAULT_UI_PAGE_SIZE,
+} from "../../hooks/useProductsSearch";
 // Shared max-width content wrapper used on every page
 import Container from "../../components/layouts/Container";
 // Sidebar filter panel + its default (empty) filter state
@@ -25,10 +28,6 @@ import Pagination from "../../components/ui/Pagination";
 import EmptyState from "../../components/ui/EmptyState";
 // App route path constants
 import { ROUTES } from "../../constants/routes";
-
-// Page size is fully controlled on the frontend — the useProductsSearch hook
-// re-slices whatever the backend returns into UI_PAGE_SIZE-sized pages
-const PER_PAGE = UI_PAGE_SIZE;
 
 // Smoothly scrolls back to the top of the page — called on every filter,
 // sort, or page change so the user always sees the new results from the top
@@ -56,6 +55,9 @@ const Products = () => {
   const [viewMode, setViewMode] = useState("grid");
   // Current page number for pagination
   const [currentPage, setCurrentPage] = useState(1);
+  // How many products are shown per UI page, controlled by the "Rows per
+  // page" dropdown in the Pagination control below
+  const [pageSize, setPageSize] = useState(DEFAULT_UI_PAGE_SIZE);
   // Whether the mobile filter drawer is currently open
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
@@ -92,14 +94,24 @@ const Products = () => {
     scrollToTop();
   };
 
+  // Called when the customer picks a different "rows per page" value.
+  // Resets back to page 1 as well, since staying on a deep page number
+  // could land past the end of the newly-sized result set.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    scrollToTop();
+  };
+
   // =============================================
   // PRODUCTS SEARCH — client-side re-paginated to
-  // exactly PER_PAGE (21) items per UI page
+  // exactly pageSize items per UI page
   // =============================================
   const { data: productsData, isLoading } = useProductsSearch({
     filters,
     sortBy,
     uiPage: currentPage,
+    pageSize,
   });
 
   // Extract the current page's products, defaulting to an empty array
@@ -107,7 +119,7 @@ const Products = () => {
   // Total number of products matching the current filters
   const totalResults = productsData?.count || 0;
   // Total number of pages, derived from the total result count
-  const totalPages = Math.ceil(totalResults / PER_PAGE);
+  const totalPages = Math.ceil(totalResults / pageSize);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -182,7 +194,7 @@ const Products = () => {
                   viewMode={viewMode}
                   onViewModeChange={setViewMode}
                   currentPage={currentPage}
-                  perPage={PER_PAGE}
+                  perPage={pageSize}
                 />
               </div>
 
@@ -201,7 +213,7 @@ const Products = () => {
                     <ProductGrid
                       products={products}
                       isLoading={isLoading}
-                      skeletonCount={PER_PAGE}
+                      skeletonCount={pageSize}
                       emptyVariant="noProducts"
                       cols={{ default: 2, sm: 2, md: 3, lg: 3 }}
                     />
@@ -220,13 +232,13 @@ const Products = () => {
                         // FIXED: this used to always render exactly 6 rows,
                         // no matter how many products the current page
                         // actually holds. Grid view correctly sizes its
-                        // skeleton to PER_PAGE (21), so list view was the
+                        // skeleton to pageSize, so list view was the
                         // one place a customer would see 6 placeholder rows
-                        // suddenly snap to 21 real rows the moment the
+                        // suddenly snap to pageSize real rows the moment the
                         // request finished — a jarring page-length jump.
-                        // Using PER_PAGE here keeps both view modes
+                        // Using pageSize here keeps both view modes
                         // consistent with each other and with the real data.
-                        Array.from({ length: PER_PAGE }).map((_, i) => (
+                        Array.from({ length: pageSize }).map((_, i) => (
                           <div
                             key={i}
                             className="flex flex-col sm:flex-row gap-4 sm:gap-5 p-4 sm:p-5 bg-white rounded-2xl border border-gray-100 animate-pulse"
@@ -287,12 +299,18 @@ const Products = () => {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Pagination — only rendered once there's more than one page */}
-              {!isLoading && totalPages > 1 && (
+              {/* Pagination — shown whenever there's at least one product,
+                  not gated on totalPages > 1 any more, so the "rows per
+                  page" dropdown stays reachable even while every matching
+                  product currently fits on a single page. */}
+              {!isLoading && totalResults > 0 && (
                 <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={handlePageChange}
+                  pageSize={pageSize}
+                  pageSizeOptions={UI_PAGE_SIZE_OPTIONS}
+                  onPageSizeChange={handlePageSizeChange}
                 />
               )}
             </div>

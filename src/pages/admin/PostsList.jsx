@@ -38,7 +38,13 @@ const PLATFORM_OPTIONS = [
   { value: "tiktok", label: "TikTok" },
 ];
 
-const PAGE_SIZE = 9;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [9, 18, 36, 90];
+// 9 (the previous fixed value) is kept as the smallest/default option
+// here instead of 10, since this page renders posts as a 3-column card
+// grid and 9 divides evenly into full rows.
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const PostsList = () => {
   const navigate = useNavigate();
@@ -48,10 +54,22 @@ const PostsList = () => {
   const [platform, setPlatform] = useState("");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many posts the backend returns per page, controlled
+  // by the "Rows per page" dropdown next to the Prev/Next controls.
+  // Sent to the backend as `page_size` alongside `page` on every request.
   const [postToDelete, setPostToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   const {
     data: postsResponse,
@@ -65,21 +83,26 @@ const PostsList = () => {
       platform,
       debouncedSearch,
       currentPage,
+      pageSize,
     ],
-    queryFn: ({ signal }) => getSocialPosts({
-        status: activeStatus || undefined,
-        platform: platform || undefined,
-        // `search` is now confirmed to work server-side on this
-        // endpoint (previously undocumented and sent optimistically)
-        search: debouncedSearch || undefined,
-        page: currentPage,
-        page_size: PAGE_SIZE,
-      }, signal),
+    queryFn: ({ signal }) =>
+      getSocialPosts(
+        {
+          status: activeStatus || undefined,
+          platform: platform || undefined,
+          // `search` is now confirmed to work server-side on this
+          // endpoint (previously undocumented and sent optimistically)
+          search: debouncedSearch || undefined,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
   });
 
   const posts = extractListData(postsResponse);
   const totalCount = postsResponse?.data?.count ?? posts.length;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
   // Real server-side pagination is now confirmed on this endpoint, so
   // `posts` is always already exactly one page's worth of results —
   // no more client-side slicing fallback needed for the case where
@@ -204,6 +227,9 @@ const PostsList = () => {
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       <ConfirmModal

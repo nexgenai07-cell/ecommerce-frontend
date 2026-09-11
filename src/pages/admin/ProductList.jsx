@@ -33,7 +33,10 @@ import PageHeader from "../../components/shared/PageHeader";
 import ProductStatsCards from "../../components/admin-products/ProductStatsCards";
 import ProductFilters from "../../components/admin-products/ProductFilters";
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const ProductList = () => {
   const navigate = useNavigate();
@@ -48,6 +51,19 @@ const ProductList = () => {
     ordering: "-created_at",
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many products are shown per page, controlled by the
+  // "Rows per page" dropdown in the table footer. Sent to the backend
+  // as `page_size` for the normal search view, and used as the
+  // client-side slice size for the Low Stock exception view.
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
   const [selectedIds, setSelectedIds] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -125,6 +141,7 @@ const ProductList = () => {
       filters.maxPrice,
       filters.ordering,
       currentPage,
+      pageSize,
     ],
     queryFn: ({ signal }) =>
       searchProducts(
@@ -141,7 +158,7 @@ const ProductList = () => {
           max_price: filters.maxPrice || undefined,
           ordering: filters.ordering,
           page: currentPage,
-          page_size: PAGE_SIZE,
+          page_size: pageSize,
         },
         signal,
       ),
@@ -194,8 +211,8 @@ const ProductList = () => {
     return matchesSearch && matchesCategory;
   });
   const lowStockPaged = lowStockFiltered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // --------------------------------------------------
@@ -205,7 +222,7 @@ const ProductList = () => {
   const activeTotalCount = isLowStockView
     ? lowStockFiltered.length
     : searchTotalCount;
-  const activeTotalPages = Math.ceil(activeTotalCount / PAGE_SIZE) || 1;
+  const activeTotalPages = Math.ceil(activeTotalCount / pageSize) || 1;
   const isLoading = isLowStockView
     ? isLoadingLowStock
     : isLoadingSearch || isLoadingLowStock;
@@ -498,6 +515,9 @@ const ProductList = () => {
         totalPages={activeTotalPages}
         totalResults={activeTotalCount}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       {/* UPDATED COPY: the previous message claimed "this action can be

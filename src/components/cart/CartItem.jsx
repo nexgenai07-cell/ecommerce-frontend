@@ -68,7 +68,11 @@ import formatPrice from "../../utils/formatPrice";
 //        the current quantity, and the calculated total_price for this line.
 // onRemove — optional callback fired after a successful delete, so the parent
 //            Cart page can refresh its own data / play its own exit animation.
-const CartItem = ({ item, onRemove }) => {
+// isSelected / onToggleSelect — optional bulk-select checkbox wiring, passed
+//            down from the Cart page's "Remove Selected" action bar. Both are
+//            undefined when this row is rendered anywhere selection doesn't
+//            apply, in which case the checkbox simply isn't rendered.
+const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
   // Grabs the shared React Query client instance for this component.
   const queryClient = useQueryClient();
 
@@ -323,6 +327,23 @@ const CartItem = ({ item, onRemove }) => {
       transition={{ duration: 0.25 }}
       className="flex items-start gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-shadow duration-200"
     >
+      {/* Bulk-select checkbox — only rendered when the parent Cart page
+          actually wired up selection (onToggleSelect provided). Sits
+          before the image so it reads left-to-right as "pick this row",
+          matching the checkbox column convention used on the admin
+          DataTable pages. */}
+      {onToggleSelect && (
+        <label className="flex items-center pt-1 shrink-0 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            onChange={() => onToggleSelect(item.id)}
+            className="w-4 h-4 accent-primary cursor-pointer"
+            aria-label={`Select ${item.product.name}`}
+          />
+        </label>
+      )}
+
       {/* ─── Product Image ─── */}
       <Link
         to={ROUTES.PRODUCT_DETAIL.replace(":id", item.product.id)}

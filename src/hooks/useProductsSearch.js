@@ -1,8 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts } from "../api/products.api";
 
-// Yehi single source of truth hai — page size sirf yahan se change hoga
-export const UI_PAGE_SIZE = 21;
+// Selectable "rows per page" values for the product grid/list, shown in
+// the Pagination control's "Rows per page" dropdown on the Products
+// page. The first option is also the default UI page size, matching
+// what the page always showed before this dropdown existed.
+export const UI_PAGE_SIZE_OPTIONS = [21, 50, 100];
+export const DEFAULT_UI_PAGE_SIZE = UI_PAGE_SIZE_OPTIONS[0];
 
 // --------------------------------------------------
 // BACKEND FIX CONFIRMED: `category_id` now accepts MULTIPLE values in
@@ -20,7 +24,15 @@ export const UI_PAGE_SIZE = 21;
 // comma-separated string and sends a single request per backend page,
 // exactly like a normal single-category search did before.
 // --------------------------------------------------
-const useProductsSearch = ({ filters, sortBy, uiPage }) => {
+const useProductsSearch = ({
+  filters,
+  sortBy,
+  uiPage,
+  // How many products make up one UI page. Driven by the customer's
+  // "Rows per page" selection on the Products page; defaults to the
+  // original fixed page size for any caller that doesn't pass one.
+  pageSize = DEFAULT_UI_PAGE_SIZE,
+}) => {
   const queryClient = useQueryClient();
 
   // category_id ke ilawa baaqi filters — inko har request ke sath bhejenge
@@ -40,11 +52,11 @@ const useProductsSearch = ({ filters, sortBy, uiPage }) => {
     selectedCategories.length > 0 ? selectedCategories.join(",") : undefined;
 
   return useQuery({
-    queryKey: ["products-list", filters, sortBy, uiPage, UI_PAGE_SIZE],
+    queryKey: ["products-list", filters, sortBy, uiPage, pageSize],
     queryFn: async () => {
       // Fetches ONE backend page, with its own cache key (category
       // selection + params + page), so the exact same page is never
-      // re-requested while the admin navigates back and forth.
+      // re-requested while the customer navigates back and forth.
       const fetchBackendPage = (backendPage) => {
         const params = {
           ...baseParams,
@@ -53,20 +65,22 @@ const useProductsSearch = ({ filters, sortBy, uiPage }) => {
         };
         return queryClient.fetchQuery({
           queryKey: ["products-backend-page", params],
-          queryFn: ({ signal }) => searchProducts(params, signal).then((res) => res.data),
+          queryFn: ({ signal }) =>
+            searchProducts(params, signal).then((res) => res.data),
           staleTime: 1000 * 60 * 3,
         });
       };
 
       // Only fetches exactly as many backend pages as this UI page
       // actually needs — never the entire matching result set, no
-      // matter how many categories are selected at once.
+      // matter how many categories are selected or how large the
+      // customer's chosen "rows per page" value is.
       const first = await fetchBackendPage(1);
-      const backendPageSize = first.results.length || UI_PAGE_SIZE;
+      const backendPageSize = first.results.length || pageSize;
       const totalCount = first.count;
 
-      const startIndex = (uiPage - 1) * UI_PAGE_SIZE;
-      const endIndex = Math.min(startIndex + UI_PAGE_SIZE, totalCount) - 1;
+      const startIndex = (uiPage - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, totalCount) - 1;
 
       if (totalCount === 0 || endIndex < startIndex) {
         return { results: [], count: totalCount };
@@ -79,6 +93,10 @@ const useProductsSearch = ({ filters, sortBy, uiPage }) => {
       for (let p = backendPageStart; p <= backendPageEnd; p++)
         neededPages.push(p);
 
+      // When the customer picks a large "rows per page" value (e.g. 100)
+      // and the backend's own page size is smaller, this naturally fetches
+      // several backend pages in parallel to fill one UI page — the same
+      // mechanism that already handled multi-category merges above.
       const pageResponses = await Promise.all(
         neededPages.map((p) =>
           p === 1 ? Promise.resolve(first) : fetchBackendPage(p),
@@ -89,7 +107,7 @@ const useProductsSearch = ({ filters, sortBy, uiPage }) => {
       const offset = startIndex - (backendPageStart - 1) * backendPageSize;
 
       return {
-        results: combined.slice(offset, offset + UI_PAGE_SIZE),
+        results: combined.slice(offset, offset + pageSize),
         count: totalCount,
       };
     },

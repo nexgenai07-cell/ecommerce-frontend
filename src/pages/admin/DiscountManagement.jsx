@@ -47,7 +47,9 @@ const TYPE_OPTIONS = [
   { value: "fixed", label: "Fixed Amount" },
 ];
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 /**
  * Determines a coupon's effective status. This is the single source
@@ -72,6 +74,19 @@ const DiscountManagement = () => {
   const [typeFilter, setTypeFilter] = useState("");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many discounts are shown per page, controlled by the
+  // "Rows per page" dropdown in the table footer. Discounts are
+  // filtered client-side above, so this only affects the slice taken
+  // below — no network request is re-fired.
+
+  // Resets back to page 1 whenever the admin picks a different rows-per-
+  // page value, since staying on a deep page of a now-differently-sized
+  // result set could land on an empty page.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeDiscount, setActiveDiscount] = useState(null);
@@ -122,11 +137,11 @@ const DiscountManagement = () => {
   // Client-side pagination
   // --------------------------------------------------
   const totalCount = filteredDiscounts.length;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
   const safePage = Math.min(currentPage, totalPages);
   const paginatedDiscounts = filteredDiscounts.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
   );
 
   // --------------------------------------------------
@@ -445,6 +460,9 @@ const DiscountManagement = () => {
         totalPages={totalPages}
         totalResults={totalCount}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       <DiscountFormModal

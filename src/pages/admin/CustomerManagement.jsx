@@ -98,9 +98,10 @@ const SORT_OPTIONS = [
   // Customer who has spent the least money first
 ];
 
-const PAGE_SIZE = 10;
-// How many customers are shown per page — matches the page size the
-// backend was confirmed to use for this endpoint
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const CustomerManagement = () => {
   const [search, setSearch] = useState("");
@@ -113,6 +114,11 @@ const CustomerManagement = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   // currentPage — which page of results is currently being viewed
+
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many customers the backend returns per page,
+  // controlled by the "Rows per page" dropdown in the table footer.
+  // Sent to the backend as `page_size` alongside `page` on every request.
 
   const [isExporting, setIsExporting] = useState(false);
   // isExporting — true while the CSV export download is in progress
@@ -136,15 +142,26 @@ const CustomerManagement = () => {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["adminCustomers", "list", debouncedSearch, sortBy, currentPage],
-    queryFn: ({ signal }) => getCustomers({
-        search: debouncedSearch || undefined,
-        // undefined (not empty string) so an empty search box doesn't
-        // send a pointless ?search= query param
-        ordering: sortBy,
-        page: currentPage,
-        page_size: PAGE_SIZE,
-      }, signal),
+    queryKey: [
+      "adminCustomers",
+      "list",
+      debouncedSearch,
+      sortBy,
+      currentPage,
+      pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getCustomers(
+        {
+          search: debouncedSearch || undefined,
+          // undefined (not empty string) so an empty search box doesn't
+          // send a pointless ?search= query param
+          ordering: sortBy,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
     keepPreviousData: true,
     // Keeps showing the previous page's rows while the next page
     // loads, instead of flashing an empty table on every page change
@@ -152,14 +169,15 @@ const CustomerManagement = () => {
 
   const pageCustomers = extractListData(response);
   const totalCount = response?.data?.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // Whenever the search term or sort option changes, jump back to
-  // page 1 — staying on, say, page 3 of a brand-new filtered/sorted
-  // list would either show nothing or the wrong rows
+  // Whenever the search term, sort option, or rows-per-page selection
+  // changes, jump back to page 1 — staying on, say, page 3 of a
+  // brand-new filtered/sorted/resized list would either show nothing
+  // or the wrong rows
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, sortBy]);
+  }, [debouncedSearch, sortBy, pageSize]);
 
   // --------------------------------------------------
   // CUSTOMER DETAIL — API 88, fetched only when the drawer opens
@@ -270,7 +288,13 @@ const CustomerManagement = () => {
       label: "Actions",
       render: (row) => (
         <button
-          onClick={() => setSelectedCustomerId(row.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which opens the same drawer — avoids a redundant
+            // double open when the icon itself is clicked
+            setSelectedCustomerId(row.id);
+          }}
           // Opens the detail drawer for this exact customer row
           className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           aria-label={`View ${row.name}`}
@@ -366,6 +390,9 @@ const CustomerManagement = () => {
         columns={columns}
         data={pageCustomers}
         keyField="id"
+        onRowClick={(row) => setSelectedCustomerId(row.id)}
+        // Opens the same detail drawer as the eye icon when any part of
+        // the row is clicked
         isLoading={isLoading}
         error={isError}
         onRetry={refetch}
@@ -373,6 +400,9 @@ const CustomerManagement = () => {
         totalPages={totalPages}
         totalResults={totalCount}
         onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={setPageSize}
       />
 
       <CustomerDetailDrawer

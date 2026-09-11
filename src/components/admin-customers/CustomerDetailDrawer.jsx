@@ -104,10 +104,10 @@ const ORDERS_SORTERS = {
     (Number(a.total_amount) || 0) - (Number(b.total_amount) || 0),
 };
 
-// Assumed page size for the orders-filter endpoint — matches the same
-// PAGE_SIZE assumption already used on the main Orders page, since
-// the backend doesn't document its own page size explicitly
-const ORDERS_PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the orders sub-table's
+// pagination dropdown, matching the backend's page_size cap of 100.
+const ORDERS_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_ORDERS_PAGE_SIZE = ORDERS_PAGE_SIZE_OPTIONS[0];
 
 // --------------------------------------------------
 // FilterDropdown — a custom-styled dropdown used ONLY for the status
@@ -217,6 +217,12 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
   // ORDERS SUB-TABLE STATE
   // --------------------------------------------------
   const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersPageSize, setOrdersPageSize] = useState(
+    DEFAULT_ORDERS_PAGE_SIZE,
+  );
+  // ordersPageSize — how many of this customer's orders are shown per
+  // page, controlled by the "Rows per page" dropdown under the orders
+  // sub-table. Sent to the backend as `page_size` alongside `page`.
   const [ordersStatusFilter, setOrdersStatusFilter] = useState("");
   const [ordersSearchInput, setOrdersSearchInput] = useState("");
   const [ordersSortBy, setOrdersSortBy] = useState("-created_at");
@@ -232,14 +238,22 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
     setOrdersStatusFilter("");
     setOrdersSearchInput("");
     setOrdersSortBy("-created_at");
+    setOrdersPageSize(DEFAULT_ORDERS_PAGE_SIZE);
   }, [customer?.id]);
 
-  // Whenever the status filter or search term changes, jump back to
-  // page 1 of the orders list — staying on a later page of a new
-  // filter could show nothing or skip results
+  // Whenever the status filter, search term, or rows-per-page selection
+  // changes, jump back to page 1 of the orders list — staying on a
+  // later page of a new filter/size could show nothing or skip results
   useEffect(() => {
     setOrdersPage(1);
-  }, [ordersStatusFilter, debouncedOrdersSearch]);
+  }, [ordersStatusFilter, debouncedOrdersSearch, ordersPageSize]);
+
+  // Resets back to page 1 whenever the admin picks a different
+  // rows-per-page value for the orders sub-table.
+  const handleOrdersPageSizeChange = (size) => {
+    setOrdersPageSize(size);
+    setOrdersPage(1);
+  };
 
   // --------------------------------------------------
   // ORDERS QUERY — only runs when the drawer is open AND we actually
@@ -257,12 +271,19 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
       ordersPage,
       ordersStatusFilter,
       debouncedOrdersSearch,
+      ordersPageSize,
     ],
-    queryFn: ({ signal }) => getCustomerOrders(customer.id, {
-        status: ordersStatusFilter || undefined,
-        search: debouncedOrdersSearch || undefined,
-        page: ordersPage,
-      }, signal),
+    queryFn: ({ signal }) =>
+      getCustomerOrders(
+        customer.id,
+        {
+          status: ordersStatusFilter || undefined,
+          search: debouncedOrdersSearch || undefined,
+          page: ordersPage,
+          page_size: ordersPageSize,
+        },
+        signal,
+      ),
     enabled: isOpen && !!customer?.id,
   });
 
@@ -276,7 +297,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
   const totalOrdersCount = ordersResponse?.data?.count ?? ordersList.length;
   const ordersTotalPages = Math.max(
     1,
-    Math.ceil(totalOrdersCount / ORDERS_PAGE_SIZE),
+    Math.ceil(totalOrdersCount / ordersPageSize),
   );
 
   // True when a status filter or search term is actively narrowing
@@ -499,6 +520,9 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
                 currentPage={ordersPage}
                 totalPages={ordersTotalPages}
                 onPageChange={setOrdersPage}
+                pageSize={ordersPageSize}
+                pageSizeOptions={ORDERS_PAGE_SIZE_OPTIONS}
+                onPageSizeChange={handleOrdersPageSizeChange}
               />
             )}
           </div>

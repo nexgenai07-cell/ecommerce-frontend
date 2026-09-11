@@ -119,15 +119,11 @@ export const trackOrder = (orderNumber, signal) => {
 // orders). Used in the admin panel's orders management page when no
 // status/search/date filter is active.
 //
-// BUG FIXED: this used to take no arguments at all, so every click on
-// a different page number silently re-requested the exact same
-// (unpaginated) response — the admin always saw the same first page
-// of orders no matter which page they clicked. The backend's own
-// documented example response for this endpoint already includes a
-// working "next": ".../admin/orders/?page=2" link, confirming `page`
-// was supported all along — it just was never actually being sent.
-// Now forwards `page` (and `ordering`, now confirmed working) exactly
-// like every other list endpoint in this file.
+// The "params" object supports standard list-endpoint query params —
+// "page" (which page of results to fetch), "page_size" (rows per
+// page; server default is 10, capped at 100), and "ordering" (sort
+// field, e.g. "-created_at"). The response follows the standard
+// paginated shape: { count, next, previous, results }.
 export const getAdminOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/orders/", { signal, params });
 };
@@ -139,15 +135,16 @@ export const getAdminOrders = (params, signal) => {
 // The "params" object can include:
 // - status: filter by order status (e.g. pending, shipped, delivered)
 // - start_date / end_date: filter orders within a date range
-// - search: search by customer name, order number, AND phone number
-//   (phone matching is now confirmed working server-side — see the
-//   backend fix notes in OrderManagement.jsx)
+// - search: search by customer name, order number, and phone number
+//   (both the number saved on the customer's profile and the
+//   contact_phone entered at checkout)
 // - customer_id: added by the backend team specifically so we
 //   can show one customer's own order history (see getCustomerOrders
 //   below). Returns only orders placed by that exact customer.
-// - ordering: now confirmed working — e.g. "-created_at", "created_at",
+// - ordering: sort field, e.g. "-created_at", "created_at",
 //   "-total_amount", "total_amount"
-// - page: which page of results to fetch (for pagination)
+// - page: which page of results to fetch
+// - page_size: rows per page; server default is 10, capped at 100
 export const filterAdminOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/orders/filter/", { signal, params });
   // Passing "params" as the second argument tells Axios to automatically
@@ -162,9 +159,9 @@ export const filterAdminOrders = (params, signal) => {
 // is used on the admin Customers page, inside the customer detail
 // drawer, to show that exact customer's order history.
 //
-// `params` can additionally include status / search / page — all of
-// which combine correctly with customer_id on the backend, e.g.:
-//   getCustomerOrders(20, { status: "delivered", page: 2 })
+// `params` can additionally include status / search / page / page_size —
+// all of which combine correctly with customer_id on the backend, e.g.:
+//   getCustomerOrders(20, { status: "delivered", page: 2, page_size: 20 })
 export const getCustomerOrders = (customerId, params = {}, signal) => {
   return filterAdminOrders({ ...params, customer_id: customerId }, signal);
   // Reuses filterAdminOrders so both functions always stay in sync —

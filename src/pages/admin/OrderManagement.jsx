@@ -97,7 +97,10 @@ const BULK_STATUS_OPTIONS = [
   { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
 ];
 
-const PAGE_SIZE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown,
+// matching the backend's page_size cap of 100.
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // Set of every status value the tab bar actually recognizes, used to
 // validate an incoming "status" URL parameter so an unrecognized or
@@ -153,6 +156,10 @@ const OrderManagement = () => {
   // comment above). Defaults to "Newest First".
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // pageSize — how many orders the backend returns per page, controlled
+  // by the "Rows per page" dropdown in the table footer. Sent to the
+  // backend as `page_size` alongside `page` on every request.
   const [isExporting, setIsExporting] = useState(false);
 
   // Bulk selection — array of order_number values currently checked in
@@ -213,11 +220,15 @@ const OrderManagement = () => {
         endDate,
         sortBy,
         page: currentPage,
+        pageSize,
       },
     ],
     queryFn: ({ signal }) => {
       if (!hasActiveFilters) {
-        return getAdminOrders({ ordering: sortBy, page: currentPage }, signal);
+        return getAdminOrders(
+          { ordering: sortBy, page: currentPage, page_size: pageSize },
+          signal,
+        );
       }
       return filterAdminOrders(
         {
@@ -227,6 +238,7 @@ const OrderManagement = () => {
           end_date: endDate || undefined,
           ordering: sortBy,
           page: currentPage,
+          page_size: pageSize,
         },
         signal,
       );
@@ -236,22 +248,20 @@ const OrderManagement = () => {
 
   const visibleOrders = extractListData(ordersResponse);
   const totalCount = ordersResponse?.data?.count ?? visibleOrders.length;
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
-  // `visibleOrders` is now always exactly one real, already-filtered,
-  // already-sorted page straight from the backend — no more client-side
-  // re-filtering or re-sorting on top of it. The old safety-net
-  // client-side search/phone/sort pass has been removed: it existed
-  // specifically because the backend used to silently ignore these
-  // params, which is now fixed and confirmed.
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  // `visibleOrders` is always exactly one real, already-filtered,
+  // already-sorted page straight from the backend, sized according to
+  // the currently selected `pageSize` — no client-side re-filtering,
+  // re-sorting, or re-slicing on top of it.
 
   const hasAnyFilterActive = hasActiveFilters;
 
-  // Whenever any filter or sort changes, jump back to page 1 — staying
-  // on, say, page 3 of a now-much-smaller filtered result set would
+  // Whenever any filter, sort, or page size changes, jump back to
+  // page 1 — staying on, say, page 3 of a now-smaller result set would
   // otherwise show an empty page.
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeStatus, effectiveSearch, startDate, endDate, sortBy]);
+  }, [activeStatus, effectiveSearch, startDate, endDate, sortBy, pageSize]);
 
   const handleTabChange = (statusKey) => {
     setActiveStatus(statusKey);
@@ -378,9 +388,15 @@ const OrderManagement = () => {
       label: "Actions",
       render: (row) => (
         <button
-          onClick={() =>
-            navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number))
-          }
+          onClick={(e) => {
+            e.stopPropagation();
+            // Stops this click from also bubbling up to the row's own
+            // onClick, which opens the same order detail page — without
+            // this, clicking the icon would trigger navigation twice
+            navigate(
+              ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number),
+            );
+          }}
           className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-primary-50 transition-colors"
           aria-label={`View order ${row.order_number}`}
         >
@@ -389,6 +405,12 @@ const OrderManagement = () => {
       ),
     },
   ];
+
+  // Opens the same order detail page as the row's eye icon — passed to
+  // DataTable so clicking anywhere on a row (outside the checkbox column)
+  // navigates there too, not just the small icon
+  const handleRowClick = (row) =>
+    navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number));
 
   return (
     <div className="flex flex-col gap-6">
@@ -556,6 +578,7 @@ const OrderManagement = () => {
           columns={columns}
           data={visibleOrders}
           keyField="order_number"
+          onRowClick={handleRowClick}
           selectable
           onSelectionChange={setSelectedOrderNumbers}
           isLoading={isLoading}
@@ -565,6 +588,9 @@ const OrderManagement = () => {
           totalPages={totalPages}
           totalResults={totalCount}
           onPageChange={setCurrentPage}
+          pageSize={pageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={setPageSize}
         />
       </div>
 

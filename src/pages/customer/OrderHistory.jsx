@@ -13,8 +13,11 @@ import EmptyState from "../../components/ui/EmptyState"; // Generic empty state 
 import ErrorState from "../../components/ui/ErrorState"; // Reusable error-state component with a retry button — same pattern used in OrderDetail.jsx, ProductDetail.jsx, NotificationHistory.jsx
 import Pagination from "../../components/ui/Pagination"; // Same numbered prev/next pagination control used on NotificationHistory, ActiveTickets, and the admin side
 
-// How many orders to show per page — same pattern/value as NotificationHistory
-const PER_PAGE = 10;
+// Selectable "rows per page" values shown in the pagination dropdown —
+// same pattern/values as NotificationHistory. The first option is also
+// the default page size when the page first loads.
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 const OrderHistory = () => {
   // activeTab tracks which status filter tab is currently selected — "all" shows every order
@@ -25,6 +28,10 @@ const OrderHistory = () => {
 
   // currentPage tracks which page of the (filtered) orders list is showing
   const [currentPage, setCurrentPage] = useState(1);
+
+  // pageSize tracks how many orders are shown per page, controlled by the
+  // "Rows per page" dropdown inside the Pagination control below
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // =============================================
   // MY ORDERS API — GET /api/v1/orders/
@@ -108,10 +115,10 @@ const OrderHistory = () => {
   // NotificationHistory/ActiveTickets, replacing the earlier plain
   // "show everything in one long list" behavior
   // --------------------------------------------------
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * PER_PAGE,
-    currentPage * PER_PAGE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // Whenever the status tab or date range changes, the filtered result set
@@ -124,6 +131,14 @@ const OrderHistory = () => {
 
   const handleDateRangeChange = (range) => {
     setDateRange(range);
+    setCurrentPage(1);
+  };
+
+  // Called when the customer picks a different "rows per page" value.
+  // Resets back to page 1 as well, since staying on a deep page number
+  // could land past the end of the newly-sized result set.
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
     setCurrentPage(1);
   };
 
@@ -252,30 +267,42 @@ const OrderHistory = () => {
             </div>
           )}
 
-          {/* ── Order cards ────────────────────────────────────────────────── */}
+          {/* ── Order cards + pagination ───────────────────────────────────────
+              Both live inside one shared white card so the list and its
+              pagination footer read as a single unit, matching the
+              merged-box look DataTable already gives every admin table.
+              variant="compact" strips Pagination's own card chrome
+              (shadow/border/rounded corners) since this wrapper already
+              supplies all of that; border-t is what visually separates the
+              footer from the cards above. Shown whenever there's at least
+              one (filtered) order — not gated on totalPages > 1, so the
+              "rows per page" dropdown stays reachable even while everything
+              currently fits on a single page.                               */}
           {!isLoading && !isError && filteredOrders.length > 0 && (
-            <AnimatePresence mode="popLayout">
-              <div className="flex flex-col gap-4">
-                {paginatedOrders.map((order, index) => (
-                  <OrderCard
-                    key={order.order_number}
-                    order={order}
-                    index={index}
-                  />
-                ))}
-              </div>
-            </AnimatePresence>
-          )}
+            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white">
+              <AnimatePresence mode="popLayout">
+                <div className="flex flex-col gap-4 p-4 sm:p-5">
+                  {paginatedOrders.map((order, index) => (
+                    <OrderCard
+                      key={order.order_number}
+                      order={order}
+                      index={index}
+                    />
+                  ))}
+                </div>
+              </AnimatePresence>
 
-          {/* ── Pagination — same numbered prev/next control used on
-              NotificationHistory/ActiveTickets, only shown once there's
-              more than one page of (filtered) orders                    */}
-          {!isLoading && !isError && totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageSizeChange={handlePageSizeChange}
+                variant="compact"
+                className="border-t border-gray-100"
+              />
+            </div>
           )}
         </div>
       </Container>
