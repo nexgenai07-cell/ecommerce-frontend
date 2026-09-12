@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AiOutlineLeft, AiOutlineRight, AiOutlinePlus } from "react-icons/ai";
+import {
+  AiOutlineLeft,
+  AiOutlineRight,
+  AiOutlinePlus,
+  AiOutlineCalendar,
+} from "react-icons/ai";
 
 import { getPostsCalendar } from "../../api/social.api";
 // getPostsCalendar — API 83: only documents a `month` param. Day/Week
@@ -12,7 +17,17 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import Button from "../../components/ui/Button";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel. The month
+// navigation controls now live in PageHeader's `actions` slot.
 import CalendarDaySidebar from "../../components/admin-social/CalendarDaySidebar";
+import StatusTabs from "../../components/shared/StatusTabs";
+// StatusTabs — the SAME shared pill-tab row used for status filtering
+// on every other admin list page, reused here for the platform filter
+// so its active/inactive styling matches the rest of the panel instead
+// of this page's own black-pill variant.
 
 const PLATFORM_FILTERS = [
   { key: "", label: "All" },
@@ -79,55 +94,50 @@ const Calendar = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold text-gray-900">Content Calendar</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setViewDate(new Date(year, month - 1, 1))}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50"
-          >
-            <AiOutlineLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium text-gray-900 w-32 text-center">
-            {viewDate.toLocaleDateString("en-US", {
-              month: "long",
-              year: "numeric",
-            })}
-          </span>
-          <button
-            onClick={() => setViewDate(new Date(year, month + 1, 1))}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50"
-          >
-            <AiOutlineRight className="w-4 h-4" />
-          </button>
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-            onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
-          >
-            Create Post
-          </Button>
-        </div>
-      </div>
+      {/* Shared gradient PageHeader — matches every other admin screen.
+          Month navigation + "Create Post" live in the `actions` slot. */}
+      <PageHeader
+        icon={<AiOutlineCalendar />}
+        title="Content Calendar"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewDate(new Date(year, month - 1, 1))}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+            >
+              <AiOutlineLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-gray-900 w-32 text-center">
+              {viewDate.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <button
+              onClick={() => setViewDate(new Date(year, month + 1, 1))}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+            >
+              <AiOutlineRight className="w-4 h-4" />
+            </button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<AiOutlinePlus className="w-4 h-4" />}
+              onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
+            >
+              Create Post
+            </Button>
+          </div>
+        }
+      />
 
-      {/* Platform filter pills */}
-      <div className="flex items-center gap-2 overflow-x-auto">
-        {PLATFORM_FILTERS.map((filter) => (
-          <button
-            key={filter.key || "all"}
-            onClick={() => setPlatformFilter(filter.key)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap transition-colors ${
-              platformFilter === filter.key
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
+      {/* Platform filter pills — shared StatusTabs component, same as
+          every other admin list page's status/priority pill row. */}
+      <StatusTabs
+        tabs={PLATFORM_FILTERS}
+        activeKey={platformFilter}
+        onChange={setPlatformFilter}
+      />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Calendar grid */}

@@ -5,7 +5,6 @@ import {
   AiOutlinePlusCircle,
   AiOutlineEdit,
   AiOutlineDelete,
-  AiOutlineDownload,
 } from "react-icons/ai";
 
 import { getAuditLogs } from "../../api/admin.api";
@@ -15,12 +14,16 @@ import useDebounce from "../../hooks/useDebounce";
 import downloadCsv from "../../utils/downloadCsv";
 import { showSuccess } from "../../components/ui/Toast";
 import StatsCard from "../../components/ui/StatsCard";
-import Input from "../../components/ui/Input";
-import Select from "../../components/ui/Select";
 import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
 import DataTable from "../../components/ui/DataTable";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel.
 import AuditLogDetailModal from "../../components/admin-audit/AuditLogDetailModal";
+import AuditLogFilters from "../../components/admin-audit/AuditLogFilters";
+// AuditLogFilters — the shared-style toolbar above the table (search,
+// Filters toggle, Export, Entity/User chips).
 
 const ACTION_BADGE_VARIANT = {
   create: "success",
@@ -53,6 +56,16 @@ const AuditLogs = () => {
   };
 
   const debouncedSearch = useDebounce(search, 400);
+
+  const hasActiveFilters = !!search || !!entityFilter || !!userFilter;
+  // Drives the "Clear all" link's visibility in the toolbar.
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setEntityFilter("");
+    setUserFilter("");
+    setCurrentPage(1);
+  };
 
   // --------------------------------------------------
   // MAIN LOG LIST — API 82. `page`, `entity`, `user`, and `search` are
@@ -105,11 +118,11 @@ const AuditLogs = () => {
   ];
 
   const entityOptions = [
-    { value: "", label: "Entity: All" },
+    { value: "", label: "All Entities" },
     ...uniqueEntities.map((e) => ({ value: e, label: e })),
   ];
   const userOptions = [
-    { value: "", label: "User: All" },
+    { value: "", label: "All Users" },
     ...uniqueUsers.map((u) => ({ value: u, label: u })),
   ];
 
@@ -234,12 +247,7 @@ const AuditLogs = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Audit Logs</h1>
-        <p className="text-sm text-gray-500">
-          Complete record of all admin actions in your store.
-        </p>
-      </div>
+      <PageHeader icon={<AiOutlineFileText />} title="Audit Logs" />
 
       {/* Layout: a flex-wrap row rather than a three-column grid.
           StatsCard sizes itself to its own content, so a grid column
@@ -274,39 +282,31 @@ const AuditLogs = () => {
           included — no date-scoped count is reliably available
           without a confirmed date filter param. */}
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col sm:flex-row items-center gap-2">
-        <Input
-          placeholder="Filter by ID or user..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setCurrentPage(1);
-          }}
-        />
-        <Select
-          options={entityOptions}
-          value={entityFilter}
-          onChange={(e) => {
-            setEntityFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        />
-        <Select
-          options={userOptions}
-          value={userFilter}
-          onChange={(e) => {
-            setUserFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        />
-        <Button
-          variant="secondary"
-          leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-          onClick={handleExport}
-        >
-          Export Logs
-        </Button>
-      </div>
+      {/* Toolbar — search, Filters, Export, and (once opened) the
+          Entity/User dropdown chips. Same shared toolbar pattern used
+          on every other admin list page. */}
+      <AuditLogFilters
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        entityOptions={entityOptions}
+        entityFilter={entityFilter}
+        onEntityChange={(value) => {
+          setEntityFilter(value);
+          setCurrentPage(1);
+        }}
+        userOptions={userOptions}
+        userFilter={userFilter}
+        onUserChange={(value) => {
+          setUserFilter(value);
+          setCurrentPage(1);
+        }}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+        onExport={handleExport}
+      />
 
       <DataTable
         columns={columns}

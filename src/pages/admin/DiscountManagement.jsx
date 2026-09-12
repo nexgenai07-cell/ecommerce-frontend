@@ -3,8 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   AiOutlinePlus,
-  AiOutlineSearch,
-  AiOutlineDownload,
   AiOutlineEdit,
   AiOutlineDelete,
   AiOutlinePercentage,
@@ -20,14 +18,13 @@ import useDebounce from "../../hooks/useDebounce";
 
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
-import Select from "../../components/ui/Select";
 import Badge from "../../components/ui/Badge";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
 import DiscountStatsCards from "../../components/admin-discounts/DiscountStatsCards";
 import DiscountFormModal from "../../components/admin-discounts/DiscountFormModal";
+import DiscountFilters from "../../components/admin-discounts/DiscountFilters";
 
 /**
  * Status filter tabs shown above the table. Each tab's key maps
@@ -39,13 +36,9 @@ const STATUS_TABS = [
   { key: "expired", label: "Expired" },
 ];
 
-/**
- * Discount type options for the Type filter dropdown.
- */
-const TYPE_OPTIONS = [
-  { value: "percent", label: "Percentage" },
-  { value: "fixed", label: "Fixed Amount" },
-];
+// Note: the discount type option list (Percentage / Fixed Amount) now
+// lives inside DiscountFilters.jsx, right next to the Type dropdown
+// chip that renders it.
 
 // Selectable "rows per page" values shown in the pagination dropdown.
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -105,6 +98,19 @@ const DiscountManagement = () => {
   const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
+
+  // True the moment any of the three filters — status tab, search box,
+  // or type dropdown — is set to something other than its default.
+  // Drives the "Clear all" link inside DiscountFilters.
+  const hasActiveFilters = !!activeTab || !!search || !!typeFilter;
+
+  // Resets every filter back to its default in one click.
+  const handleClearFilters = () => {
+    setActiveTab("");
+    setSearch("");
+    setTypeFilter("");
+    setCurrentPage(1);
+  };
 
   // --------------------------------------------------
   // Discounts list query
@@ -354,25 +360,14 @@ const DiscountManagement = () => {
         icon={<AiOutlinePercentage />}
         title="Discount Management"
         actions={
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full sm:w-auto">
-            <Button
-              variant="secondary"
-              leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-              onClick={handleExport}
-              isLoading={isExporting}
-              className="w-full sm:w-auto"
-            >
-              Export Data
-            </Button>
-            <Button
-              variant="primary"
-              leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-              onClick={openCreateForm}
-              className="w-full sm:w-auto"
-            >
-              Create Discount
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            leftIcon={<AiOutlinePlus className="w-4 h-4" />}
+            onClick={openCreateForm}
+            className="w-full sm:w-auto"
+          >
+            Create Discount
+          </Button>
         }
       />
 
@@ -383,48 +378,31 @@ const DiscountManagement = () => {
         inactiveCount={statusCounts.inactive}
       />
 
-      {/* Status tabs + search + type filter */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div className="flex items-center gap-1 flex-wrap">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.key || "all"}
-              onClick={() => {
-                setActiveTab(tab.key);
-                setCurrentPage(1);
-              }}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-                activeTab === tab.key
-                  ? "bg-primary-50 text-primary"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
-          <Input
-            placeholder="Search promo codes..."
-            leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-          <Select
-            placeholder="Type: All"
-            options={TYPE_OPTIONS}
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-        </div>
-      </div>
+      {/* Toolbar — status tabs, search, Filters, Export, and (once
+          opened) the Type dropdown chip. Same shared toolbar pattern
+          used on every other admin list page. */}
+      <DiscountFilters
+        statusTabs={STATUS_TABS}
+        activeStatus={activeTab}
+        onStatusChange={(key) => {
+          setActiveTab(key);
+          setCurrentPage(1);
+        }}
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        typeFilter={typeFilter}
+        onTypeChange={(value) => {
+          setTypeFilter(value);
+          setCurrentPage(1);
+        }}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       {/* Bulk action bar — appears only while one or more rows are
           checked. Stacks vertically on narrow screens and sits on one

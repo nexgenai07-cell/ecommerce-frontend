@@ -13,6 +13,13 @@ import Select from "../../components/ui/Select";
 import Toggle from "../../components/ui/Toggle";
 import Button from "../../components/ui/Button";
 import Avatar from "../../components/ui/Avatar";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel. This page composes
+// a single notification rather than listing records, so — unlike
+// every other page updated in this pass — it has no table, and
+// therefore no shared list-toolbar to adopt.
 
 // Real, confirmed enum — matches the type values TopHeader's
 // notification bell already uses to route items into tabs
@@ -106,13 +113,7 @@ const NotificationTemplates = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Send Notification</h1>
-        <p className="text-sm text-gray-500">
-          Compose and send a notification to a customer or broadcast to
-          everyone.
-        </p>
-      </div>
+      <PageHeader icon={<AiOutlineSend />} title="Send Notification" />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Compose form */}

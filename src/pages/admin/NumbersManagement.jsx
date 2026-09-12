@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { AiOutlinePlus, AiOutlineDownload, AiOutlineEye } from "react-icons/ai";
+import { AiOutlinePlus, AiOutlineEye, AiOutlineMessage } from "react-icons/ai";
 
 import { getWhatsAppSessions, getWhatsAppLogs } from "../../api/whatsapp.api";
 import { getCustomers } from "../../api/customers.api";
@@ -11,12 +11,18 @@ import formatRelativeTime from "../../utils/formatRelativeTime";
 import downloadCsv from "../../utils/downloadCsv";
 import { showSuccess } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import Avatar from "../../components/ui/Avatar";
 import StatsCard from "../../components/ui/StatsCard";
 import DataTable from "../../components/ui/DataTable";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own custom
+// header row so it finally matches the rest of the panel.
 import ManualEntryModal from "../../components/admin-whatsapp/ManualEntryModal";
+import NumbersFilters from "../../components/admin-whatsapp/NumbersFilters";
+// NumbersFilters — the shared-style toolbar above the table (search +
+// Export).
 
 // Selectable "rows per page" values shown in the pagination dropdown.
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -109,13 +115,11 @@ const NumbersManagement = () => {
     currentPage * pageSize,
   );
 
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-    // A new search term changes which rows match, so the page count
-    // can shrink. Resetting to page 1 avoids landing on a page number
-    // that no longer exists for the new filtered result set.
-    setCurrentPage(1);
-  };
+  // Search changes are wired directly to setSearch + setCurrentPage(1)
+  // inline where NumbersFilters is rendered below (a new search term
+  // changes which rows match, so the page count can shrink — resetting
+  // to page 1 avoids landing on a page number that no longer exists
+  // for the new filtered result set).
 
   // Real per-row chat count — only for the small, currently-VISIBLE
   // page of rows (not all sessions at once), matching the same
@@ -219,22 +223,11 @@ const NumbersManagement = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">WhatsApp Numbers</h1>
-          <p className="text-sm text-gray-500">
-            Numbers currently active with the WhatsApp bot.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-            onClick={handleExport}
-          >
-            Export CSV
-          </Button>
+      {/* Shared gradient PageHeader — matches every other admin screen. */}
+      <PageHeader
+        icon={<AiOutlineMessage />}
+        title="WhatsApp Numbers"
+        actions={
           <Button
             variant="primary"
             leftIcon={<AiOutlinePlus className="w-4 h-4" />}
@@ -242,8 +235,8 @@ const NumbersManagement = () => {
           >
             Manual Entry
           </Button>
-        </div>
-      </div>
+        }
+      />
       {/* Note: "Total WhatsApp Users" and "Blocked Numbers" stat cards
           from the design are not included here, since neither figure
           is computable and no blocking system exists anywhere in the
@@ -268,13 +261,16 @@ const NumbersManagement = () => {
         />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
-        <Input
-          placeholder="Filter by name or number..."
-          value={search}
-          onChange={handleSearchChange}
-        />
-      </div>
+      {/* Toolbar — search and Export. Same shared toolbar pattern used
+          on every other admin list page. */}
+      <NumbersFilters
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        onExport={handleExport}
+      />
 
       <DataTable
         columns={columns}

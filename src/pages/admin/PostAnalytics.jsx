@@ -1,6 +1,10 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AiOutlineArrowLeft, AiOutlineCopy } from "react-icons/ai";
+import {
+  AiOutlineArrowLeft,
+  AiOutlineCopy,
+  AiOutlineBarChart,
+} from "react-icons/ai";
 
 import {
   getSocialPostById,
@@ -19,6 +23,11 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Spinner from "../../components/ui/Spinner";
 import StatsCard from "../../components/ui/StatsCard";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1>. The breadcrumb line above it is kept as-is, since PageHeader
+// doesn't render one itself.
 
 const PostAnalytics = () => {
   const { id } = useParams();
@@ -89,30 +98,33 @@ const PostAnalytics = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <p className="text-xs text-gray-400 mb-1">
-            <Link
-              to={ROUTES.ADMIN_SOCIAL_DASHBOARD}
-              className="hover:text-primary"
+      <div className="flex flex-col gap-1">
+        <p className="text-xs text-gray-400">
+          <Link
+            to={ROUTES.ADMIN_SOCIAL_DASHBOARD}
+            className="hover:text-primary"
+          >
+            Social Media
+          </Link>
+          {" / "}
+          <Link to={ROUTES.ADMIN_SOCIAL_POSTS} className="hover:text-primary">
+            Posts
+          </Link>
+          {" / "}Post #{post.id}
+        </p>
+        <PageHeader
+          icon={<AiOutlineBarChart />}
+          title="Post Analytics"
+          actions={
+            <Button
+              variant="secondary"
+              leftIcon={<AiOutlineArrowLeft className="w-4 h-4" />}
+              onClick={() => navigate(ROUTES.ADMIN_SOCIAL_POSTS)}
             >
-              Social Media
-            </Link>
-            {" / "}
-            <Link to={ROUTES.ADMIN_SOCIAL_POSTS} className="hover:text-primary">
-              Posts
-            </Link>
-            {" / "}Post #{post.id}
-          </p>
-          <h1 className="text-xl font-bold text-gray-900">Post Analytics</h1>
-        </div>
-        <Button
-          variant="secondary"
-          leftIcon={<AiOutlineArrowLeft className="w-4 h-4" />}
-          onClick={() => navigate(ROUTES.ADMIN_SOCIAL_POSTS)}
-        >
-          Back to Posts
-        </Button>
+              Back to Posts
+            </Button>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

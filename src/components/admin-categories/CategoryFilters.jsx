@@ -1,14 +1,12 @@
-import Input from "../ui/Input";
-import Select from "../ui/Select";
+import { useState } from "react";
 import {
-  AiOutlineSearch,
-  AiOutlineFilter,
-  AiOutlineClose,
-} from "react-icons/ai";
+  ListToolbarBar,
+  FilterChipsRow,
+  FilterChip,
+  DateRangeFilterChip,
+  OptionRow,
+} from "../shared/list-toolbar";
 
-// Sort dropdown options — each value maps to a sorter function defined
-// inside CategoryManagement.jsx (kept there since that's where the
-// actual array of categories being sorted lives).
 const SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
   { value: "created_at", label: "Oldest First" },
@@ -18,99 +16,121 @@ const SORT_OPTIONS = [
   { value: "product_count", label: "Fewest Products" },
 ];
 
-// NOTE: the "Status" (Active/Inactive) dropdown that used to live here
-// has been REMOVED. It relied on the category's is_active field to
-// distinguish soft-deleted rows from normal ones inside this very
-// list — but the backend's real deletion mechanism now uses a
-// separate internal is_delete flag that is never returned in this
-// endpoint's response, AND deleted categories are filtered out of the
-// list entirely before it ever reaches the frontend. There is no
-// longer any "inactive" row that could ever show up here to filter
-// for — every category this component receives is, by definition,
-// a live one. See CategoryManagement.jsx for the full explanation.
+const DEFAULT_ORDERING = "-created_at";
 
+// NOTE: there is no "Status" (Active/Inactive) dropdown here. It relied
+// on a category's is_active field to distinguish soft-deleted rows from
+// normal ones inside this very list — but the backend's real deletion
+// mechanism uses a separate internal is_delete flag that is never
+// returned by this endpoint, and deleted categories are filtered out of
+// the list before it ever reaches the frontend. Every category this
+// component receives is, by definition, a live one, so there is nothing
+// left for a status filter to narrow down.
+
+/**
+ * CategoryFilters
+ *
+ * The toolbar sitting above the categories table: search box, a
+ * "Filters" toggle, an "Export" button, and — once opened — the
+ * Created Date range and Sort dropdown chips.
+ *
+ * Built on the same shared list-toolbar pieces as every other admin
+ * list page's filters component, so this toolbar is visually and
+ * behaviourally identical to the one above the products table.
+ *
+ * Props:
+ * - filters:          Current filter values owned by
+ *                     CategoryManagement.jsx — { search, startDate,
+ *                     endDate, ordering }.
+ * - onFilterChange:   (key, value) => void — called on every change to
+ *                     any single field.
+ * - onClearFilters:   () => void — resets every field back to its
+ *                     default in one call.
+ * - hasActiveFilters: Whether at least one real filter (search or date
+ *                     range) is currently active.
+ * - onExport:         Handler for the Export button. Exports the
+ *                     currently filtered/sorted category list as a
+ *                     client-side CSV (there is no confirmed backend
+ *                     export type for categories yet, but the full
+ *                     list is already loaded and filtered in the
+ *                     browser, so nothing is lost by building the CSV
+ *                     from that instead of a fresh server request).
+ */
 const CategoryFilters = ({
-  filters, // { search, startDate, endDate, ordering } — current filter values, owned by the parent page
-  onFilterChange, // (key, value) => void — called on every field change
-  onClearFilters, // () => void — resets every field back to its default
-  hasActiveFilters, // true when at least one real filter (search/startDate/endDate) is active
+  filters,
+  onFilterChange,
+  onClearFilters,
+  hasActiveFilters,
+  onExport,
 }) => {
-  // Live count of how many filters are currently active — shown next to
-  // the "Filters" heading, same pattern as ProductFilters.jsx. Sorting
-  // is intentionally NOT counted here since "Newest First" is just the
-  // default view, not a narrowing filter. "status" was removed from
-  // this list along with the dropdown above.
+  const [areFiltersOpen, setAreFiltersOpen] = useState(false);
+
+  // Sort is intentionally excluded from this count — "Newest First" is
+  // just the default view, not a narrowing filter.
   const activeFilterCount = [
-    filters.search,
-    filters.startDate,
-    filters.endDate,
+    filters.startDate || filters.endDate,
+    filters.ordering && filters.ordering !== DEFAULT_ORDERING,
   ].filter(Boolean).length;
 
+  const selectedSort = SORT_OPTIONS.find(
+    (opt) => opt.value === filters.ordering,
+  );
+
   return (
-    <div className="bg-white rounded-2xl border border-white shadow-md overflow-hidden">
-      {/* Header row — icon + label + live active-filter count on the left,
-          "Clear all" on the right (only rendered once a real filter is active) */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
-            <AiOutlineFilter className="w-4 h-4" />
-          </span>
-          <span className="text-sm font-semibold text-gray-800">Filters</span>
-          {activeFilterCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-xs font-semibold">
-              {activeFilterCount}
-            </span>
-          )}
-        </div>
+    <div className="relative">
+      <ListToolbarBar
+        searchValue={filters.search}
+        onSearchChange={(value) => onFilterChange("search", value)}
+        searchPlaceholder="Search by category name..."
+        activeFilterCount={activeFilterCount}
+        areFiltersOpen={areFiltersOpen}
+        onToggleFilters={() => setAreFiltersOpen((prev) => !prev)}
+        onExport={onExport}
+      />
 
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-danger transition-colors"
+      {areFiltersOpen && (
+        <FilterChipsRow
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={onClearFilters}
+        >
+          <DateRangeFilterChip
+            label="Date"
+            heading="Created Date"
+            startValue={filters.startDate}
+            endValue={filters.endDate}
+            onStartChange={(value) => onFilterChange("startDate", value)}
+            onEndChange={(value) => onFilterChange("endDate", value)}
+            onClear={() => {
+              onFilterChange("startDate", "");
+              onFilterChange("endDate", "");
+            }}
+          />
+
+          <FilterChip
+            label="Sort"
+            valueLabel={selectedSort ? selectedSort.label : "select sort"}
+            isActive={filters.ordering !== DEFAULT_ORDERING}
+            onClear={() => onFilterChange("ordering", DEFAULT_ORDERING)}
+            panelClassName="w-48 max-w-[90vw] p-1.5"
           >
-            <AiOutlineClose className="w-3.5 h-3.5" />
-            Clear all
-          </button>
-        )}
-      </div>
-
-      {/* Body — search gets its own full-width row since it's the
-          primary/most-used control, date range + sort sit together
-          below in a clean, evenly-spaced grid. Grid is now 3 columns
-          instead of 4 now that the Status dropdown is gone. */}
-      <div className="p-5 flex flex-col gap-4">
-        <Input
-          placeholder="Search by category name..."
-          leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-          value={filters.search}
-          onChange={(e) => onFilterChange("search", e.target.value)}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <Input
-            label="Created From"
-            type="date"
-            value={filters.startDate}
-            onChange={(e) => onFilterChange("startDate", e.target.value)}
-          />
-
-          <Input
-            label="Created To"
-            type="date"
-            value={filters.endDate}
-            onChange={(e) => onFilterChange("endDate", e.target.value)}
-          />
-
-          <Select
-            label="Sort By"
-            options={SORT_OPTIONS}
-            placeholder="Sort categories"
-            value={filters.ordering}
-            onChange={(e) => onFilterChange("ordering", e.target.value)}
-          />
-        </div>
-      </div>
+            {({ close }) => (
+              <>
+                {SORT_OPTIONS.map((opt) => (
+                  <OptionRow
+                    key={opt.value}
+                    label={opt.label}
+                    isSelected={filters.ordering === opt.value}
+                    onClick={() => {
+                      onFilterChange("ordering", opt.value);
+                      close();
+                    }}
+                  />
+                ))}
+              </>
+            )}
+          </FilterChip>
+        </FilterChipsRow>
+      )}
     </div>
   );
 };

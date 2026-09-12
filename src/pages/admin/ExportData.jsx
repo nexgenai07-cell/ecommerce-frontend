@@ -1,6 +1,3 @@
-// ============================================================
-// ExportData — ADMIN DATA EXPORT PAGE
-// ============================================================
 // SIGNIFICANTLY simplified from the original design. The entire
 // backend only has ONE export capability (API 90: GET
 // /api/v1/analytics/export/, params: start_date, end_date, type),
@@ -24,6 +21,7 @@ import {
   AiOutlineAppstore,
   AiOutlineTeam,
   AiOutlineHome,
+  AiOutlineDownload,
 } from "react-icons/ai";
 
 import { exportReport } from "../../api/analytics.api";
@@ -31,6 +29,10 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel.
 import ExportReportCard from "../../components/admin-export/ExportReportCard";
 
 // Predefined report cards — "Sales by Category" from the design was
@@ -156,12 +158,7 @@ const ExportData = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Export Data</h1>
-        <p className="text-sm text-gray-500">
-          Download your store data as a CSV file.
-        </p>
-      </div>
+      <PageHeader icon={<AiOutlineDownload />} title="Export Data" />
 
       {/* Quick predefined reports */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

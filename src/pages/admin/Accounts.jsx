@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BsFacebook, BsInstagram, BsTwitterX, BsTiktok } from "react-icons/bs";
-import { AiOutlineCheckCircle } from "react-icons/ai";
+import { AiOutlineCheckCircle, AiOutlineShareAlt } from "react-icons/ai";
 
 import { getSocialAccounts } from "../../api/social.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -9,6 +9,10 @@ import extractListData from "../../utils/extractListData";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Spinner from "../../components/ui/Spinner";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel.
 import ConnectAccountModal from "../../components/admin-social/ConnectAccountModal";
 
 const ALL_PLATFORMS = [
@@ -41,12 +45,7 @@ const Accounts = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Connected Accounts</h1>
-        <p className="text-sm text-gray-500">
-          Connect your social media accounts to publish posts from Zyron.
-        </p>
-      </div>
+      <PageHeader icon={<AiOutlineShareAlt />} title="Connected Accounts" />
 
       {isLoading ? (
         <div className="py-16 flex items-center justify-center">

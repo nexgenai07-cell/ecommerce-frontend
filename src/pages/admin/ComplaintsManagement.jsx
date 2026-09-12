@@ -4,13 +4,7 @@ import { useState, useEffect } from "react";
 // invalidation after the bulk status-update mutation below
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import {
-  AiOutlineFileText,
-  AiOutlineDownload,
-  AiOutlineSearch,
-  AiOutlineFilter,
-  AiOutlineClose,
-} from "react-icons/ai";
+import { AiOutlineFileText } from "react-icons/ai";
 
 import { getComplaints, updateComplaintStatus } from "../../api/complaints.api";
 // getComplaints — API 55: GET /api/v1/complaints/. Role-based on the
@@ -36,7 +30,6 @@ import formatDate from "../../utils/formatDate";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
@@ -45,6 +38,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // used on every other admin screen (Orders, Products, Returns...).
 import ComplaintStatsCards from "../../components/admin-complaints/ComplaintStatsCards";
 import ComplaintDetailModal from "../../components/admin-complaints/ComplaintDetailModal";
+import ComplaintFilters from "../../components/admin-complaints/ComplaintFilters";
 
 // --------------------------------------------------
 // STATUS TABS — one pill per real COMPLAINT_STATUS value, plus "All".
@@ -119,14 +113,7 @@ const ComplaintsManagement = () => {
 
   const hasAnyFilterActive =
     !!activeStatus || !!activePriority || !!debouncedSearch;
-  // Drives the "Clear all" button's visibility in the filter card header.
-
-  const activeFilterCount = [
-    activeStatus,
-    activePriority,
-    debouncedSearch,
-  ].filter(Boolean).length;
-  // Feeds the little numbered badge next to the "Filters" heading.
+  // Drives the "Clear all" link's visibility in the toolbar.
 
   // --------------------------------------------------
   // MAIN LIST — real server-side filtering + pagination. Only ONE
@@ -396,20 +383,7 @@ const ComplaintsManagement = () => {
           PAGE HEADER — shared gradient-badge header, same component
           used on every other admin page.
           ================================================================ */}
-      <PageHeader
-        icon={<AiOutlineFileText />}
-        title="Complaints Management"
-        actions={
-          <Button
-            variant="secondary"
-            leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-            onClick={handleExport}
-            isLoading={isExporting}
-          >
-            Export CSV
-          </Button>
-        }
-      />
+      <PageHeader icon={<AiOutlineFileText />} title="Complaints Management" />
       {/* Note: "+ New Ticket" from the original design is NOT included —
           API 54 (Submit Complaint) has no field to attribute a new
           complaint to a DIFFERENT customer; an admin calling it would
@@ -429,90 +403,25 @@ const ComplaintsManagement = () => {
       />
 
       {/* ================================================================
-          FILTERS CARD — status pills, priority pills, and a combined
-          Complaint ID / Subject search. Same visual language as the
-          Returns admin page's filter card for consistency across the
-          panel.
+          TOOLBAR — search, Filters, Export, and (once opened) the
+          Status / Priority dropdown chips. Same shared toolbar pattern
+          used on every other admin list page (see
+          src/components/shared/list-toolbar).
           ================================================================ */}
-      <div className="bg-white rounded-2xl border border-white shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)] overflow-hidden">
-        {/* Header strip — icon badge + "Filters" label + live active
-            count on the left, "Clear all" on the right (only when
-            something is actually active). */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-          <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
-              <AiOutlineFilter className="w-4 h-4" />
-            </span>
-            <span className="text-sm font-semibold text-gray-800">Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-xs font-semibold">
-                {activeFilterCount}
-              </span>
-            )}
-          </div>
-
-          {hasAnyFilterActive && (
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-danger transition-colors"
-            >
-              <AiOutlineClose className="w-3.5 h-3.5" />
-              Clear all
-            </button>
-          )}
-        </div>
-
-        {/* Body — status pills, then priority pills, then the search
-            box. All three stacked so nothing gets cramped on mobile. */}
-        <div className="p-5 flex flex-col gap-4">
-          {/* Status pills — horizontally scrollable on narrow screens,
-              scrollbar hidden (defined project-wide in index.css)
-              while scrolling itself still fully works. */}
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.key || "all-status"}
-                onClick={() => handleTabChange(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 ${
-                  activeStatus === tab.key
-                    ? "bg-linear-to-r from-primary to-primary-dark text-white shadow-md shadow-primary/25"
-                    : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Priority pills — a second, visually distinct pill row
-              (outlined instead of filled) so it doesn't get confused
-              with the status row above it. */}
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {PRIORITY_TABS.map((tab) => (
-              <button
-                key={tab.key || "all-priority"}
-                onClick={() => handlePriorityChange(tab.key)}
-                className={`px-3.5 py-1.5 text-xs font-medium rounded-full border whitespace-nowrap transition-all duration-150 shrink-0 ${
-                  activePriority === tab.key
-                    ? "border-primary bg-primary-50 text-primary"
-                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search box */}
-          <Input
-            placeholder="Search by ID or subject..."
-            leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
+      <ComplaintFilters
+        statusTabs={STATUS_TABS}
+        activeStatus={activeStatus}
+        onStatusChange={handleTabChange}
+        priorityTabs={PRIORITY_TABS}
+        activePriority={activePriority}
+        onPriorityChange={handlePriorityChange}
+        search={search}
+        onSearchChange={setSearch}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasAnyFilterActive}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       {/* ================================================================
           COMPLAINTS TABLE — wrapped in its own soft-shadow card so it

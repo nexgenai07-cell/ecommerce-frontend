@@ -1,10 +1,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AiOutlineTeam, AiOutlineThunderbolt } from "react-icons/ai";
+import {
+  AiOutlineTeam,
+  AiOutlineThunderbolt,
+  AiOutlineMessage,
+} from "react-icons/ai";
 
 import { getWhatsAppSessions } from "../../api/whatsapp.api";
 import extractListData from "../../utils/extractListData";
 import StatsCard from "../../components/ui/StatsCard";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel. This page is a
+// live conversations/chat view rather than a filterable record list,
+// so it has no table and therefore no shared list-toolbar to adopt.
 import ConversationsList from "../../components/admin-whatsapp/ConversationsList";
 import ChatPanel from "../../components/admin-whatsapp/ChatPanel";
 
@@ -23,12 +33,7 @@ const BotLogs = () => {
 
   return (
     <div className="flex flex-col gap-6 h-full">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">WhatsApp Bot Logs</h1>
-        <p className="text-sm text-gray-500">
-          Monitor and reply to live bot conversations.
-        </p>
-      </div>
+      <PageHeader icon={<AiOutlineMessage />} title="WhatsApp Bot Logs" />
 
       {/* Layout: a flex-wrap row rather than a two-column grid.
           StatsCard sizes itself to its own content, so a grid column

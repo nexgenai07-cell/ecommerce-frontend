@@ -5,16 +5,11 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches server data automatically
 
-import {
-  AiOutlineDownload,
-  AiOutlineSearch,
-  AiOutlineEye,
-  AiOutlineTeam,
-} from "react-icons/ai";
-// AiOutlineDownload — Export button icon
-// AiOutlineSearch — search input icon
+import { AiOutlineEye, AiOutlineTeam } from "react-icons/ai";
 // AiOutlineEye — "view customer" row action icon
 // AiOutlineTeam — PageHeader icon for this page
+// The search/filter/export icons now live inside the shared toolbar
+// components used by CustomerFilters below.
 
 import { getCustomers, getCustomerDetail } from "../../api/customers.api";
 // getCustomers — API 110, now confirmed to filter (`search`), sort
@@ -45,15 +40,6 @@ import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 // showSuccess / showError — toast notification helpers for the export flow
 
-import Button from "../../components/ui/Button";
-// Button — shared button component (Export, Clear)
-
-import Input from "../../components/ui/Input";
-// Input — shared text input component (search box)
-
-import Select from "../../components/ui/Select";
-// Select — shared dropdown component (sort choice)
-
 import Avatar from "../../components/ui/Avatar";
 // Avatar — shows customer initials in a colored circle
 
@@ -72,31 +58,10 @@ import CustomerStatsCards from "../../components/admin-customers/CustomerStatsCa
 import CustomerDetailDrawer from "../../components/admin-customers/CustomerDetailDrawer";
 // CustomerDetailDrawer — the side panel that opens on "eye" click
 
-// --------------------------------------------------
-// SORT OPTIONS — each value is sent straight to the backend as the
-// `ordering` query parameter and confirmed working there (newest/
-// oldest joined, name A–Z/Z–A, most/fewest orders, highest/lowest
-// spender). Sorting now always applies across the customer's ENTIRE
-// matching list, not just whichever page happened to be loaded.
-// --------------------------------------------------
-const SORT_OPTIONS = [
-  { value: "-created_at", label: "Newest Joined" },
-  // Default sort — most recently joined customer first
-  { value: "created_at", label: "Oldest Joined" },
-  // Oldest customer account first
-  { value: "name", label: "Name: A–Z" },
-  // Alphabetical by customer name, ascending
-  { value: "-name", label: "Name: Z–A" },
-  // Alphabetical by customer name, descending
-  { value: "-total_orders", label: "Most Orders" },
-  // Customer with the highest order count first
-  { value: "total_orders", label: "Fewest Orders" },
-  // Customer with the lowest order count first
-  { value: "-total_spent", label: "Highest Spender" },
-  // Customer who has spent the most money first
-  { value: "total_spent", label: "Lowest Spender" },
-  // Customer who has spent the least money first
-];
+import CustomerFilters from "../../components/admin-customers/CustomerFilters";
+// CustomerFilters — the shared-style toolbar above the table (search,
+// Filters toggle, Export, Sort chip). The sort option list itself now
+// lives inside that file, right next to where it is rendered.
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -312,22 +277,8 @@ const CustomerManagement = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Shared gradient PageHeader — matches every other admin screen.
-          Export button lives inside the header's `actions` slot. */}
-      <PageHeader
-        icon={<AiOutlineTeam />}
-        title="Customers"
-        actions={
-          <Button
-            variant="secondary"
-            leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-            onClick={handleExport}
-            isLoading={isExporting}
-          >
-            Export
-          </Button>
-        }
-      />
+      {/* Shared gradient PageHeader — matches every other admin screen. */}
+      <PageHeader icon={<AiOutlineTeam />} title="Customers" />
       {/* Note: "+ Add Customer" from the design is NOT included — there
           is no documented endpoint for an admin to manually create a
           customer account; only self-registration (API 1) exists. */}
@@ -335,56 +286,25 @@ const CustomerManagement = () => {
       {/* Only 2 real, accurate, compact stat cards — see CustomerStatsCards.jsx */}
       <CustomerStatsCards />
 
-      {/* Filter toolbar — search AND sort are both real backend
-          parameters now, so filtering/sorting always applies across
-          the customer's entire matching list, not just one page */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-3">
-        {/* Small section heading above the filter controls — makes it
-            clear at a glance that this whole card is the filter area */}
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Filter Customers
-        </h3>
-
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          {/* flex-col on mobile (stacked vertically), sm:flex-row on
-              larger screens (search, sort, and clear sit side by side) */}
-          <div className="flex-1">
-            {/* flex-1 lets the search box grow to fill the remaining space */}
-            <Input
-              placeholder="Search by name, email or phone..."
-              leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Fixed-width wrapper keeps the sort dropdown from stretching
-              full-width on larger screens the way the search input does */}
-          <div className="sm:w-56 shrink-0">
-            <Select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              options={SORT_OPTIONS}
-              placeholder="Sort by..."
-            />
-          </div>
-
-          {/* "Clear" — only rendered when a filter is actually active,
-              resets both the search box and the sort dropdown at once */}
-          {hasActiveFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setSortBy("-created_at");
-              }}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* Toolbar — search, Filters, Export, and (once opened) the Sort
+          dropdown chip. Same shared toolbar pattern used on every other
+          admin list page (see src/components/shared/list-toolbar).
+          Search AND sort are both real backend parameters, so
+          filtering/sorting always applies across the customer's entire
+          matching list, not just one page. */}
+      <CustomerFilters
+        search={search}
+        onSearchChange={setSearch}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        hasActiveFilters={hasActiveFilters}
+        onClearFilters={() => {
+          setSearch("");
+          setSortBy("-created_at");
+        }}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       <DataTable
         columns={columns}

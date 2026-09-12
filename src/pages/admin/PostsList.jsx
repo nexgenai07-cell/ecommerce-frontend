@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AiOutlinePlus, AiOutlineSearch } from "react-icons/ai";
+import { AiOutlinePlus, AiOutlineFileText } from "react-icons/ai";
 
 import { getSocialPosts, deleteSocialPost } from "../../api/social.api";
 import { ROUTES } from "../../constants/routes";
@@ -11,13 +11,19 @@ import extractListData from "../../utils/extractListData";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
-import Select from "../../components/ui/Select";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import Pagination from "../../components/ui/Pagination";
 import Spinner from "../../components/ui/Spinner";
 import EmptyState from "../../components/ui/EmptyState";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own custom
+// header row so it finally matches the rest of the panel.
 import PostCard from "../../components/admin-social/PostCard";
+import PostFilters from "../../components/admin-social/PostFilters";
+// PostFilters — the shared-style toolbar above the grid (status tabs,
+// search, Filters toggle, Platform chip). The platform option list
+// itself now lives inside that file.
 
 // Real status tabs — matches the actual SOCIAL_POST_STATUS enum
 // exactly. "Draft" and "Failed" from the design were dropped — they
@@ -30,13 +36,9 @@ const STATUS_TABS = [
   { key: SOCIAL_POST_STATUS.REJECTED, label: "Rejected" },
 ];
 
-const PLATFORM_OPTIONS = [
-  { value: "", label: "Platform: All" },
-  { value: "facebook", label: "Facebook" },
-  { value: "instagram", label: "Instagram" },
-  { value: "twitter", label: "Twitter / X" },
-  { value: "tiktok", label: "TikTok" },
-];
+// Note: the platform option list (Facebook/Instagram/Twitter/TikTok)
+// now lives inside PostFilters.jsx, right next to the Platform
+// dropdown chip that renders it.
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -62,6 +64,16 @@ const PostsList = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
+
+  const hasActiveFilters = !!activeStatus || !!platform || !!search;
+  // Drives the "Clear all" link's visibility in the toolbar.
+
+  const handleClearFilters = () => {
+    setActiveStatus("");
+    setPlatform("");
+    setSearch("");
+    setCurrentPage(1);
+  };
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
   // page value, since staying on a deep page of a now-differently-sized
@@ -129,64 +141,44 @@ const PostsList = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">All Posts</h1>
-          <p className="text-sm text-gray-500">
-            Manage and track your social content across all platforms.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-          onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
-        >
-          Create New Post
-        </Button>
-      </div>
+      {/* Shared gradient PageHeader — matches every other admin screen. */}
+      <PageHeader
+        icon={<AiOutlineFileText />}
+        title="All Posts"
+        actions={
+          <Button
+            variant="primary"
+            leftIcon={<AiOutlinePlus className="w-4 h-4" />}
+            onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
+          >
+            Create New Post
+          </Button>
+        }
+      />
 
-      {/* Status tabs + filters */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.key || "all"}
-              onClick={() => {
-                setActiveStatus(tab.key);
-                setCurrentPage(1);
-              }}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-                activeStatus === tab.key
-                  ? "bg-primary-50 text-primary"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-2">
-          <Select
-            options={PLATFORM_OPTIONS}
-            value={platform}
-            onChange={(e) => {
-              setPlatform(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-          <Input
-            placeholder="Search posts..."
-            leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-        </div>
-      </div>
+      {/* Toolbar — status tabs, search, Filters, and (once opened) the
+          Platform dropdown chip. Same shared toolbar pattern used on
+          every other admin list page. */}
+      <PostFilters
+        statusTabs={STATUS_TABS}
+        activeStatus={activeStatus}
+        onStatusChange={(key) => {
+          setActiveStatus(key);
+          setCurrentPage(1);
+        }}
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        platform={platform}
+        onPlatformChange={(value) => {
+          setPlatform(value);
+          setCurrentPage(1);
+        }}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
 
       {/* Posts grid */}
       {isLoading ? (

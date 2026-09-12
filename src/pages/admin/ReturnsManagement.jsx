@@ -9,12 +9,7 @@ import {
   AiOutlineClockCircle,
   AiOutlineCheckCircle,
   AiOutlineCloseCircle,
-  AiOutlineDownload,
-  AiOutlineSearch,
   AiOutlineEye,
-  AiOutlineFilter,
-  AiOutlineClose,
-  AiOutlineSortAscending,
   AiOutlineMail,
   AiOutlinePhone,
   AiOutlineEnvironment,
@@ -90,7 +85,6 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Input from "../../components/ui/Input";
-import Select from "../../components/ui/Select";
 import Textarea from "../../components/ui/Textarea";
 import Avatar from "../../components/ui/Avatar";
 import Spinner from "../../components/ui/Spinner";
@@ -103,6 +97,10 @@ import PageHeader from "../../components/shared/PageHeader";
 // every other admin screen (Orders, Products, Categories, Dashboard...).
 // Added here so Returns finally matches the rest of the panel instead of
 // using its own plain <h1>.
+import ReturnFilters from "../../components/admin-returns/ReturnFilters";
+// ReturnFilters — the shared-style toolbar above the table (status
+// tabs, search, Filters toggle, Export, Date Range/Sort chips). The
+// sort option list itself now lives inside that file.
 
 // --------------------------------------------------
 // STATUS TABS — one pill per real RETURN_STATUS value, plus "All".
@@ -117,19 +115,9 @@ const STATUS_TABS = [
   { key: RETURN_STATUS.REJECTED, label: "Rejected" },
 ];
 
-// --------------------------------------------------
-// SORT OPTIONS — sent straight to the backend as a real `ordering`
-// query param. "-created_at"/"created_at" are CONFIRMED working.
-// "customer_name"/"-customer_name" were never explicitly confirmed —
-// sent through optimistically; if the backend doesn't recognize this
-// field name it will simply have no effect rather than error.
-// --------------------------------------------------
-const SORT_OPTIONS = [
-  { value: "-created_at", label: "Newest First" },
-  { value: "created_at", label: "Oldest First" },
-  { value: "customer_name", label: "Customer Name: A-Z" },
-  { value: "-customer_name", label: "Customer Name: Z-A" },
-];
+// Note: the sort option list (Newest/Oldest/Customer Name) now lives
+// inside ReturnFilters.jsx, right next to the Sort dropdown chip that
+// renders it.
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -611,10 +599,6 @@ const ReturnsManagement = () => {
   // return reason text — see the note near the getReturns import above
   // for what's NOT confirmed).
 
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  // showAdvancedFilters — toggles the Date Range + Sort By row open/closed
-  // so the filter card stays compact until the admin actually needs it.
-
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   // startDate / endDate — client-side date-range filter against created_at
@@ -658,15 +642,7 @@ const ReturnsManagement = () => {
 
   const hasAnyFilterActive =
     !!activeStatus || !!debouncedSearch || !!startDate || !!endDate;
-  // Drives the "Clear all" button's visibility in the filter card header.
-
-  const activeFilterCount = [
-    activeStatus,
-    debouncedSearch,
-    startDate,
-    endDate,
-  ].filter(Boolean).length;
-  // Feeds the little numbered badge next to the "Filters" heading.
+  // Drives the "Clear all" link's visibility in the toolbar.
 
   // --------------------------------------------------
   // MAIN LIST — real server-side status/search/date filtering,
@@ -1010,20 +986,7 @@ const ReturnsManagement = () => {
           PAGE HEADER — shared gradient-badge header, same component used
           on every other admin page, rendered first as requested.
           ================================================================ */}
-      <PageHeader
-        icon={<AiOutlineHistory />}
-        title="Returns Management"
-        actions={
-          <Button
-            variant="secondary"
-            leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-            onClick={handleExport}
-            isLoading={isExporting}
-          >
-            Export CSV
-          </Button>
-        }
-      />
+      <PageHeader icon={<AiOutlineHistory />} title="Returns Management" />
 
       {/* ================================================================
           STAT CARDS — all four counts are read directly from the
@@ -1074,121 +1037,36 @@ const ReturnsManagement = () => {
       </div>
 
       {/* ================================================================
-          FILTERS CARD — richer filter surface: status pills, a combined
-          Return ID / Order ID / Customer Name search, and a collapsible
-          Date Range + Sort row. Same visual language as the Orders admin
-          page's filter card for consistency across the panel.
+          TOOLBAR — status tabs, search, Filters, Export, and (once
+          opened) the Date Range / Sort dropdown chips. Same shared
+          toolbar pattern used on every other admin list page.
           ================================================================ */}
-      <div className="bg-white rounded-2xl border border-white shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)] overflow-hidden">
-        {/* Header strip — icon badge + "Filters" label + live active count
-            on the left, "Clear all" on the right (only when something is
-            actually active). */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-          <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
-              <AiOutlineFilter className="w-4 h-4" />
-            </span>
-            <span className="text-sm font-semibold text-gray-800">Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-xs font-semibold">
-                {activeFilterCount}
-              </span>
-            )}
-          </div>
-
-          {hasAnyFilterActive && (
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-danger transition-colors"
-            >
-              <AiOutlineClose className="w-3.5 h-3.5" />
-              Clear all
-            </button>
-          )}
-        </div>
-
-        {/* Body — status pills on their own scrollable row, then the
-            search box + advanced toggle, then the collapsible date/sort
-            row. */}
-        <div className="p-5 flex flex-col gap-4">
-          {/* Status pills — horizontally scrollable on narrow screens,
-              scrollbar hidden (defined project-wide in index.css) while
-              scrolling itself still fully works. */}
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.key || "all"}
-                onClick={() => handleTabChange(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 ${
-                  activeStatus === tab.key
-                    ? "bg-linear-to-r from-primary to-primary-dark text-white shadow-md shadow-primary/25"
-                    : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Primary search + advanced-filters toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="Search Return ID, Order ID, or Customer Name..."
-                leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-            <Button
-              variant={showAdvancedFilters ? "primary" : "secondary"}
-              size="sm"
-              leftIcon={<AiOutlineSortAscending className="w-4 h-4" />}
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="shrink-0"
-            >
-              Date &amp; Sort
-            </Button>
-          </div>
-
-          {/* Advanced row — date range (client-side, see flag above) and a
-              client-side sort dropdown. Toggled by the button above so the
-              filter card stays compact by default. */}
-          {showAdvancedFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4 border-t border-gray-100">
-              <Input
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-              <Input
-                label="End Date"
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-              <Select
-                label="Sort By"
-                options={SORT_OPTIONS}
-                placeholder="Sort returns"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+      <ReturnFilters
+        statusTabs={STATUS_TABS}
+        activeStatus={activeStatus}
+        onStatusChange={handleTabChange}
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={(value) => {
+          setStartDate(value);
+          setCurrentPage(1);
+        }}
+        onEndDateChange={(value) => {
+          setEndDate(value);
+          setCurrentPage(1);
+        }}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasAnyFilterActive}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       {/* ================================================================
           RETURNS TABLE — wrapped in its own soft-shadow card so it reads

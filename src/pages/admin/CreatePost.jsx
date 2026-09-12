@@ -15,6 +15,12 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Textarea from "../../components/ui/Textarea";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1>. The breadcrumb line above it is kept as-is, since PageHeader
+// doesn't render one itself.
+import { AiOutlineEdit } from "react-icons/ai";
 import ProductPicker from "../../components/admin-social/ProductPicker";
 import PostPreview, {
   getCharacterLimit,
@@ -129,10 +135,7 @@ const CreatePost = () => {
         <p className="text-xs text-gray-400 mb-1">
           Social Media / Create New Post
         </p>
-        <h1 className="text-xl font-bold text-gray-900">Create New Post</h1>
-        <p className="text-sm text-gray-500">
-          Compose and schedule your social media content.
-        </p>
+        <PageHeader icon={<AiOutlineEdit />} title="Create New Post" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

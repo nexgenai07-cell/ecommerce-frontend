@@ -12,6 +12,7 @@ import { getCategories, deleteCategory } from "../../api/categories.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
+import downloadCsv from "../../utils/downloadCsv";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
@@ -190,6 +191,27 @@ const CategoryManagement = () => {
     return [...filtered].sort(sortFn);
   }, [allCategories, filters]);
 
+  // Exports whichever categories currently match the active filters —
+  // built client-side from data already loaded in the browser, since
+  // there is no confirmed backend export type for categories yet (see
+  // the CONFIRMED list documented in exportReport, src/api/analytics.api.js).
+  const handleExport = () => {
+    downloadCsv(
+      filteredCategories.map((category) => ({
+        name: category.name,
+        product_count: category.product_count ?? 0,
+        created_at: category.created_at ? formatDate(category.created_at) : "",
+      })),
+      [
+        { key: "name", label: "Name" },
+        { key: "product_count", label: "Products" },
+        { key: "created_at", label: "Created Date" },
+      ],
+      "categories",
+    );
+    showSuccess("Categories exported.");
+  };
+
   const totalPages = Math.max(
     1,
     Math.ceil(filteredCategories.length / pageSize),
@@ -361,6 +383,7 @@ const CategoryManagement = () => {
         onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
+        onExport={handleExport}
       />
 
       <div

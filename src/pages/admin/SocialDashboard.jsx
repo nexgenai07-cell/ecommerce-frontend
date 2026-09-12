@@ -1,8 +1,12 @@
 import { useNavigate } from "react-router-dom";
-import { AiOutlinePlus } from "react-icons/ai";
+import { AiOutlinePlus, AiOutlineShareAlt } from "react-icons/ai";
 
 import { ROUTES } from "../../constants/routes";
 import Button from "../../components/ui/Button";
+import PageHeader from "../../components/shared/PageHeader";
+// PageHeader — the SAME shared gradient icon + title header already
+// used on every other admin screen, replacing this page's own plain
+// <h1> so it finally matches the rest of the panel.
 import ConnectedAccountsRow from "../../components/admin-social/ConnectedAccountsRow";
 import SocialStatsCards from "../../components/admin-social/SocialStatsCards";
 import PostsByPlatformChart from "../../components/admin-social/PostsByPlatformChart";
@@ -13,19 +17,20 @@ const SocialDashboard = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">
-          Social Media Dashboard
-        </h1>
-        <Button
-          variant="primary"
-          leftIcon={<AiOutlinePlus className="w-4 h-4" />}
-          onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
-        >
-          Create Post
-        </Button>
-      </div>
+      {/* Shared gradient PageHeader — matches every other admin screen. */}
+      <PageHeader
+        icon={<AiOutlineShareAlt />}
+        title="Social Media Dashboard"
+        actions={
+          <Button
+            variant="primary"
+            leftIcon={<AiOutlinePlus className="w-4 h-4" />}
+            onClick={() => navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST)}
+          >
+            Create Post
+          </Button>
+        }
+      />
 
       <ConnectedAccountsRow />
 

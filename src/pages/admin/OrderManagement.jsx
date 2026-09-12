@@ -1,20 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AiOutlineSearch,
-  AiOutlineFilter,
-  AiOutlineDownload,
-  AiOutlineEye,
-  AiOutlineShoppingCart,
-  AiOutlineClose,
-  AiOutlineSortAscending,
-  AiOutlinePhone,
-} from "react-icons/ai";
-// AiOutlinePhone — used on the "Phone Number" advanced filter field
-// react-icons — every small icon used across the redesigned header,
-// filter card, and table actions comes from this single icon set so
-// the whole page keeps one consistent visual language.
+import { AiOutlineEye, AiOutlineShoppingCart } from "react-icons/ai";
+// react-icons — the icons used by the table's own row actions and the
+// page header. The search/filter/export/status-tab icons now live
+// inside the shared toolbar components used by OrderFilters below.
 
 import {
   getAdminOrders,
@@ -40,7 +30,6 @@ import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
-import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
@@ -48,6 +37,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already used
 // on every other admin screen (Products, Categories, Dashboard, etc).
 import OrderStatsCards from "../../components/admin-orders/OrderStatsCards";
+import OrderFilters from "../../components/admin-orders/OrderFilters";
 
 // --------------------------------------------------
 // STATUS TABS — one pill per real ORDER_STATUS value, plus "All".
@@ -64,23 +54,10 @@ const STATUS_TABS = [
   { key: ORDER_STATUS.CANCELLED, label: "Cancelled" },
 ];
 
-// --------------------------------------------------
-// SORT OPTIONS — sent straight to the backend as the `ordering` query
-// param. "-created_at" / "created_at" and "-total_amount" /
-// "total_amount" are CONFIRMED working server-side. The order-number
-// options are sent through optimistically (not part of the confirmed
-// list) — if the backend doesn't recognize this specific field name,
-// it will simply have no effect rather than error, but this one
-// specifically hasn't been verified with a real example yet.
-// --------------------------------------------------
-const SORT_OPTIONS = [
-  { value: "-created_at", label: "Newest First" },
-  { value: "created_at", label: "Oldest First" },
-  { value: "-total_amount", label: "Amount: High to Low" },
-  { value: "total_amount", label: "Amount: Low to High" },
-  { value: "order_number", label: "Order Number: A-Z" },
-  { value: "-order_number", label: "Order Number: Z-A" },
-];
+// Note: the sort option list (Newest/Oldest/Amount/Order Number) now
+// lives inside OrderFilters.jsx, right next to the Sort dropdown chip
+// that renders it, since nothing in this file needs the list directly
+// any more.
 
 // --------------------------------------------------
 // BULK STATUS OPTIONS — the subset of ORDER_STATUS values that are
@@ -142,10 +119,6 @@ const OrderManagement = () => {
   // wasn't asked to change), they both just feed the same backend
   // parameter under the hood.
 
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  // showAdvancedFilters — toggles the Date Range + Sort By row open/closed
-  // so the filter card stays compact until the admin actually needs it.
-
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   // startDate / endDate — sent straight through to API 48 as
@@ -188,16 +161,6 @@ const OrderManagement = () => {
   // hasActiveFilters — true the moment ANY filter is active. Decides
   // which endpoint gets called (API 47 vs API 48) — the plain list
   // endpoint is only used when browsing with zero filters.
-
-  const activeFilterCount = [
-    activeStatus,
-    debouncedSearch,
-    startDate,
-    endDate,
-    debouncedPhoneSearch,
-  ].filter(Boolean).length;
-  // activeFilterCount — feeds the little numbered badge next to the
-  // "Filters" heading.
 
   // --------------------------------------------------
   // ORDERS LIST — real server-side filtering, search (including phone),
@@ -430,114 +393,30 @@ const OrderManagement = () => {
       <OrderStatsCards />
 
       {/* ================================================================
-          FILTERS CARD
+          TOOLBAR — status tabs, search, Filters, Export, and (once
+          opened) the Date Range / Phone Number / Sort dropdown chips.
+          Same shared toolbar pattern used on every other admin list
+          page (see src/components/shared/list-toolbar).
           ================================================================ */}
-      <div className="bg-white rounded-2xl border border-white shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)] overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-          <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
-              <AiOutlineFilter className="w-4 h-4" />
-            </span>
-            <span className="text-sm font-semibold text-gray-800">Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-xs font-semibold">
-                {activeFilterCount}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {hasAnyFilterActive && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-danger transition-colors"
-              >
-                <AiOutlineClose className="w-3.5 h-3.5" />
-                Clear all
-              </button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-              onClick={handleExport}
-              isLoading={isExporting}
-            >
-              Export
-            </Button>
-          </div>
-        </div>
-
-        <div className="p-5 flex flex-col gap-4">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.key || "all"}
-                onClick={() => handleTabChange(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 ${
-                  activeStatus === tab.key
-                    ? "bg-linear-to-r from-primary to-primary-dark text-white shadow-md shadow-primary/25"
-                    : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="Search by order number or customer name..."
-                leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <Button
-              variant={showAdvancedFilters ? "primary" : "secondary"}
-              size="sm"
-              leftIcon={<AiOutlineSortAscending className="w-4 h-4" />}
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="shrink-0"
-            >
-              Date &amp; Sort
-            </Button>
-          </div>
-
-          {showAdvancedFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 border-t border-gray-100">
-              <Input
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-              <Input
-                label="End Date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-              <Input
-                label="Phone Number"
-                placeholder="03XX-XXXXXXX"
-                leftIcon={<AiOutlinePhone className="w-4 h-4" />}
-                value={phoneSearch}
-                onChange={(e) => setPhoneSearch(e.target.value)}
-              />
-              <Select
-                label="Sort By"
-                options={SORT_OPTIONS}
-                placeholder="Sort orders"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+      <OrderFilters
+        statusTabs={STATUS_TABS}
+        activeStatus={activeStatus}
+        onStatusChange={handleTabChange}
+        search={search}
+        onSearchChange={setSearch}
+        phoneSearch={phoneSearch}
+        onPhoneSearchChange={setPhoneSearch}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasAnyFilterActive}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       {/* ================================================================
           BULK ACTION BAR — appears only while one or more rows are

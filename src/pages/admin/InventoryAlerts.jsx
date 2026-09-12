@@ -11,10 +11,6 @@ import { useQuery } from "@tanstack/react-query";
 // useQuery — fetches, caches, and re-fetches server data automatically
 
 import {
-  AiOutlineDownload,
-  // "Export Report" button icon
-  AiOutlineSearch,
-  // Search input icon
   AiOutlineWarning,
   // PageHeader icon for this page — same icon already used for
   // "Inventory Alerts" in the admin sidebar
@@ -45,8 +41,6 @@ import extractListData from "../../utils/extractListData";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
-import Select from "../../components/ui/Select";
 import Badge from "../../components/ui/Badge";
 import DataTable from "../../components/ui/DataTable";
 
@@ -58,6 +52,10 @@ import PageHeader from "../../components/shared/PageHeader";
 
 import InventoryStatsCards from "../../components/admin-inventory/InventoryStatsCards";
 import InventoryAlertBanner from "../../components/admin-inventory/InventoryAlertBanner";
+import InventoryFilters from "../../components/admin-inventory/InventoryFilters";
+// InventoryFilters — the shared-style toolbar above the table (search,
+// Filters toggle, Export, Category chip, and the multi-select status
+// tabs specific to this page).
 
 const STATUS_TABS = [
   { key: "", label: "All" },
@@ -115,6 +113,23 @@ const InventoryAlerts = () => {
   const debouncedSearch = useDebounce(search, 400);
   // Waits 400ms after the admin stops typing before actually filtering
   // — avoids re-filtering/re-fetching on every single keystroke
+
+  const hasActiveFilters = activeTabs.length > 0 || !!search || !!categoryId;
+  // Drives the "Clear all" link's visibility in the toolbar.
+
+  const handleToggleStatus = (key) => {
+    setActiveTabs((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+
+  const handleClearStatus = () => setActiveTabs([]);
+
+  const handleClearFilters = () => {
+    setActiveTabs([]);
+    setSearch("");
+    setCategoryId("");
+  };
 
   // --------------------------------------------------
   // INVENTORY ALERTS — the small, bounded "needs attention" list.
@@ -430,23 +445,7 @@ const InventoryAlerts = () => {
     <div className="flex flex-col gap-6">
       {/* Shared gradient PageHeader — matches every other admin screen.
           Export Report button lives inside the header's `actions` slot. */}
-      <PageHeader
-        icon={<AiOutlineWarning />}
-        title="Inventory Alerts"
-        actions={
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Button
-              variant="secondary"
-              leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-              onClick={handleExport}
-              isLoading={isExporting}
-              className="w-full sm:w-auto"
-            >
-              Export Report
-            </Button>
-          </div>
-        }
-      />
+      <PageHeader icon={<AiOutlineWarning />} title="Inventory Alerts" />
 
       <InventoryAlertBanner
         outOfStockCount={outOfStockCount}
@@ -462,60 +461,26 @@ const InventoryAlerts = () => {
 
       <InventoryStatsCards />
 
-      {/* Tabs + search + category filter — ref target for the
-          "Review All" smooth-scroll above */}
-      <div
-        ref={tableSectionRef}
-        className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
-      >
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-          {STATUS_TABS.map((tab) => {
-            const isActive =
-              tab.key === ""
-                ? activeTabs.length === 0 && !search && !categoryId
-                : activeTabs.includes(tab.key);
-
-            return (
-              <button
-                key={tab.key || "all"}
-                onClick={() => {
-                  if (tab.key === "") {
-                    setActiveTabs([]);
-                    setSearch("");
-                    setCategoryId("");
-                    return;
-                  }
-                  setActiveTabs((prev) =>
-                    prev.includes(tab.key)
-                      ? prev.filter((key) => key !== tab.key)
-                      : [...prev, tab.key],
-                  );
-                }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors shrink-0 ${
-                  isActive
-                    ? "bg-primary-50 text-primary"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <Input
-            placeholder="Filter products..."
-            leftIcon={<AiOutlineSearch className="w-4 h-4" />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Select
-            options={categoryOptions}
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-          />
-        </div>
+      {/* Toolbar — search, Filters, Export, Category chip, and the
+          multi-select status tabs — ref target for the "Review All"
+          smooth-scroll above. Same shared toolbar pattern used on
+          every other admin list page. */}
+      <div ref={tableSectionRef}>
+        <InventoryFilters
+          statusOptions={STATUS_TABS}
+          activeTabs={activeTabs}
+          onToggleStatus={handleToggleStatus}
+          onClearStatus={handleClearStatus}
+          search={search}
+          onSearchChange={setSearch}
+          categoryOptions={categoryOptions}
+          categoryId={categoryId}
+          onCategoryChange={setCategoryId}
+          onClearFilters={handleClearFilters}
+          hasActiveFilters={hasActiveFilters}
+          onExport={handleExport}
+          isExporting={isExporting}
+        />
       </div>
 
       <DataTable
