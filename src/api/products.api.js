@@ -1,4 +1,3 @@
-// ============================================================
 // PRODUCTS API MODULE
 // ============================================================
 // This file contains ALL API calls related to the Products module.
@@ -41,6 +40,16 @@ export const getProducts = (params, signal) => {
 //                      status separately when more than one is active
 //                      (see InventoryAlerts.jsx).
 //   - ordering     -> e.g. "-created_at", "price", "-price", "name"
+//   - min_price / max_price -> filters by product price range.
+//     UPDATED (Sep 2026, API 29 backend fix): the backend now rejects
+//     a negative min_price/max_price OR a min_price greater than
+//     max_price with a 400 under an "error" key (e.g. "min_price
+//     cannot be negative.", "min_price cannot be greater than
+//     max_price."). The customer-facing price slider (ProductsFilters.jsx)
+//     already clamps its own inputs so it can never produce either
+//     case; the admin panel's RangeFilterChip does not, so ProductList.jsx
+//     surfaces this 400 as an inline error toast instead of a silent
+//     empty result grid.
 //   - page         -> standard pagination
 // All of the above now combine correctly in a single request. This
 // endpoint is the single source of truth for the admin Product
@@ -60,6 +69,10 @@ export const getProductById = (id, signal) => {
 // ----------------------------
 // API - Create a new product (Admin only)
 // ----------------------------
+// UPDATED (Sep 2026, API 31 backend fix): sku now has a hard
+// 15-character cap enforced server-side — a longer value gets a 400
+// ("SKU cannot be longer than 15 characters."). Validated client-side
+// too, see the sku field in ProductAdd.jsx's Zod schema.
 export const createProduct = (data, signal) => {
   return axiosInstance.post("/api/v1/products/", data, {
     signal,
@@ -100,6 +113,8 @@ export const checkProductSkuExists = (sku, excludeId, signal) => {
 // Stock changes (add/remove/correction) now go through the dedicated
 // adjustStock() function below, which is atomic and race-condition-safe
 // on the backend. This endpoint stays for name/price/category/etc. only.
+// UPDATED (Sep 2026, API 32 backend fix): same 15-character sku cap as
+// createProduct() above now applies here too.
 export const updateProduct = (id, data, signal) => {
   return axiosInstance.put(`/api/v1/products/${id}/`, data, { signal });
 };

@@ -1,13 +1,17 @@
-// Import "useParams" to read dynamic URL params and "Link" for client-side navigation, from react-router-dom
-import { useParams, Link } from "react-router-dom";
+// Import "useEffect" to publish this page's dynamic breadcrumb label, and
+// "useParams" to read dynamic URL params, from react-router-dom / react
+import { useEffect } from "react";
+import { useParams } from "react-router-dom";
 // Import "useQuery" hook from react-query (tanstack) to handle data fetching, caching, and refetching
 import { useQuery } from "@tanstack/react-query";
 // Import "motion" from framer-motion to enable a simple fade-in animation on the page
 import { motion } from "framer-motion";
 // Import a truck icon used inside the page header's gradient icon box
 import { BsTruck } from "react-icons/bs";
-// Import a constants object that holds route path strings used for navigation links
-import { ROUTES } from "../../constants/routes";
+// Import useBreadcrumb — publishes this order's number to the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// CustomerLayout, above every customer page).
+import useBreadcrumb from "../../hooks/useBreadcrumb";
 // Import a constants object that holds standardized react-query cache key generator functions
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API functions for fetching order details and order tracking info
@@ -34,6 +38,17 @@ const OrderTracking = () => {
   // URL se order number lo
   // Extract the "id" route param from the URL and rename it to "orderNumber" for clarity
   const { id: orderNumber } = useParams();
+
+  // Publishes the order number into the shared breadcrumb trail's last
+  // crumb (the config's static fallback for this route is "Track
+  // Order" — see constants/breadcrumbs.config.js). The URL param is
+  // available immediately, with no API round trip required, so this
+  // label appears correctly from the very first render.
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (orderNumber) handleSetLabel(`Order ${orderNumber}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderNumber]);
 
   // =============================================
   // ORDER DETAIL API
@@ -143,33 +158,6 @@ const OrderTracking = () => {
         <Container className="py-6 sm:py-8">
           {/* Outer vertical flex column holding all page sections, with gap between them */}
           <div className="flex flex-col gap-6">
-            {/* Breadcrumb */}
-            {/* Row container holding the breadcrumb nav */}
-            <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-              {/* Link back to the home page */}
-              <Link
-                to={ROUTES.HOME}
-                className="hover:text-gray-600 transition-colors"
-              >
-                Home
-              </Link>
-              {/* Separator character between breadcrumb links */}
-              <span className="text-gray-300">›</span>
-              {/* Link to the user's account orders list page */}
-              <Link
-                to={ROUTES.ACCOUNT_ORDERS}
-                className="hover:text-gray-600 transition-colors"
-              >
-                My Orders
-              </Link>
-              {/* Separator character between breadcrumb links */}
-              <span className="text-gray-300">›</span>
-              {/* Current page indicator showing the specific order number, not a clickable link */}
-              <span className="text-gray-600 font-medium">
-                Order {orderNumber}
-              </span>
-            </nav>
-
             {/* ── Page header ────────────────────────────────────────────────────
                 Same icon-box pattern used across every other account page:
                 a rounded gradient icon square + bold heading + gray subtitle */}

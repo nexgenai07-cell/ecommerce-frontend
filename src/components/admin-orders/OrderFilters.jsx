@@ -40,6 +40,10 @@ const DEFAULT_ORDERING = "-created_at";
  * - onSearchChange:   (value) => void.
  * - phoneSearch:      Dedicated "Phone Number" filter value.
  * - onPhoneSearchChange: (value) => void.
+ * - productFilter:    Dedicated "Product" filter value (NEW, Sep 2026, API 62).
+ * - onProductFilterChange: (value) => void.
+ * - categoryFilter:   Dedicated "Category" filter value (NEW, Sep 2026, API 62).
+ * - onCategoryFilterChange: (value) => void.
  * - startDate / endDate: Date range values ("yyyy-mm-dd" strings).
  * - onStartDateChange / onEndDateChange: (value) => void.
  * - sortBy:           Current `ordering` value.
@@ -57,6 +61,10 @@ const OrderFilters = ({
   onSearchChange,
   phoneSearch,
   onPhoneSearchChange,
+  productFilter,
+  onProductFilterChange,
+  categoryFilter,
+  onCategoryFilterChange,
   startDate,
   endDate,
   onStartDateChange,
@@ -76,6 +84,8 @@ const OrderFilters = ({
     activeStatus,
     startDate || endDate,
     phoneSearch,
+    productFilter,
+    categoryFilter,
     sortBy && sortBy !== DEFAULT_ORDERING,
   ].filter(Boolean).length;
 
@@ -144,6 +154,29 @@ const OrderFilters = ({
             value={phoneSearch}
             onChange={onPhoneSearchChange}
             onClear={() => onPhoneSearchChange("")}
+          />
+
+          {/* NEW (Sep 2026, API 62 backend fix) — the backend now
+              accepts these two as standalone filters on the filter
+              endpoint, combinable with everything else here. Both
+              match partially and case-insensitively against any line
+              item's product/category name inside an order. */}
+          <TextFilterChip
+            label="Product"
+            heading="Product Name"
+            placeholder="e.g. Wireless Mouse"
+            value={productFilter}
+            onChange={onProductFilterChange}
+            onClear={() => onProductFilterChange("")}
+          />
+
+          <TextFilterChip
+            label="Category"
+            heading="Category Name"
+            placeholder="e.g. Electronics"
+            value={categoryFilter}
+            onChange={onCategoryFilterChange}
+            onClear={() => onCategoryFilterChange("")}
           />
 
           <FilterChip

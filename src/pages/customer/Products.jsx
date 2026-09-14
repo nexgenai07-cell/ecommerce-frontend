@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 // Reads the ?category_id= query param (used when arriving from a category link)
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 // Framer Motion — smooth fade/slide transitions between filter/sort/view changes
 import { motion, AnimatePresence } from "framer-motion";
 // Icons used in the mobile filter button and the page header badge
@@ -26,8 +26,6 @@ import ProductGrid from "../../components/shared/ProductGrid";
 import Pagination from "../../components/ui/Pagination";
 // "No products found" placeholder, shown in list view when there's no data
 import EmptyState from "../../components/ui/EmptyState";
-// App route path constants
-import { ROUTES } from "../../constants/routes";
 
 // Smoothly scrolls back to the top of the page — called on every filter,
 // sort, or page change so the user always sees the new results from the top
@@ -125,18 +123,6 @@ const Products = () => {
     <div className="min-h-screen bg-gray-50">
       <Container className="py-6 sm:py-8 px-5 sm:px-8 lg:px-14 xl:px-20">
         <div className="flex flex-col gap-5">
-          {/* Breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-            <Link
-              to={ROUTES.HOME}
-              className="hover:text-gray-600 transition-colors"
-            >
-              Home
-            </Link>
-            <span className="text-gray-300">›</span>
-            <span className="text-gray-600 font-medium">Shop</span>
-          </nav>
-
           {/* ===== PAGE HEADER — compact banner with product count ===== */}
           <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 px-6 py-5 sm:px-7 sm:py-6">
             {/* Decorative soft glow accents — purely visual, sit behind the content */}

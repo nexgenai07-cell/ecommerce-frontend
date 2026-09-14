@@ -1,6 +1,13 @@
+import { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 // Import the useQuery hook from React Query for fetching and caching server data
 import { useQuery } from "@tanstack/react-query";
+// useBreadcrumb — publishes this ticket's number to the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// CustomerLayout, above every customer page), swapping in "Ticket
+// #CMP-{id}" for the config's static "Ticket Details" fallback — see
+// constants/breadcrumbs.config.js.
+import useBreadcrumb from "../../hooks/useBreadcrumb";
 // Import the motion component from framer-motion for animating the page entrance
 import { motion } from "framer-motion";
 // Import back-arrow, paperclip (attachment), robot (AI/system), person (agent), and clock icons used throughout this redesigned page
@@ -61,6 +68,17 @@ const STATUS_CONFIG = {
 const ComplaintDetail = () => {
   // Extract the complaint ID from the URL — e.g. /account/complaints/10 → "10"
   const { id } = useParams();
+
+  // Publishes this ticket's number into the shared breadcrumb trail's
+  // last crumb, matching the "Complaint #CMP-{id}" format used
+  // consistently across both the customer and admin sides of the
+  // complaints module. The URL param is available immediately, with
+  // no API round trip required.
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (id) handleSetLabel(`Ticket #CMP-${id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // =============================================
   // COMPLAINT DETAIL API — GET /api/v1/complaints/{id}/
@@ -125,10 +143,10 @@ const ComplaintDetail = () => {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      {/* Container component constrains content width and adds vertical padding, larger on "sm" screens and up */}
-      <Container className="py-6 sm:py-8">
+      {/* Container component constrains content width and adds vertical padding, compact on mobile and slightly roomier from "sm" up */}
+      <Container className="py-5 sm:py-6">
         {/* Outer vertical flex layout, capped at a comfortable reading width so long complaint text doesn't stretch edge-to-edge on wide screens */}
-        <div className="flex flex-col gap-6 max-w-3xl">
+        <div className="flex flex-col gap-4 max-w-3xl">
           {/* Back link */}
           {/* Navigates back to the complaints list page; the arrow nudges slightly left on hover for a bit of tactile feedback */}
           <Link
@@ -144,15 +162,15 @@ const ComplaintDetail = () => {
               Stacks vertically on mobile, sits side-by-side from "sm" breakpoint up. */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             {/* Left side — icon badge + title/subtitle, matching the header treatment used on the Submit Complaint page */}
-            <div className="flex items-center gap-3">
-              {/* Gradient circular icon badge — same visual language used across the complaints module */}
-              <div className="w-11 h-11 rounded-2xl bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-lg shadow-primary/30 shrink-0">
-                <BsChatSquareDots className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-2.5">
+              {/* Gradient circular icon badge — same visual language used across the complaints module, sized down slightly for a more compact header */}
+              <div className="w-9 h-9 rounded-xl bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-lg shadow-primary/30 shrink-0">
+                <BsChatSquareDots className="w-4 h-4 text-white" />
               </div>
               {/* Title + filed-on/order-number subtitle stack */}
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Complaint #CP-{complaint.id}
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">
+                  Complaint #CMP-{complaint.id}
                 </h1>
                 <p className="text-sm text-gray-400 mt-0.5">
                   Filed on {formatDate(complaint.created_at)}
@@ -189,28 +207,28 @@ const ComplaintDetail = () => {
               unrelated boxes, using a vertical connector line between the two avatar
               badges — same "timeline" language used in the Resolution Protocol panel
               on the Submit Complaint page, for visual consistency across the module. */}
-          <div className="relative flex flex-col gap-4">
+          <div className="relative flex flex-col gap-3">
             {/* Connector line running behind both avatar badges below, from the middle of the first
                 badge down to the middle of the second one. Only rendered here once, positioned with
-                fixed offsets that line up with the 10-unit-wide avatar badges used in both cards. */}
-            <div className="absolute left-5 top-10 bottom-10 w-px bg-linear-to-b from-primary-200 via-gray-200 to-gray-200" />
+                fixed offsets that line up with the 9-unit-wide avatar badges used in both cards. */}
+            <div className="absolute left-[1.125rem] top-9 bottom-9 w-px bg-linear-to-b from-primary-200 via-gray-200 to-gray-200" />
 
             {/* Original complaint card */}
             {/* Elevated card — white background, soft resting shadow that strengthens on hover, gradient accent
                 strip on top, matching the "raised" card treatment used across the rest of the complaints module */}
-            <div className="relative bg-white rounded-3xl border border-gray-100 shadow-[0_6px_22px_-6px_rgba(16,24,40,0.10)] hover:shadow-[0_14px_32px_-8px_rgba(16,24,40,0.14)] transition-shadow duration-300 overflow-hidden">
+            <div className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_6px_22px_-6px_rgba(16,24,40,0.10)] hover:shadow-[0_14px_32px_-8px_rgba(16,24,40,0.14)] transition-shadow duration-300 overflow-hidden">
               {/* Thin gradient accent strip across the top of the card */}
               <div className="h-1 w-full bg-linear-to-r from-primary via-primary-light to-primary-dark" />
 
               {/* Card body — flex row with an avatar badge on the left and the complaint content on the right */}
-              <div className="p-5 sm:p-6 flex items-start gap-4">
+              <div className="p-4 sm:p-5 flex items-start gap-3">
                 {/* Avatar badge representing the customer's own submission — a filled gradient circle with the
                     complaint-type icon, sits above the connector line thanks to the parent's z-index stacking */}
-                <div className="relative z-10 w-10 h-10 rounded-full bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-sm shadow-primary/30 shrink-0 ring-4 ring-white">
-                  <BsRobot className="w-4.5 h-4.5 text-white" />
+                <div className="relative z-10 w-9 h-9 rounded-full bg-linear-to-br from-primary to-primary-dark flex items-center justify-center shadow-sm shadow-primary/30 shrink-0 ring-4 ring-white">
+                  <BsRobot className="w-4 h-4 text-white" />
                 </div>
                 {/* Content column: type label, subject heading, body text, and optional attachment chip */}
-                <div className="flex-1 min-w-0 flex flex-col gap-3">
+                <div className="flex-1 min-w-0 flex flex-col gap-2">
                   {/* Small uppercase label naming the complaint category */}
                   <p className="text-xs font-semibold text-primary uppercase tracking-wider">
                     {complaint.type} issue
@@ -245,9 +263,9 @@ const ComplaintDetail = () => {
                 can keep replying, and posting a message here never changes
                 this complaint's status (that only ever happens on the admin
                 side, explicitly). */}
-            <div className="relative bg-white rounded-3xl border border-gray-100 shadow-[0_6px_22px_-6px_rgba(16,24,40,0.10)] overflow-hidden">
-              <div className="p-5 sm:p-6">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+            <div className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_6px_22px_-6px_rgba(16,24,40,0.10)] overflow-hidden">
+              <div className="p-4 sm:p-5">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                   Conversation
                 </p>
                 <ComplaintThread

@@ -34,6 +34,13 @@ const getStatusColor = (status) => {
       // (amber) token signals "waiting on the customer/system"
       return "bg-warning-light text-warning";
 
+    case ORDER_STATUS.ON_HOLD:
+      // NEW (Sep 2026) — QR order reopened for a retry review after an
+      // earlier proof rejection. Same warning (amber) token as PENDING
+      // since it's another "waiting on a decision" state, just a
+      // retry rather than a first attempt.
+      return "bg-warning-light text-warning";
+
     case ORDER_STATUS.CONFIRMED:
       // Payment succeeded, order acknowledged — info (blue) token
       // signals "acknowledged, now being processed"

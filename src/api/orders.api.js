@@ -1,4 +1,3 @@
-// ============================================================
 // ORDERS API MODULE
 // ============================================================
 // This file contains ALL API calls related to the Orders module.
@@ -73,6 +72,13 @@ export const getMyOrders = (params, signal) => {
 // admin got "No Order matches the given query" for a real, existing
 // order that wasn't theirs) and reported to the backend team.
 //
+// UPDATED (Sep 2026, API 57 backend fix): the returned payment object
+// now also includes qr_rejection_count (integer, 0 if the QR proof
+// has never been rejected) — how many times this order's proof has
+// been rejected by an admin. Surface it on the customer Order Detail
+// page (see PaymentInfo.jsx) so the customer understands why the
+// order shows "on hold" / "cancelled" after a rejected proof.
+//
 // DO NOT reuse this function for the admin order detail page — use
 // getAdminOrderDetail() below instead, which calls the new
 // admin-only endpoint the backend added specifically to fix this.
@@ -96,6 +102,15 @@ export const getOrderDetail = (orderNumber, signal) => {
 // data with no reason) continues to work exactly as before. When
 // provided, it's just a free-text string for the customer's own
 // context; it does not change how the cancellation itself is handled.
+//
+// UPDATED (Sep 2026, API 58 backend fix): the customer can now only
+// cancel an order BEFORE it ships — "shipped", "out_for_delivery", and
+// "delivered" are all blocked now (previously only "delivered" was
+// blocked). The frontend hides the Cancel button itself once the
+// order reaches one of those statuses (see NeedHelp.jsx's canCancel),
+// but the backend also enforces this with a specific 400 message per
+// status (e.g. "This order has already been shipped and can no
+// longer be cancelled."), returned under an "error" key.
 export const cancelOrder = (orderNumber, data, signal) => {
   return axiosInstance.put(`/api/v1/orders/${orderNumber}/cancel/`, data, {
     signal,
@@ -145,6 +160,17 @@ export const getAdminOrders = (params, signal) => {
 //   "-total_amount", "total_amount"
 // - page: which page of results to fetch
 // - page_size: rows per page; server default is 10, capped at 100
+//
+// NEW (Sep 2026, API 62 backend fix): two additional filters, both
+// combinable with everything else above in the same request —
+// - product: partial, case-insensitive match against any product
+//   name inside the order (across every line item)
+// - category: same matching behavior, against the category name of
+//   any product inside the order
+// Also, status now accepts "pending" as an alias for
+// "pending_payment", so that value returns the expected results
+// instead of an empty list. An order is never duplicated in the
+// results even if it contains multiple items matching product/category.
 export const filterAdminOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/orders/filter/", { signal, params });
   // Passing "params" as the second argument tells Axios to automatically
@@ -183,6 +209,13 @@ export const getCustomerOrders = (customerId, params = {}, signal) => {
 //
 // Used ONLY on the admin order detail page ("/admin/orders/:id") —
 // the customer-facing page keeps using getOrderDetail() unchanged.
+//
+// UPDATED (Sep 2026, API 61 backend fix): same addition as the
+// customer-facing getOrderDetail() above — the payment object now
+// also includes qr_rejection_count. Show this, and treat
+// order.status "on_hold" distinctly from "pending_payment", on the
+// admin Order Detail page so the admin can tell a first review apart
+// from a retry review.
 export const getAdminOrderDetail = (orderNumber, signal) => {
   return axiosInstance.get(`/api/v1/admin/orders/${orderNumber}/`, { signal });
 };
@@ -205,10 +238,54 @@ export const getAdminOrderDetail = (orderNumber, signal) => {
 //   mandatory and the backend 400s without it. For payment.method
 //   "stripe", omit both entirely — refund stays fully automatic,
 //   exactly as before.
+//
+// UPDATED (Sep 2026, API 63 backend fix) — several new restrictions
+// the frontend now needs to respect when building the status dropdown
+// (see AdminOrderDetail.jsx's getSelectableStatusOptions):
+// 1) "confirmed" now also requires payment.status "paid" (previously
+//    only enforced starting from "shipped").
+// 2) Once payment.status is "paid", status can never move back to
+//    "pending_payment" — blocked outright.
+// 3) Once payment.status is "refunded" or "rejected", NO further
+//    status change is allowed via this endpoint at all — only the
+//    Reinstate endpoint (reinstateOrder() below) can reopen it.
+// 4) The status sequence is now strictly forward-only: pending_payment
+//    → confirmed → shipped → out_for_delivery → delivered. Any
+//    backward move within that sequence is rejected, even if paid.
+// 5) When status is "shipped" with a tracking_number in the same
+//    request, the customer's notification now includes it.
+// 6) The unpaid-order error message now starts with "Please approve
+//    payment first." — returned under an "error" key, not "message".
 export const updateOrderStatus = (orderNumber, data, signal) => {
   return axiosInstance.put(
     `/api/v1/admin/orders/${orderNumber}/status/`,
     data,
+    { signal },
+  );
+};
+
+// ----------------------------
+// API 63.1 - Reinstate a cancelled order (Admin only)
+// ----------------------------
+// Reverses a cancelled order back to "pending_payment" so the customer
+// can pay for it again. Clears the old payment record on the backend
+// (status back to "pending", stripe_payment_intent_id, paid_at, and
+// refunded_at all reset) so a fresh Stripe PaymentIntent can be
+// created next time the customer pays, and sends the customer a
+// notification that the order has been reinstated. No request body.
+//
+// Only a "cancelled" order can be reinstated — the backend 400s with
+// { "error": "Only a cancelled order can be reinstated." } otherwise.
+// This is the ONLY way to move an order forward again once its
+// payment has ended up "refunded" or "rejected", since
+// updateOrderStatus() above now refuses any further change in that
+// case. After reinstating, the customer pays again via the normal Pay
+// Now flow — call createPaymentIntent() (payments.api.js) with this
+// same order_number.
+export const reinstateOrder = (orderNumber, signal) => {
+  return axiosInstance.put(
+    `/api/v1/admin/orders/${orderNumber}/reinstate/`,
+    undefined,
     { signal },
   );
 };

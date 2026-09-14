@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload
 import { useQuery } from "@tanstack/react-query"; // useQuery fetches and caches each API response independently
 import { motion } from "framer-motion"; // motion.div wraps the page to animate it in on mount
 import { BsSpeedometer2 } from "react-icons/bs"; // Speedometer icon used inside the page header's gradient icon box — represents "overview"
@@ -200,21 +199,6 @@ const AccountDashboard = () => {
         <Container className="py-6 sm:py-8">
           {/* Outer flex column — stacks all dashboard sections vertically with consistent gaps */}
           <div className="flex flex-col gap-8">
-            {/* ── Breadcrumb navigation ────────────────────────────────────────────
-                "Home" is a clickable link; "My Account" is the current page (plain text) */}
-            <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-              <Link
-                to={ROUTES.HOME} // navigates back to the storefront homepage
-                className="hover:text-gray-600 transition-colors"
-              >
-                Home
-              </Link>
-              <span className="text-gray-300">›</span>{" "}
-              {/* Visual separator between breadcrumb segments */}
-              <span className="text-gray-600 font-medium">My Account</span>{" "}
-              {/* Current page — not a link */}
-            </nav>
-
             {/* ── Page header ────────────────────────────────────────────────────
                 Same icon-box pattern used across every other account page:
                 a rounded gradient icon square + bold heading + gray subtitle */}

@@ -1,4 +1,3 @@
-// ============================================================
 // QR PAYMENT PROOF UPLOAD FORM
 // ============================================================
 // Shared upload UI for the QR (Easypaisa/JazzCash) payment flow.
@@ -25,9 +24,15 @@ import Input from "../ui/Input";
 import { showError } from "../ui/Toast";
 
 // orderNumber — required, identifies which order this proof belongs to.
-// onUploaded(paymentData) — called with the response's "payment" object
-// right after a successful upload, so the parent can flip straight to
-// its own "Payment Under Review" state without waiting on a refetch.
+// onUploaded(responseData) — called with the FULL response body right
+// after a successful upload, so the parent can flip straight to its
+// own "Payment Under Review" state without waiting on a refetch.
+// UPDATED (Sep 2026, API 74.1 backend fix): the response now also
+// carries order_status ("pending_payment" for a first-time review,
+// "on_hold" for a retry after an earlier rejection) and
+// reopened_after_rejection (boolean) alongside the existing "payment"
+// object — passing the whole response lets callers distinguish a
+// first upload from a retry instead of only seeing payment.status.
 const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
   const queryClient = useQueryClient();
   const [screenshot, setScreenshot] = useState(null);
@@ -46,11 +51,20 @@ const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
       });
-      onUploaded?.(response.data?.payment);
+      // Pass the full response body (not just .payment) so callers can
+      // also read order_status / reopened_after_rejection — see the
+      // comment on the onUploaded prop above.
+      onUploaded?.(response.data);
     },
     onError: (error) => {
+      // UPDATED (Sep 2026, API 74.1 backend fix): the new rejection-cap
+      // and cancelled-order errors come back under an "error" key
+      // (e.g. "Maximum re-upload attempts (3) reached for this
+      // order..."), not "message" — checking both keeps every error
+      // message from this endpoint visible to the customer.
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to upload payment proof. Please try again.",
       );
     },

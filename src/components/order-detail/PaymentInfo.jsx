@@ -62,16 +62,34 @@ const PaymentInfo = ({ order }) => {
   // the badge above updates instantly instead of waiting on a refetch
   // that the form's own mutation already triggers in the background.
   const [justUploaded, setJustUploaded] = useState(false);
+  // NEW (Sep 2026, API 74.1 backend fix): captures order_status from
+  // the upload response so the just-uploaded badge can say "Under
+  // Review — Retry" for a re-opened QR order instead of the generic
+  // first-time "Payment Under Review" wording.
+  const [justUploadedOrderStatus, setJustUploadedOrderStatus] = useState(null);
 
   // Stripe's own PaymentIntent id is the real transaction reference for
   // card orders — no more locally-generated "-PLT-ZM00" suffix.
   const txnId = payment.stripe_payment_intent_id || "—";
 
+  // How many times this order's QR proof has been rejected so far —
+  // NEW (Sep 2026, API 57 backend fix): now included on payment
+  // whenever payment.method is "qr", 0 if it's never been rejected.
+  const rejectionCount = payment.qr_rejection_count || 0;
+  // UPDATED (Sep 2026, API 74.1 backend fix): once rejectionCount hits
+  // the backend's hard cap of 3, the order is permanently cancelled —
+  // the upload endpoint refuses any further attempt for it, so the
+  // button is hidden entirely instead of letting the customer submit
+  // into a guaranteed 400.
+  const hasReachedRejectionCap = rejectionCount >= 3;
+
   // The customer can (re-)upload proof only while there's actually
-  // something to prove — i.e. before an admin has approved/paid it.
+  // something to prove — i.e. before an admin has approved/paid it,
+  // and before the 3-attempt rejection cap has been reached.
   const canUploadProof =
     isQr &&
     !justUploaded &&
+    !hasReachedRejectionCap &&
     (paymentStatus === "pending" || paymentStatus === "rejected");
 
   return (
@@ -135,7 +153,9 @@ const PaymentInfo = ({ order }) => {
         >
           {config.icon}
           {justUploaded
-            ? PAYMENT_STATUS_CONFIG.under_review.label
+            ? justUploadedOrderStatus === "on_hold"
+              ? "Under Review — Retry"
+              : PAYMENT_STATUS_CONFIG.under_review.label
             : config.label}
         </span>
       </div>
@@ -165,12 +185,36 @@ const PaymentInfo = ({ order }) => {
       )}
 
       {/* Rejection notice — tells the customer to check their notification
-          for the admin's reason, and re-upload a corrected screenshot */}
+          for the admin's reason, and re-upload a corrected screenshot.
+          UPDATED (Sep 2026, API 74.4 backend fix): also surfaces the
+          rejection count once at least one rejection has happened, so
+          the customer understands why the order shows "cancelled" /
+          "on hold" instead of the original "pending payment". */}
       {paymentStatus === "rejected" && !justUploaded && (
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-4 flex flex-col gap-1">
           <p className="text-xs text-danger">
             Your payment proof was rejected. Check your notifications for the
             reason, then upload a new screenshot below.
+          </p>
+          {rejectionCount > 0 && (
+            <p className="text-xs text-gray-400">
+              Rejected {rejectionCount} time{rejectionCount === 1 ? "" : "s"}
+              {!hasReachedRejectionCap && " · up to 3 attempts allowed"}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Rejection cap reached — NEW (Sep 2026, API 74.1 backend fix):
+          once qr_rejection_count reaches 3, the upload endpoint refuses
+          any further attempt and the order stays permanently
+          cancelled, so the re-upload button is replaced with a
+          "Contact Support" message instead of a dead-end error. */}
+      {isQr && hasReachedRejectionCap && !justUploaded && (
+        <div className="px-5 pb-5 border-t border-gray-50 pt-4">
+          <p className="text-xs text-danger">
+            Maximum re-upload attempts (3) reached for this order. It has been
+            permanently cancelled — please contact support for help.
           </p>
         </div>
       )}
@@ -181,8 +225,9 @@ const PaymentInfo = ({ order }) => {
           {uploadOpen ? (
             <QrProofUploadForm
               orderNumber={order.order_number}
-              onUploaded={() => {
+              onUploaded={(responseData) => {
                 setJustUploaded(true);
+                setJustUploadedOrderStatus(responseData?.order_status || null);
                 setUploadOpen(false);
               }}
             />

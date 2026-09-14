@@ -39,6 +39,11 @@ const getStepIndex = (status) => {
   switch (status) {
     case ORDER_STATUS.PENDING:
       return 0; // Order placed but not yet confirmed by the seller
+    case ORDER_STATUS.ON_HOLD:
+      // NEW (Sep 2026) — QR retry review after an earlier proof
+      // rejection. Treated the same as PENDING for stepper purposes:
+      // the order hasn't been confirmed yet either way.
+      return 0;
     case ORDER_STATUS.CONFIRMED:
       return 1; // Seller confirmed the order
     case ORDER_STATUS.SHIPPED:

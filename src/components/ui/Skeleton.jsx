@@ -303,9 +303,12 @@ const SkeletonStepper = () => {
 const SkeletonProductDetail = () => {
   return (
     <div className="flex flex-col gap-8 sm:gap-10">
-      {/* Breadcrumb pill — real ProductBreadcrumb is a rounded-full chip,
-          not a plain text row */}
-      <Skeleton className="w-64 h-9 rounded-full" />
+      {/* No breadcrumb placeholder here anymore — the shared
+          <Breadcrumbs /> component (mounted once in CustomerLayout,
+          above this page's Suspense boundary entirely) is already on
+          screen showing its static fallback label the instant this
+          skeleton appears, so duplicating it inside the skeleton would
+          just flash a second, redundant pill above this one. */}
 
       {/* Image gallery (left) + product info (right) — same
           grid-cols-1 lg:grid-cols-2 split as the real page */}
@@ -416,12 +419,12 @@ const SkeletonProductDetail = () => {
 const SkeletonOrderDetail = () => {
   return (
     <div className="flex flex-col gap-6">
-      {/* Breadcrumb — real nav is "My Orders" (link) + "›" + "Order <id>" */}
-      <div className="flex items-center gap-1.5">
-        <Skeleton className="w-20 h-3.5" />
-        <Skeleton className="w-2 h-3.5" />
-        <Skeleton className="w-28 h-3.5" />
-      </div>
+      {/* No breadcrumb placeholder here anymore — the shared
+          <Breadcrumbs /> component (mounted once in CustomerLayout,
+          above this page's Suspense boundary entirely) is already on
+          screen showing its fallback label the instant this skeleton
+          appears, so duplicating it here would just flash a second,
+          redundant bar above this one. */}
 
       {/* Page header — icon box + title on the left, status badge on the
           right. Real h1 is "text-2xl sm:text-3xl", so the title bar needs
@@ -568,14 +571,12 @@ const SkeletonOrderDetail = () => {
 const SkeletonOrderTracking = () => {
   return (
     <div className="flex flex-col gap-6">
-      {/* Breadcrumb — real nav has 3 segments: Home › My Orders › Order <id> */}
-      <div className="flex items-center gap-1.5">
-        <Skeleton className="w-12 h-3.5" />
-        <Skeleton className="w-2 h-3.5" />
-        <Skeleton className="w-20 h-3.5" />
-        <Skeleton className="w-2 h-3.5" />
-        <Skeleton className="w-24 h-3.5" />
-      </div>
+      {/* No breadcrumb placeholder here anymore — the shared
+          <Breadcrumbs /> component (mounted once in CustomerLayout,
+          above this page's Suspense boundary entirely) is already on
+          screen showing its fallback label the instant this skeleton
+          appears, so duplicating it here would just flash a second,
+          redundant bar above this one. */}
 
       {/* Page header — icon box + title/subtitle stack. Real h1 is
           "text-2xl sm:text-3xl" (needs the same "h-7 sm:h-8" scale-up used
@@ -715,8 +716,12 @@ const SkeletonOrderTracking = () => {
 const SkeletonAccountDashboard = () => {
   return (
     <div className="flex flex-col gap-8">
-      {/* Breadcrumb */}
-      <Skeleton className="w-28 h-4" />
+      {/* No breadcrumb placeholder here anymore — the shared
+          <Breadcrumbs /> component (mounted once in CustomerLayout,
+          above this page's Suspense boundary entirely) is already on
+          screen showing its fallback label the instant this skeleton
+          appears, so duplicating it here would just flash a second,
+          redundant bar above this one. */}
 
       {/* Page header — icon box + title/subtitle stack, same as every
           other account page's header */}

@@ -1,18 +1,3 @@
-// Every QR (Easypaisa/JazzCash) order currently at payment.status:
-// "under_review" — the customer has uploaded a screenshot and is
-// waiting on a manual decision. This is a pure manual-verification
-// step: no live gateway integration exists, so an admin is the only
-// thing that moves these orders forward.
-//
-// Approve -> payment.status: "paid", order.status: "confirmed", stock
-//            reservation is finalized (see api/payments.api.js).
-// Reject  -> payment.status: "rejected" (mandatory reason), order
-//            stays "pending_payment" so the customer can re-upload.
-//
-// duplicate_warning is surfaced as a badge only — the backend never
-// auto-rejects a match, it's purely a heads-up for the admin to look
-// closer before deciding.
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineQrcode, AiOutlineWarning } from "react-icons/ai";
@@ -108,8 +93,15 @@ const QrPaymentQueue = () => {
       setApproveTarget(null);
     },
     onError: (error) => {
+      // The backend returns validation/state errors under an "error"
+      // key (e.g. "Order status is <status>, not pending_payment or
+      // on_hold.") — checking it before the older "message" key keeps
+      // this specific text visible instead of always falling through
+      // to the generic fallback.
       showError(
-        error?.response?.data?.message || "Failed to approve this payment.",
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "Failed to approve this payment.",
       );
     },
   });
@@ -120,15 +112,25 @@ const QrPaymentQueue = () => {
   const rejectMutation = useMutation({
     mutationFn: ({ orderNumber, reason }) =>
       rejectQrPayment(orderNumber, reason),
-    onSuccess: () => {
-      showSuccess(`${rejectTarget} rejected. The customer has been notified.`);
+    onSuccess: (response) => {
+      // UPDATED (Sep 2026, API 74.4 backend fix): the order is now
+      // actually cancelled by a rejection (not left "pending"), and
+      // may be permanently cancelled once this was the 3rd rejection
+      // — the toast now reflects whichever of those actually happened,
+      // using the response's own message where available.
+      showSuccess(
+        response?.data?.message ||
+          `${rejectTarget} rejected. The customer has been notified.`,
+      );
       invalidateQueue();
       setRejectTarget(null);
       setRejectReason("");
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message || "Failed to reject this payment.",
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "Failed to reject this payment.",
       );
     },
   });
@@ -164,7 +166,8 @@ const QrPaymentQueue = () => {
       setConfirmBulkApproveOpen(false);
     } catch (error) {
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to approve the selected payments.",
       );
     } finally {
@@ -192,7 +195,9 @@ const QrPaymentQueue = () => {
         ),
       );
       showSuccess(
-        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} rejected. Customers have been notified.`,
+        // UPDATED (Sep 2026, API 74.4 backend fix): rejecting now
+        // cancels each order rather than leaving it "pending".
+        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} rejected — those orders have been cancelled. Customers have been notified and can re-upload proof unless they've hit the 3-attempt limit.`,
       );
       invalidateQueue();
       setSelectedOrderNumbers([]);
@@ -200,7 +205,8 @@ const QrPaymentQueue = () => {
       setBulkRejectReason("");
     } catch (error) {
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to reject the selected payments.",
       );
     } finally {
@@ -213,7 +219,7 @@ const QrPaymentQueue = () => {
       key: "order_number",
       label: "Order",
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-sm font-semibold text-gray-900">
             {row.order_number}
           </span>
@@ -224,6 +230,19 @@ const QrPaymentQueue = () => {
             >
               <AiOutlineWarning className="w-3.5 h-3.5" />
               Duplicate
+            </span>
+          )}
+          {/* NEW (Sep 2026, API 74.2 backend fix): a small "Retry x/3"
+              badge on any row that's a retry review (order_status
+              "on_hold"), using rejection_count — helps the admin
+              prioritize/understand orders that have already failed
+              review once or twice before this one. */}
+          {row.order_status === "on_hold" && (
+            <span
+              title="This order's QR proof was rejected before — this is a retry review."
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-light text-warning text-xs font-semibold"
+            >
+              Retry {row.rejection_count ?? 0}/3
             </span>
           )}
         </div>
@@ -402,8 +421,15 @@ const QrPaymentQueue = () => {
           <p className="text-sm text-gray-500">
             Order{" "}
             <span className="font-semibold text-gray-800">{rejectTarget}</span>{" "}
-            will stay pending — the customer can re-upload a corrected
-            screenshot. This reason is sent to them directly.
+            {/* UPDATED (Sep 2026, API 74.4 backend fix): a rejection
+                now cancels the order and releases its reserved stock —
+                it no longer just sits "pending". The customer can
+                still re-upload a corrected screenshot to reopen it,
+                unless this is their 3rd rejection, in which case the
+                cancellation becomes permanent. */}
+            will be cancelled and its reserved stock released — the customer can
+            re-upload a corrected screenshot to reopen it (unless this is their
+            3rd rejection). This reason is sent to them directly.
           </p>
           <Textarea
             label="Reason for rejection"
@@ -464,8 +490,9 @@ const QrPaymentQueue = () => {
               {selectedOrderNumbers.length} order
               {selectedOrderNumbers.length === 1 ? "" : "s"}
             </span>{" "}
-            will stay pending — each customer can re-upload a corrected
-            screenshot. This same reason is sent to all of them.
+            will be cancelled and their reserved stock released — each customer
+            can re-upload a corrected screenshot to reopen theirs (unless it was
+            their 3rd rejection). This same reason is sent to all of them.
           </p>
           <Textarea
             label="Reason for rejection"

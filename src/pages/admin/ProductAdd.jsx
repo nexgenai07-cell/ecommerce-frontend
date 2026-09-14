@@ -23,6 +23,7 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import generateSku from "../../utils/generateSku";
+import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — builds a readable candidate SKU from name + category,
 // used to auto-fill the SKU field until the admin edits it manually
 
@@ -83,7 +84,21 @@ const productSchema = z
         (val) => !val || /^\d+$/.test(val),
         "Low stock threshold must be a whole number",
       ),
-    sku: z.string().trim().optional(),
+    // The input itself already uppercases and strips spaces as the
+    // admin types (see InventorySection.jsx's onChange handler), so
+    // this transform is mainly a safety net for values that arrive
+    // some other way (autofill, pasted text). validateSku() then runs
+    // the full rule set — length, allowed characters, start/end
+    // character, consecutive hyphens/underscores, reserved words.
+    sku: z
+      .string()
+      .transform((value) => sanitizeSkuValue(value))
+      .refine(
+        (value) => validateSku(value) === null,
+        (value) => ({
+          message: validateSku(value),
+        }),
+      ),
     is_active: z.boolean(),
   })
   // Cross-field check: if an "original price" (compare-at / strike-through
@@ -384,6 +399,7 @@ const ProductAdd = () => {
             // here so a non-numeric or empty value during typing safely
             // falls back to 0 instead of passing through as NaN.
             onRegenerateSku={handleRegenerateSku}
+            skuValue={watchedValues.sku}
             onSkuBlur={checkSkuOnBlur}
           />
           <LivePreviewCard

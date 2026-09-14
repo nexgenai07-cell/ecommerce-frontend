@@ -1,6 +1,13 @@
+import { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 // Import the useQuery hook from React Query for fetching and caching server data
 import { useQuery } from "@tanstack/react-query";
+// useBreadcrumb — publishes this return's number to the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// CustomerLayout, above every customer page), swapping in "Return
+// #RET-{id}" for the config's static "Return Details" fallback — see
+// constants/breadcrumbs.config.js.
+import useBreadcrumb from "../../hooks/useBreadcrumb";
 // Import the motion component from framer-motion for animating the page entrance
 import { motion } from "framer-motion";
 // Back-arrow for the "back to returns" link, and a package icon for the order chip
@@ -53,6 +60,16 @@ const STATUS_CONFIG = {
 const ReturnDetail = () => {
   // Extract the return ID from the URL — e.g. /account/returns/16 → "16"
   const { id } = useParams();
+
+  // Publishes this return's number into the shared breadcrumb trail's
+  // last crumb, matching the "Return #RET-{id}" format already used in
+  // this page's own heading below. The URL param is available
+  // immediately, with no API round trip required.
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (id) handleSetLabel(`Return #RET-${id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // =============================================
   // RETURN DETAIL API — API 66: GET /api/v1/returns/{id}/

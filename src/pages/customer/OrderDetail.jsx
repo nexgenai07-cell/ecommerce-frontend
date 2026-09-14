@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react"; // useState manages the cancel confirmation modal's open/close state + local "just confirmed" flag; useEffect drives the one-time success toast + URL cleanup
-import {
-  useParams,
-  useSearchParams,
-  useNavigate,
-  Link,
-} from "react-router-dom"; // useParams reads the order number from the URL; useSearchParams reads the ?success=true flag set by Checkout; useNavigate cleans that flag out of the URL once handled; Link for breadcrumb navigation
+import { useParams, useSearchParams, useNavigate } from "react-router-dom"; // useParams reads the order number from the URL; useSearchParams reads the ?success=true flag set by Checkout; useNavigate cleans that flag out of the URL once handled
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // useQuery fetches data; useMutation handles the cancel API call; useQueryClient invalidates stale cache
 import { motion, AnimatePresence } from "framer-motion"; // motion.div wraps the page to animate it in on mount; AnimatePresence animates the payment-confirmation banner in/out
 import { BsReceiptCutoff } from "react-icons/bs"; // Receipt icon used inside the page header's gradient icon box
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
+import useBreadcrumb from "../../hooks/useBreadcrumb";
+// useBreadcrumb — publishes this order's number to the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// CustomerLayout, above every customer page).
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
 import { getOrderDetail, cancelOrder } from "../../api/orders.api"; // API functions: fetch one order by number, cancel an order
 import { getReturns } from "../../api/returns.api"; // API function: fetch all return requests — filtered client-side for this order
@@ -41,6 +40,17 @@ const PAYMENT_CONFIRMATION_POLL_INTERVAL_MS = 2500;
 const OrderDetail = () => {
   // Extract the order number from the URL — e.g. /account/orders/ORD-00123 → "ORD-00123"
   const { id: orderNumber } = useParams();
+
+  // Publishes the order number into the shared breadcrumb trail's last
+  // crumb (the config's static fallback for this route is "Order
+  // Details" — see constants/breadcrumbs.config.js). The URL param is
+  // available immediately, with no API round trip required, so this
+  // label is correct from the very first render.
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (orderNumber) handleSetLabel(`Order ${orderNumber}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderNumber]);
 
   // Reads ?success=true — set by Checkout.jsx right after stripe.confirmPayment()
   // reports success client-side. Its presence means "the customer just paid,
@@ -192,9 +202,15 @@ const OrderDetail = () => {
     },
 
     onError: (error) => {
-      // Show the server's error message if available, otherwise show a generic fallback
+      // Show the server's error message if available, otherwise show a
+      // generic fallback. UPDATED (Sep 2026, API 58 backend fix): the
+      // cancel endpoint's 400 responses use an "error" key (e.g. "This
+      // order has already been shipped and can no longer be
+      // cancelled."), not "message" — checking both keeps this working
+      // regardless of which shape a given error response uses.
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to cancel order. Please try again.",
       );
     },
@@ -268,24 +284,6 @@ const OrderDetail = () => {
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* ── Breadcrumb navigation ──────────────────────────────────────────
-                "My Orders" is a clickable link back to the list; current order is plain text
-                gap-1.5 keeps the chevron separator tight between the two labels   */}
-            <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-              <Link
-                to={ROUTES.ACCOUNT_ORDERS} // navigates back to the Order History page
-                className="hover:text-gray-600 transition-colors"
-              >
-                My Orders
-              </Link>
-              <span className="text-gray-300">›</span>{" "}
-              {/* Visual separator between breadcrumb segments */}
-              <span className="text-gray-600 font-medium">
-                Order {orderNumber}{" "}
-                {/* Current page — not a link since the user is already here */}
-              </span>
-            </nav>
 
             {/* ── Page header ────────────────────────────────────────────────────
                 Same icon-box pattern used across every other account page:

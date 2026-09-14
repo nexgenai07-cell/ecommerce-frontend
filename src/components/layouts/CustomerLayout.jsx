@@ -4,13 +4,18 @@ import CustomerNavbar from "./CustomerNavbar";
 import Footer from "./Footer";
 import Container from "./Container";
 import { Skeleton } from "../ui/Skeleton";
+import Breadcrumbs from "../shared/Breadcrumbs";
+// Breadcrumbs — the single shared, route-driven breadcrumb trail
+// component. Mounted here as a sibling of <Outlet /> so it appears
+// above every public customer page. It manages its own Container
+// width internally and hides itself automatically on the homepage
+// and on any route outside its config.
 import ChatWidget from "../chat-assistant/ChatWidget";
 // The AI shopping assistant floating widget — mounted here (as a
 // sibling of <Outlet />, not inside it) so it's present on every
-// customer page. UPDATED: no longer takes a "role" prop — the
-// assistant role is now determined automatically inside ChatProvider
-// (mounted once at the app root in App.jsx) based on who is actually
-// logged in, so this component doesn't need to hardcode it per layout.
+// customer page. The assistant role is determined automatically
+// inside ChatProvider (mounted once at the app root in App.jsx)
+// based on who is actually logged in.
 import ScrollToTopButton from "../shared/ScrollToTopButton";
 // Floating "back to top" button — mounted here (as a sibling of
 // <Outlet />) so it's present on every customer page. It stacks
@@ -26,11 +31,17 @@ const CustomerLayout = () => {
     location.pathname.startsWith(route),
   );
 
+  // /account/* pages render their own Breadcrumbs inside
+  // CustomerAccountLayout, next to the sidebar rather than above it.
+  const hideBreadcrumb = location.pathname.startsWith("/account");
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <CustomerNavbar />
 
       <main className="flex-1 w-full">
+        {!hideBreadcrumb && <Breadcrumbs />}
+
         <Suspense
           fallback={
             <Container className="py-8">

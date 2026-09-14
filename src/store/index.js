@@ -22,6 +22,7 @@ import cartReducer from "./slices/cartSlice"; // Handles shopping cart state (it
 import wishlistReducer from "./slices/wishlistSlice"; // Handles wishlist state (saved/favorited products)
 import uiReducer from "./slices/uiSlice"; // Handles general UI state (e.g. modals, sidebars, loaders, theme, etc.)
 import chatReducer from "./slices/chatSlice"; // Handles the AI chat assistant state (widget open/closed, messages, session, connection status, etc.)
+import breadcrumbReducer from "./slices/breadcrumbSlice"; // Handles the single shared "dynamic breadcrumb label" used by detail pages (a real product name, order number, etc.) — see components/shared/Breadcrumbs.jsx
 
 // Creating the actual Redux store using Redux Toolkit's configureStore().
 // configureStore() automatically sets up good defaults like:
@@ -37,11 +38,13 @@ export const store = configureStore({
   // state.wishlist  -> managed by wishlistReducer
   // state.ui        -> managed by uiReducer
   // state.chat      -> managed by chatReducer
+  // state.breadcrumb -> managed by breadcrumbReducer
   reducer: {
     auth: authReducer,
     cart: cartReducer,
     wishlist: wishlistReducer,
     ui: uiReducer,
     chat: chatReducer,
+    breadcrumb: breadcrumbReducer,
   },
 });

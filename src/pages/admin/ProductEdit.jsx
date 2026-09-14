@@ -17,11 +17,13 @@ import {
 } from "../../api/products.api";
 // checkProductNameExists / checkProductSkuExists — API 31.1 / API 31.2
 import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
+import useBreadcrumb from "../../hooks/useBreadcrumb";
 import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import generateSku from "../../utils/generateSku";
+import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — used only by the manual "Regenerate" button here.
 // Unlike ProductAdd, editing an EXISTING product's name should not
 // silently rewrite its already-assigned SKU — that would be a
@@ -83,6 +85,13 @@ const productSchema = z
         (val) => !val || /^\d+$/.test(val),
         "Low stock threshold must be a whole number",
       ),
+    // SKU is locked (read-only) once a product exists — see
+    // InventorySection.jsx, which disables the field whenever it's
+    // rendered for an existing product. The value submitted here is
+    // always the product's original SKU, unchanged, so it's passed
+    // through without re-running the create-time rule set: an older
+    // product's SKU shouldn't fail to save just because the SKU rules
+    // were tightened after it was created.
     sku: z.string().trim().optional(),
     is_active: z.boolean(),
   })
@@ -163,6 +172,12 @@ const ProductEdit = () => {
   });
 
   const product = productResponse?.data;
+
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (product?.name) handleSetLabel(product.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.name]);
 
   // Real-time "already exists" checks (API 31.1 / API 31.2) — fire on
   // blur of the Name / SKU fields. excludeId is this product's OWN id
@@ -387,6 +402,7 @@ const ProductEdit = () => {
             availableStock={product?.available_stock}
             onAdjustStockClick={() => setIsAdjustStockOpen(true)}
             onRegenerateSku={handleRegenerateSku}
+            skuValue={watchedValues.sku}
             onSkuBlur={checkSkuOnBlur}
           />
           <LivePreviewCard

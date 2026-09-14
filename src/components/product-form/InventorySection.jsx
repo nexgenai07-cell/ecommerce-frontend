@@ -5,6 +5,12 @@ import { AiOutlineDatabase, AiOutlineReload } from "react-icons/ai";
 import Input from "../ui/Input";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
+import {
+  sanitizeSkuValue,
+  validateSku,
+  SKU_FORMAT_HINT,
+  SKU_MAX_LENGTH,
+} from "../../utils/skuValidation";
 
 const InventorySection = ({
   register,
@@ -21,6 +27,12 @@ const InventorySection = ({
   // triggers the "is this SKU already taken?" check (API 31.2). Left
   // undefined here does nothing extra, so this component works exactly
   // as before if a caller doesn't pass it.
+  skuValue = "",
+  // The SKU field's current live value, read from the parent form's
+  // watch() output. Used to compute an inline error on every render —
+  // independent of react-hook-form's own validation timing (which only
+  // (re-)runs on blur/change once the field is "touched", and can
+  // therefore miss or briefly clear an error right after it appears).
 }) => {
   const total = totalStock ?? 0;
   const reserved = reservedStock ?? 0;
@@ -28,9 +40,26 @@ const InventorySection = ({
 
   const skuField = register("sku");
   // Captured separately (instead of spreading register("sku") inline)
-  // so its own onBlur can be chained with the optional duplicate-SKU
-  // check below — same pattern used for the Name field in
-  // BasicInfoSection.jsx.
+  // so its own onChange/onBlur can be chained with the sanitizer and
+  // the optional duplicate-SKU check below — same pattern used for the
+  // Name field in BasicInfoSection.jsx.
+
+  // A SKU can only be set once, at creation — editing an existing
+  // product locks the field entirely so it can never be changed
+  // afterward. isNewProduct is only ever passed as true by
+  // ProductAdd.jsx, so this is false (locked) for every existing
+  // product opened from ProductEdit.jsx.
+  const isSkuLocked = !isNewProduct;
+
+  // Recomputed on every render straight from the current field value —
+  // shows the instant an invalid character/length/format is typed, and
+  // keeps showing on every following keystroke until the value is
+  // actually valid. Only checked once something has been typed, so an
+  // empty field doesn't show "SKU is required" before the admin has
+  // touched the form at all — react-hook-form's own errors.sku still
+  // covers that case on submit.
+  const liveSkuError = skuValue ? validateSku(skuValue) : null;
+  const skuError = liveSkuError || errors.sku?.message;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-md hover:shadow-lg transition-shadow duration-300 p-5 sm:p-6 flex flex-col gap-4">
@@ -44,17 +73,35 @@ const InventorySection = ({
       <Input
         label="SKU"
         placeholder="Auto-generated — you can edit it"
-        hint="Auto-filled as you type the product name — edit freely, or click the refresh icon for a new one"
+        // The always-visible format instruction while the field is
+        // still editable; once locked, the hint instead explains why
+        // the field can't be typed into.
+        hint={
+          isSkuLocked
+            ? "SKU cannot be changed after a product is created."
+            : SKU_FORMAT_HINT
+        }
+        maxLength={SKU_MAX_LENGTH}
+        disabled={isSkuLocked}
         {...skuField}
+        onChange={(e) => {
+          // Uppercases and strips every space as the admin types, so
+          // the field always shows the exact format that gets saved
+          // instead of correcting it only after a failed submit.
+          e.target.value = sanitizeSkuValue(e.target.value);
+          skuField.onChange(e);
+        }}
         onBlur={(e) => {
           skuField.onBlur(e); // Keep react-hook-form's own per-field validation
           onSkuBlur?.(e.target.value); // Then run the optional duplicate-SKU check
         }}
-        error={errors.sku?.message}
+        error={skuError}
         rightIcon={
           // rightIcon supports interactive elements (per Input's own
-          // docs comment) — a real <button>, not just a decorative icon
-          onRegenerateSku ? (
+          // docs comment) — a real <button>, not just a decorative icon.
+          // Hidden once the SKU is locked, since there's nothing left
+          // to regenerate.
+          onRegenerateSku && !isSkuLocked ? (
             <button
               type="button"
               onClick={onRegenerateSku}

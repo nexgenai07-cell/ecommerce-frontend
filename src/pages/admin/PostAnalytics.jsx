@@ -1,4 +1,5 @@
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AiOutlineArrowLeft,
@@ -25,14 +26,26 @@ import Spinner from "../../components/ui/Spinner";
 import StatsCard from "../../components/ui/StatsCard";
 import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already
-// used on every other admin screen, replacing this page's own plain
-// <h1>. The breadcrumb line above it is kept as-is, since PageHeader
-// doesn't render one itself.
+// used on every other admin screen,
+import useBreadcrumb from "../../hooks/useBreadcrumb";
+// useBreadcrumb — publishes this post's number into the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// AdminLayout), swapping in "Post #{id}" for the config's static
+// "Post Analytics" fallback — see constants/breadcrumbs.config.js.
 
 const PostAnalytics = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // The URL param is available immediately, with no API round trip
+  // required, so this label is correct from the very first render —
+  // matching the "Post #{id}" format this page's own heading uses.
+  const { handleSetLabel } = useBreadcrumb();
+  useEffect(() => {
+    if (id) handleSetLabel(`Post #${id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const { data: postResponse, isLoading: isPostLoading } = useQuery({
     queryKey: QUERY_KEYS.SOCIAL_POST_DETAIL(id),
@@ -99,19 +112,6 @@ const PostAnalytics = () => {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <p className="text-xs text-gray-400">
-          <Link
-            to={ROUTES.ADMIN_SOCIAL_DASHBOARD}
-            className="hover:text-primary"
-          >
-            Social Media
-          </Link>
-          {" / "}
-          <Link to={ROUTES.ADMIN_SOCIAL_POSTS} className="hover:text-primary">
-            Posts
-          </Link>
-          {" / "}Post #{post.id}
-        </p>
         <PageHeader
           icon={<AiOutlineBarChart />}
           title="Post Analytics"

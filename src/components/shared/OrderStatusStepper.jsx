@@ -125,9 +125,18 @@ const OrderStatusStepper = ({
   history = [], // The order's status history — array of objects like {status, timestamp}
   className = "", // Any extra CSS classes passed in from the parent component
 }) => {
+  // NEW (Sep 2026): ON_HOLD (a QR retry review after an earlier proof
+  // rejection) isn't one of the five delivery-journey steps below — it
+  // behaves like PENDING for progress purposes, since the order hasn't
+  // been confirmed yet either way.
+  const effectiveStatus =
+    currentStatus === ORDER_STATUS.ON_HOLD
+      ? ORDER_STATUS.PENDING
+      : currentStatus;
+
   // Find the index of the current status within the ORDER_STEPS array — tells us how many steps are completed
   const currentStepIndex = ORDER_STEPS.findIndex(
-    (step) => step.status === currentStatus,
+    (step) => step.status === effectiveStatus,
   );
 
   // Function to get the timestamp for a given step's status from the history array
@@ -156,6 +165,18 @@ const OrderStatusStepper = ({
         <div className="mb-4 px-4 py-3 bg-danger-light rounded-lg border border-red-100">
           <p className="text-sm font-medium text-danger">
             This order has been cancelled
+          </p>
+        </div>
+      )}
+
+      {/* NEW (Sep 2026) — on_hold banner, only shown for a QR retry
+          review, so the admin immediately understands why an order
+          that looks "pending" is actually a second attempt */}
+      {currentStatus === ORDER_STATUS.ON_HOLD && (
+        <div className="mb-4 px-4 py-3 bg-warning-light rounded-lg border border-amber-100">
+          <p className="text-sm font-medium text-warning">
+            This order is on hold — a QR payment proof was resubmitted after an
+            earlier rejection and is awaiting review
           </p>
         </div>
       )}

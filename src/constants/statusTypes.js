@@ -4,6 +4,14 @@
 
 export const ORDER_STATUS = {
   PENDING: "pending_payment", // Order placed, awaiting Stripe payment confirmation
+  // NEW (Sep 2026, API 74.1/74.4 backend fix): a QR order that was
+  // cancelled specifically because its payment proof was rejected, and
+  // has since had a fresh screenshot re-uploaded for a retry review.
+  // Distinct from PENDING so the admin QR queue and order detail pages
+  // can tell a first-time review apart from a retry — this status is
+  // only ever set by the backend itself (never a selectable option in
+  // the admin "Update Status" dropdown).
+  ON_HOLD: "on_hold",
   CONFIRMED: "confirmed", // Payment succeeded (Stripe webhook) — order confirmed
   SHIPPED: "shipped", // Order has been dispatched/shipped to the customer
   // Courier is actively delivering to the customer's address — backend
@@ -27,6 +35,14 @@ export const PAYMENT_STATUS = {
   PENDING: "pending", // Payment has not been completed yet
   UNDER_REVIEW: "under_review", // QR only — proof uploaded, awaiting admin approval
   PAID: "paid", // Payment was successfully completed
+  // UPDATED (Sep 2026, API 74.4 backend fix): rejecting a QR proof now
+  // also moves order.status to CANCELLED and releases reserved stock —
+  // it no longer leaves the order sitting at "pending_payment". The
+  // payment object also now carries a `qr_rejection_count` integer
+  // (how many times this order's proof has been rejected) — surfaced
+  // on the customer Order Detail page and the admin QR queue/detail
+  // pages so both sides can see how close an order is to the
+  // 3-attempt cap (see PAYMENT_METHOD.QR flows in payments.api.js).
   REJECTED: "rejected", // QR only — admin rejected the uploaded proof
   REFUNDED: "refunded", // Payment was refunded back to the customer
 };

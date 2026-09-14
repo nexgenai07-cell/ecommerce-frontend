@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -130,6 +130,7 @@ const ProductList = () => {
     data: searchResponse,
     isLoading: isLoadingSearch,
     isError: isErrorSearch,
+    error: searchQueryError,
     refetch: refetchSearch,
   } = useQuery({
     queryKey: [
@@ -172,6 +173,23 @@ const ProductList = () => {
 
   const searchResults = extractListData(searchResponse);
   const searchTotalCount = searchResponse?.data?.count ?? 0;
+
+  // NEW (Sep 2026, API 29 backend fix): the search endpoint now 400s
+  // on an invalid price range (negative min/max, or min greater than
+  // max) — something the admin-side price filter (RangeFilterChip, a
+  // plain number input) can actually produce, unlike the customer
+  // storefront's slider which already clamps itself. Surface that
+  // specific reason as a toast instead of letting the table silently
+  // render an empty state with no explanation.
+  useEffect(() => {
+    if (isErrorSearch && searchQueryError) {
+      showError(
+        searchQueryError?.response?.data?.error ||
+          searchQueryError?.response?.data?.message ||
+          "Failed to load products. Please check your filters and try again.",
+      );
+    }
+  }, [isErrorSearch, searchQueryError]);
 
   // --------------------------------------------------
   // LOW STOCK QUERY — dedicated endpoint (API 38), always fetched (its

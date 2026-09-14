@@ -48,6 +48,10 @@ import OrderFilters from "../../components/admin-orders/OrderFilters";
 const STATUS_TABS = [
   { key: "", label: "All" },
   { key: ORDER_STATUS.PENDING, label: "Pending" },
+  // NEW (Sep 2026, API 61/62 backend fix): on_hold is a real, distinct
+  // ORDER_STATUS value now (a QR retry review after an earlier
+  // rejection), so it gets its own tab like every other real status.
+  { key: ORDER_STATUS.ON_HOLD, label: "On Hold" },
   { key: ORDER_STATUS.CONFIRMED, label: "Confirmed" },
   { key: ORDER_STATUS.SHIPPED, label: "Shipped" },
   { key: ORDER_STATUS.DELIVERED, label: "Delivered" },
@@ -124,6 +128,14 @@ const OrderManagement = () => {
   // startDate / endDate — sent straight through to API 48 as
   // start_date / end_date query params.
 
+  // NEW (Sep 2026, API 62 backend fix): two additional advanced
+  // filters the backend now accepts on the filter endpoint — partial,
+  // case-insensitive matches against a product's name / its category's
+  // name across any line item in the order. Same debounce-then-send
+  // pattern as phoneSearch above.
+  const [productFilter, setProductFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+
   const [sortBy, setSortBy] = useState("-created_at");
   // sortBy — sent straight to the backend as `ordering` (see SORT_OPTIONS
   // comment above). Defaults to "Newest First".
@@ -150,6 +162,8 @@ const OrderManagement = () => {
   const debouncedPhoneSearch = useDebounce(phoneSearch, 400);
   // Waits 400ms after the admin stops typing before actually firing a
   // network request — prevents a new API call on every keystroke.
+  const debouncedProductFilter = useDebounce(productFilter, 400);
+  const debouncedCategoryFilter = useDebounce(categoryFilter, 400);
 
   // The dedicated phone field takes priority over the main search box
   // when both happen to have a value, since it's the more specific,
@@ -157,7 +171,12 @@ const OrderManagement = () => {
   const effectiveSearch = debouncedPhoneSearch || debouncedSearch;
 
   const hasActiveFilters =
-    !!activeStatus || !!effectiveSearch || !!startDate || !!endDate;
+    !!activeStatus ||
+    !!effectiveSearch ||
+    !!startDate ||
+    !!endDate ||
+    !!debouncedProductFilter ||
+    !!debouncedCategoryFilter;
   // hasActiveFilters — true the moment ANY filter is active. Decides
   // which endpoint gets called (API 47 vs API 48) — the plain list
   // endpoint is only used when browsing with zero filters.
@@ -184,6 +203,8 @@ const OrderManagement = () => {
         sortBy,
         page: currentPage,
         pageSize,
+        productFilter: debouncedProductFilter,
+        categoryFilter: debouncedCategoryFilter,
       },
     ],
     queryFn: ({ signal }) => {
@@ -199,6 +220,11 @@ const OrderManagement = () => {
           search: effectiveSearch || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
+          // NEW (Sep 2026, API 62 backend fix) — partial,
+          // case-insensitive product/category name matching, combinable
+          // with every other filter above.
+          product: debouncedProductFilter || undefined,
+          category: debouncedCategoryFilter || undefined,
           ordering: sortBy,
           page: currentPage,
           page_size: pageSize,
@@ -224,7 +250,16 @@ const OrderManagement = () => {
   // otherwise show an empty page.
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeStatus, effectiveSearch, startDate, endDate, sortBy, pageSize]);
+  }, [
+    activeStatus,
+    effectiveSearch,
+    startDate,
+    endDate,
+    sortBy,
+    pageSize,
+    debouncedProductFilter,
+    debouncedCategoryFilter,
+  ]);
 
   const handleTabChange = (statusKey) => {
     setActiveStatus(statusKey);
@@ -236,6 +271,8 @@ const OrderManagement = () => {
     setPhoneSearch("");
     setStartDate("");
     setEndDate("");
+    setProductFilter("");
+    setCategoryFilter("");
     setSortBy("-created_at");
     // Resets every filter AND the sort back to its default in one click
   };
@@ -406,6 +443,10 @@ const OrderManagement = () => {
         onSearchChange={setSearch}
         phoneSearch={phoneSearch}
         onPhoneSearchChange={setPhoneSearch}
+        productFilter={productFilter}
+        onProductFilterChange={setProductFilter}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
         startDate={startDate}
         endDate={endDate}
         onStartDateChange={setStartDate}

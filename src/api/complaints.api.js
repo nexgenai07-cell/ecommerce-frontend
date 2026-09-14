@@ -1,4 +1,3 @@
-// ============================================================
 // COMPLAINTS API MODULE
 // ============================================================
 // This file contains ALL API calls related to the Complaints module.
@@ -105,9 +104,15 @@ export const updateComplaintStatus = (id, data, signal) => {
 // ----------------------------
 // Replaces the old single admin "response" field entirely — a
 // complaint is now a running back-and-forth thread between the
-// customer and any admin, in chronological order. Response shape:
-// { results: [ { id, sender: "customer" | "admin", message,
-// created_at } ] }
+// customer and any admin, in chronological order.
+//
+// Response shape (API 72.1, Complaint Messages Thread — Corrected):
+// { results: [ { id, complaint, sender, sender_name, sender_role,
+// message, created_at } ] }
+// "sender" is the numeric id of whoever posted the message — it is
+// NOT the role string. "sender_role" ("customer" | "admin") is what
+// decides which side of the chat a message belongs to, and
+// "sender_name" is the display name of that specific sender.
 export const getComplaintMessages = (id, signal) => {
   return axiosInstance.get(`/api/v1/complaints/${id}/messages/`, { signal });
 };

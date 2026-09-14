@@ -12,10 +12,19 @@ const NeedHelp = ({
   const navigate = useNavigate(); // used by the "Chat with AI" button to navigate programmatically
 
   // canCancel — true only while the order can still be stopped before it ships
-  // Once an order is Shipped, Delivered, or Cancelled it can no longer be cancelled
-  const canCancel = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED].includes(
-    status,
-  );
+  // UPDATED (Sep 2026, API 58 backend fix): the backend now blocks
+  // cancellation once an order is "shipped", "out_for_delivery", OR
+  // "delivered" — previously only "delivered" was blocked, which meant
+  // a shipped/out-for-delivery order could still be cancelled by the
+  // customer even though it was already physically moving. ON_HOLD is
+  // included alongside PENDING/CONFIRMED since it's still a
+  // pre-confirmation state (a QR retry awaiting review), so the
+  // customer can still back out of it the same way.
+  const canCancel = [
+    ORDER_STATUS.PENDING,
+    ORDER_STATUS.ON_HOLD,
+    ORDER_STATUS.CONFIRMED,
+  ].includes(status);
 
   // canReturn — true only when the order has been delivered AND no return has been filed
   // Prevents a second return request from being created for the same order

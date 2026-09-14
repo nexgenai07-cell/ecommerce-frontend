@@ -318,13 +318,6 @@ const Cart = () => {
       <div className="relative overflow-hidden min-h-screen bg-gray-50 md:px-20">
         <Container className="py-6 sm:py-8">
           <div className="flex flex-col gap-8">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-1.5">
-              <div className="h-3.5 w-10 bg-gray-200 rounded animate-pulse" />
-              <span className="text-gray-300">›</span>
-              <div className="h-3.5 w-10 bg-gray-200 rounded animate-pulse" />
-            </div>
-
             {/* Page heading — icon box + title/subtitle stack */}
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gray-200 animate-pulse shrink-0" />
@@ -453,17 +446,12 @@ const Cart = () => {
 
       <Container className="py-6 sm:py-8">
         <div className="flex flex-col gap-8">
-          {/* ─── Breadcrumb ─── */}
-          <nav className="flex items-center gap-1.5 text-sm text-gray-400">
-            <Link
-              to={ROUTES.HOME}
-              className="hover:text-gray-600 transition-colors"
-            >
-              Home
-            </Link>
-            <span className="text-gray-300">›</span>
-            <span className="text-gray-600 font-medium">Cart</span>
-          </nav>
+          {/* The page-specific breadcrumb bar that used to render here has
+              been removed — every page now gets a consistent breadcrumb
+              trail automatically from the shared <Breadcrumbs /> component
+              mounted once in CustomerLayout, directly above this page's
+              content (its static "Cart" label is already correct here, so
+              this page needs no useBreadcrumb() call). */}
 
           {/* ─── Page Heading ─── */}
           <div className="flex items-center gap-4">

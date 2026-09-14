@@ -110,10 +110,13 @@ const PreviousComplaints = () => {
     {
       key: "id",
       label: "ID",
-      // Cell displaying the complaint's ID, prefixed with "#CP-" for a ticket-style format
+      // Cell displaying the complaint's ID, prefixed with "#CMP-" —
+      // the same ticket-style format used on the admin complaints
+      // table and the complaint detail page, so a customer and an
+      // admin looking at the same complaint always see the same ID.
       render: (row) => (
         <span className="font-semibold text-gray-800 whitespace-nowrap">
-          #CP-{row.id}
+          #CMP-{row.id}
         </span>
       ),
     },

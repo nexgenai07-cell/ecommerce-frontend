@@ -11,6 +11,14 @@ import useUI from "../../hooks/useUI";
 import cn from "../../utils/cn";
 import AdminSidebar from "./AdminSidebar";
 import TopHeader from "./TopHeader";
+import Breadcrumbs from "../shared/Breadcrumbs";
+// Breadcrumbs — the single shared, route-driven breadcrumb trail
+// component (same one mounted on the customer side inside
+// CustomerLayout.jsx). Mounted ONCE here, directly inside <main>, so
+// it automatically appears above every /admin/* page's own content.
+// It hides itself automatically — with zero leftover spacing — on the
+// admin dashboard root and on any route outside its config, so it
+// never needs to be added to individual admin pages.
 import ChatWidget from "../chat-assistant/ChatWidget";
 // The store-ops AI assistant floating widget — mounted here (as a
 // sibling of <Outlet />) so it's present on every admin page.
@@ -47,6 +55,11 @@ const AdminLayout = () => {
         <TopHeader />
 
         <main className="p-4 md:p-6 lg:p-8">
+          {/* Breadcrumb trail — sits above every admin page's own
+              PageHeader/content. Renders nothing on the dashboard root
+              or on routes without a breadcrumbs.config.js entry. */}
+          <Breadcrumbs />
+
           <Outlet />
         </main>
       </div>

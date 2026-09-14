@@ -16,10 +16,7 @@ import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Textarea from "../../components/ui/Textarea";
 import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already
-// used on every other admin screen, replacing this page's own plain
-// <h1>. The breadcrumb line above it is kept as-is, since PageHeader
-// doesn't render one itself.
+
 import { AiOutlineEdit } from "react-icons/ai";
 import ProductPicker from "../../components/admin-social/ProductPicker";
 import PostPreview, {

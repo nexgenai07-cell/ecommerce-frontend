@@ -1,4 +1,3 @@
-// Reusable OrderStatusBadge component
 // Displays a colored badge based on the order's current status
 // Uses the Badge component and the getStatusColor utility for coloring
 // Used in OrderList, OrderDetail, and AdminOrders
@@ -20,6 +19,11 @@ const OrderStatusBadge = ({
     switch (status) {
       case ORDER_STATUS.PENDING:
         return "Pending Payment"; // Order created, awaiting Stripe payment confirmation
+      case ORDER_STATUS.ON_HOLD:
+        // NEW (Sep 2026): a QR order reopened for a retry review after
+        // an earlier proof rejection — distinct wording from "Pending
+        // Payment" so it's clear this is a second attempt, not a first
+        return "Under Review — Retry";
       case ORDER_STATUS.CONFIRMED:
         return "Confirmed"; // Order has been confirmed
       case ORDER_STATUS.SHIPPED:

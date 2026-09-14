@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -5,8 +6,13 @@ import { motion } from "framer-motion";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { getProductById } from "../../api/products.api";
 
+import useBreadcrumb from "../../hooks/useBreadcrumb";
+// useBreadcrumb — publishes this product's REAL name to the shared,
+// globally-mounted <Breadcrumbs /> component (rendered once inside
+// CustomerLayout, above every customer page) once it has actually
+// loaded.
+
 import Container from "../../components/layouts/Container";
-import ProductBreadcrumb from "../../components/product-detail/ProductBreadcrumb";
 import ProductImageGallery from "../../components/product-detail/ProductImageGallery";
 import ProductInfo from "../../components/product-detail/ProductInfo";
 import ProductTabs from "../../components/product-detail/ProductTabs";
@@ -17,6 +23,7 @@ import ErrorState from "../../components/ui/ErrorState";
 
 const ProductDetail = () => {
   const { id } = useParams();
+  const { handleSetLabel } = useBreadcrumb();
 
   const {
     data: productData,
@@ -54,6 +61,15 @@ const ProductDetail = () => {
               },
       }
     : null;
+
+  // Publish the real product name to the shared breadcrumb trail the
+  // moment it's available, so the last crumb reads e.g. "Wireless
+  // Headphones Pro" instead of the generic "Product Details" fallback
+  // defined in constants/breadcrumbs.config.js.
+  useEffect(() => {
+    if (product?.name) handleSetLabel(product.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.name]);
 
   if (isLoading) {
     return (
@@ -93,11 +109,6 @@ const ProductDetail = () => {
     >
       <Container className="py-6 sm:py-10 max-w-6xl mx-auto">
         <div className="flex flex-col gap-8 sm:gap-10">
-          <ProductBreadcrumb
-            category={product.category}
-            productName={product.name}
-          />
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start">
             <div className="relative">
               {/* Numeric conversion is required here — product.original_price

@@ -3,6 +3,7 @@ import { Suspense } from "react"; // Suspense lets us show a fallback UI while t
 import CustomerAccountSidebar from "./CustomerAccountSidebar"; // Left sidebar on desktop, bottom tab bar on mobile
 import Container from "./Container"; // Reusable wrapper that applies consistent horizontal padding and max-width
 import { Skeleton } from "../ui/Skeleton"; // Animated placeholder shown while the page content is loading
+import Breadcrumbs from "../shared/Breadcrumbs"; // Route-driven breadcrumb trail
 
 const CustomerAccountLayout = () => {
   return (
@@ -26,6 +27,10 @@ const CustomerAccountLayout = () => {
             pb-20 adds bottom padding on mobile so content isn't hidden behind
             the bottom tab bar; md:pb-0 removes that padding on desktop        */}
         <main className="flex-1 min-w-0 pb-20 md:pb-0">
+          {/* Breadcrumb trail — sits inside the content column, next to the
+              sidebar rather than spanning above it. */}
+          <Breadcrumbs />
+
           {/* Suspense boundary: while the lazy-loaded child route chunk is being
               fetched, the fallback skeleton is shown instead of a blank screen */}
           <Suspense
