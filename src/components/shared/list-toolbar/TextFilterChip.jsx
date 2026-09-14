@@ -44,6 +44,7 @@ const TextFilterChip = ({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          maxLength={25}
           className="py-1.5 px-2 text-xs"
         />
         <Button

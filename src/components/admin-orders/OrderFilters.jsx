@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ListToolbarBar,
   FilterChipsRow,
@@ -7,6 +8,9 @@ import {
   TextFilterChip,
   OptionRow,
 } from "../shared/list-toolbar";
+import { getCategories } from "../../api/categories.api";
+import { QUERY_KEYS } from "../../constants/queryKeys";
+import extractListData from "../../utils/extractListData";
 
 const SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
@@ -77,6 +81,17 @@ const OrderFilters = ({
   isExporting,
 }) => {
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
+
+  // Category options for the dropdown filter below — same categories
+  // list already shown in the admin Category Management page, cached
+  // under the same query key so no extra request is made if that page
+  // was visited earlier in this session.
+  const { data: categoriesResponse } = useQuery({
+    queryKey: QUERY_KEYS.CATEGORIES,
+    queryFn: ({ signal }) => getCategories(signal),
+    staleTime: 1000 * 60 * 5,
+  });
+  const allCategories = extractListData(categoriesResponse);
 
   // Sort is intentionally excluded — "Newest First" is the default
   // view, not a narrowing filter.
@@ -170,14 +185,37 @@ const OrderFilters = ({
             onClear={() => onProductFilterChange("")}
           />
 
-          <TextFilterChip
+          <FilterChip
             label="Category"
-            heading="Category Name"
-            placeholder="e.g. Electronics"
-            value={categoryFilter}
-            onChange={onCategoryFilterChange}
+            valueLabel={categoryFilter || "select category"}
+            isActive={!!categoryFilter}
             onClear={() => onCategoryFilterChange("")}
-          />
+            panelClassName="w-52 max-w-[90vw] p-1.5"
+          >
+            {({ close }) => (
+              <>
+                <OptionRow
+                  label="All Categories"
+                  isSelected={!categoryFilter}
+                  onClick={() => {
+                    onCategoryFilterChange("");
+                    close();
+                  }}
+                />
+                {allCategories.map((category) => (
+                  <OptionRow
+                    key={category.id}
+                    label={category.name}
+                    isSelected={categoryFilter === category.name}
+                    onClick={() => {
+                      onCategoryFilterChange(category.name);
+                      close();
+                    }}
+                  />
+                ))}
+              </>
+            )}
+          </FilterChip>
 
           <FilterChip
             label="Sort"

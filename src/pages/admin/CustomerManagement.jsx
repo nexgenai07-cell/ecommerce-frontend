@@ -200,17 +200,22 @@ const CustomerManagement = () => {
       key: "customer",
       label: "Customer",
       render: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* gap-3 -> gap-2: tightened to match the smaller row height */}
           {/* Initials-based avatar — no photo field exists in the
               documented customer object */}
           <Avatar name={row.name} size="sm" />
           <div className="min-w-0">
             {/* min-w-0 allows the truncate classes below to actually
                 work inside a flex container */}
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
+              {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: same
+                  stacked-cell shrink as every other admin table's Customer/Product column */}
               {row.name}
             </p>
-            <p className="text-xs text-gray-400 truncate">{row.email}</p>
+            <p className="text-[9px] text-gray-400 truncate leading-tight">
+              {row.email}
+            </p>
           </div>
         </div>
       ),
@@ -219,7 +224,9 @@ const CustomerManagement = () => {
       key: "phone",
       label: "Phone",
       render: (row) => (
-        <span className="text-sm text-gray-600">{row.phone || "—"}</span>
+        <span className="text-[10px] sm:text-[11px] text-gray-600">
+          {row.phone || "—"}
+        </span>
         // Falls back to an em-dash when no phone number is on file
       ),
     },
@@ -227,14 +234,16 @@ const CustomerManagement = () => {
       key: "total_orders",
       label: "Orders",
       render: (row) => (
-        <span className="text-sm text-gray-900">{row.total_orders}</span>
+        <span className="text-[10px] sm:text-[11px] text-gray-900">
+          {row.total_orders}
+        </span>
       ),
     },
     {
       key: "total_spent",
       label: "Spent",
       render: (row) => (
-        <span className="text-sm font-medium text-gray-900">
+        <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
           {formatPrice(row.total_spent)}
         </span>
       ),
@@ -243,7 +252,7 @@ const CustomerManagement = () => {
       key: "created_at",
       label: "Joined",
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
           {formatDate(row.created_at)}
         </span>
       ),
@@ -276,7 +285,11 @@ const CustomerManagement = () => {
   const hasActiveFilters = !!search || sortBy !== "-created_at";
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader icon={<AiOutlineTeam />} title="Customers" />
       {/* Note: "+ Add Customer" from the design is NOT included — there

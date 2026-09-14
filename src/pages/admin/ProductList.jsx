@@ -349,17 +349,28 @@ const ProductList = () => {
       key: "product",
       label: "Product",
       render: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* gap-3 -> gap-2: tightened to match the smaller image + text next to it */}
           <img
             src={row.primary_image || "/placeholder-product.svg"}
             alt={row.name}
-            className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+            className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
+            // w-10 h-10 (40px) was BIGGER than the DataTable's new fixed 36px row height,
+            // so this thumbnail alone was forcing every product row to grow past the fixed
+            // height no matter what the DataTable component did. w-7 h-7 (28px) now
+            // comfortably fits inside the 36px row with room for the cell's own padding.
           />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
+              {/* text-sm (14px) -> text-[10px] sm:text-[11px]: matches the compact size
+                  used everywhere else in the reference image; leading-tight keeps this
+                  line and the SKU line below it both fitting inside the fixed row height */}
               {row.name}
             </p>
-            <p className="text-xs text-gray-400">SKU: {row.sku || "—"}</p>
+            <p className="text-[9px] text-gray-400 leading-tight">
+              SKU: {row.sku || "—"}
+            </p>
+            {/* text-xs (12px) -> text-[9px]: the SKU sub-line, shrunk to match */}
           </div>
         </div>
       ),
@@ -381,7 +392,13 @@ const ProductList = () => {
       label: "Price",
       render: (row) => (
         <div>
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 leading-tight">
+            {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: this is the
+                exact "price on top, discount line underneath" stacked-cell pattern from
+                Rimsha's reference image — at the old text-sm size, two of these stacked
+                lines didn't fit inside the DataTable's fixed 36px row, so this shrink
+                (matched with the DataTable's own overflow-hidden fix) is what actually
+                gets it fitting without clipping */}
             {formatPrice(row.price)}
           </p>
           {/* Number(): row.original_price and row.price arrive as decimal
@@ -390,7 +407,8 @@ const ProductList = () => {
               silently breaks whenever the original price's leading digit
               is smaller than the sale price's leading digit. */}
           {Number(row.original_price) > Number(row.price) && (
-            <p className="text-xs text-gray-400 line-through">
+            <p className="text-[9px] text-gray-400 line-through leading-tight">
+              {/* text-xs (12px) -> text-[9px] leading-tight: the second stacked line */}
               {formatPrice(row.original_price)}
             </p>
           )}
@@ -406,12 +424,15 @@ const ProductList = () => {
         const reserved = row.reserved_stock ?? 0;
         return (
           <span
+            // text-sm (14px) -> text-[10px] sm:text-[11px] on all three branches below:
+            // same compact size as the rest of the table's cells, and small enough that
+            // this column never needs its own two-line wrap inside the fixed row height
             className={
               available === 0
-                ? "text-danger text-sm"
+                ? "text-danger text-[10px] sm:text-[11px]"
                 : available <= 5
-                  ? "text-warning text-sm"
-                  : "text-gray-700 text-sm"
+                  ? "text-warning text-[10px] sm:text-[11px]"
+                  : "text-gray-700 text-[10px] sm:text-[11px]"
             }
           >
             {total} in stock
@@ -504,11 +525,12 @@ const ProductList = () => {
   ];
 
   return (
-    // Vertical rhythm tightened (gap-6 -> gap-2) so the stats cards, the
-    // filters/export toolbar, and the products table below it all sit much
-    // closer together -- addresses the "too much distance above/below the
-    // buttons row" feedback. Purely spacing, no structural change.
-    <div className="flex flex-col gap-2">
+    // Vertical rhythm tightened further (gap-2 -> gap-1.5) so the stats
+    // cards, the filters/export toolbar, and the products table below it
+    // all sit even closer together -- addresses continued feedback that
+    // the distance above/below the buttons row was still too large.
+    // Purely spacing, no structural change.
+    <div className="flex flex-col gap-1.5">
       {/* Page header — uses the shared PageHeader component so this
           page matches every other admin screen's title styling. */}
       <PageHeader
@@ -545,16 +567,17 @@ const ProductList = () => {
 
       {/* Bulk action bar — only shown once at least one row is selected */}
       {selectedIds.length > 0 && (
-        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-700">
             {selectedIds.length} item{selectedIds.length === 1 ? "" : "s"}{" "}
             selected
           </span>
           <Button
             variant="danger"
             size="sm"
-            leftIcon={<AiOutlineDelete className="w-4 h-4" />}
+            leftIcon={<AiOutlineDelete className="w-3.5 h-3.5" />}
             onClick={() => setConfirmDeleteOpen(true)}
+            className="px-2.5 py-1 text-xs whitespace-nowrap"
           >
             Delete
           </Button>

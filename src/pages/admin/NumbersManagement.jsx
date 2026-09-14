@@ -149,11 +149,11 @@ const NumbersManagement = () => {
         <div className="flex items-center gap-2">
           <Avatar name={row.customer?.name || row.phone_number} size="sm" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
               {row.customer?.name || "Unknown"}
             </p>
             {row.customer?.email && (
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-[9px] text-gray-400 truncate leading-tight">
                 {row.customer.email}
               </p>
             )}
@@ -222,7 +222,11 @@ const NumbersManagement = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader
         icon={<AiOutlineMessage />}

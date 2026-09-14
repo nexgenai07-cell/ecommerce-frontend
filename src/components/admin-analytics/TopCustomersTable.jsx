@@ -87,10 +87,17 @@ const TopCustomersTable = ({ customers, isLoading }) => {
         <div className="flex items-center gap-2">
           <Avatar name={row.name} size="sm" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
+              {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: this table
+                  renders through the shared DataTable component too, so it needed the
+                  same compact-text fix as ProductList/CustomerManagement/etc. — this file
+                  was missed in the first pass since it lives under components/admin-analytics
+                  rather than pages/admin */}
               {row.name}
             </p>
-            <p className="text-xs text-gray-400 truncate">{row.email}</p>
+            <p className="text-[9px] text-gray-400 truncate leading-tight">
+              {row.email}
+            </p>
           </div>
         </div>
       ),

@@ -1,6 +1,3 @@
-import { useState } from "react";
-// Import React's useState hook — used here to store the search box text
-
 import { useNavigate } from "react-router-dom";
 // Import useNavigate hook — lets us redirect the user to another page (like order detail page)
 
@@ -40,13 +37,6 @@ const RecentOrdersTable = () => {
   const navigate = useNavigate();
   // Get the navigate function so we can programmatically change pages on click
 
-  const [searchTerm, setSearchTerm] = useState("");
-  // Local search text — filters the already-fetched recent orders
-  // client-side (this widget only ever holds a handful of rows, so a
-  // full server round-trip per keystroke isn't needed here; the full
-  // server-side search/filter belongs on the dedicated OrderManagement
-  // page, which handles the complete order list).
-
   const { data: ordersResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "recentOrders"],
     queryFn: ({ signal }) => getAdminOrders(undefined, signal),
@@ -63,19 +53,6 @@ const RecentOrdersTable = () => {
   const recentOrders = allOrders.slice(0, 5);
   // Dashboard widget only needs a short preview — full history lives
   // on the dedicated Orders page (ROUTES.ADMIN_ORDERS)
-
-  const filteredOrders = searchTerm
-    ? recentOrders.filter(
-        (order) =>
-          order.order_number
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          order.customer?.name
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase()),
-      )
-    : recentOrders;
-  // If no search text typed, just show all 5 recent orders as-is
 
   // Column configuration for the reusable DataTable component
   const columns = [
@@ -141,13 +118,17 @@ const RecentOrdersTable = () => {
     <div
       className="
         bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4
+        h-[340px]
         shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)]
         hover:shadow-[0_4px_14px_-4px_rgba(16,24,40,0.10)]
         transition-shadow duration-300
       "
       // Outer card wrapper: white background, rounded corners, border,
       // padding, vertical stacking, plus the soft "floating card"
-      // elevation shared by every dashboard widget
+      // elevation shared by every dashboard widget. h-[340px] is a fixed
+      // height shared with InventoryAlertsWidget's outer card so the
+      // two cards in this grid row always match, regardless of how
+      // many orders or low-stock items either one has to show.
     >
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">Recent Orders</h2>
@@ -155,20 +136,27 @@ const RecentOrdersTable = () => {
 
       <DataTable
         columns={columns}
-        data={filteredOrders}
+        data={recentOrders}
         keyField="order_number"
         onRowClick={(row) =>
           navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number))
         }
         // Opens the same order detail page as the eye icon when any part
         // of the row is clicked
-        searchable
-        searchPlaceholder="Filter orders..."
-        onSearch={setSearchTerm}
         isLoading={isLoading}
+        hidePagination
+        // This widget only ever shows a fixed 5-order preview, never a
+        // real page the admin can move through — the footer strip
+        // DataTable would otherwise render has nothing functional to do
+        // here and only leaves unused space above the "View All Orders"
+        // button below.
       />
 
-      <div className="text-center pt-1">
+      <div className="flex-1 flex items-center justify-center">
+        {/* flex-1 + items-center: the table above only takes the height its
+            5 rows actually need, so this button sits vertically centered in
+            whatever space is left over inside the fixed-height card, rather
+            than hugging the top edge of that leftover space. */}
         <Button
           variant="ghost"
           size="sm"

@@ -6,6 +6,7 @@ import {
   AiOutlineShoppingCart,
   AiOutlineUser,
   AiOutlineClockCircle,
+  AiOutlineCreditCard,
 } from "react-icons/ai";
 
 import { getDashboardSummary } from "../../api/analytics.api";
@@ -47,6 +48,14 @@ const AdminDashboard = () => {
   });
 
   const summary = summaryResponse?.data || {};
+
+  // averageOrderValue — derived from the same two numbers already present
+  // in the summary response (total_revenue, total_orders), so this card
+  // needs no separate API call. Guarded against a zero-order store to
+  // avoid dividing by zero.
+  const averageOrderValue = summary.total_orders
+    ? summary.total_revenue / summary.total_orders
+    : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,6 +117,17 @@ const AdminDashboard = () => {
           // Takes the admin to Order Management with the "Pending" status
           // tab pre-selected via a query parameter, so they land directly
           // on the filtered list instead of the unfiltered "All" view.
+        />
+
+        <StatsCard
+          title="Average Order Value"
+          value={summaryLoading ? "—" : formatPrice(averageOrderValue)}
+          icon={<AiOutlineCreditCard />}
+          iconBg="bg-info-light"
+          iconColor="text-info"
+          onClick={() => navigate(ROUTES.ADMIN_ANALYTICS_REVENUE)}
+          // Same destination as Total Revenue — both figures come from
+          // the same revenue report page.
         />
       </div>
 

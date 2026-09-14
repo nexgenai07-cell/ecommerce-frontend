@@ -323,7 +323,7 @@ const ComplaintsManagement = () => {
       key: "message",
       label: "Subject",
       render: (row) => (
-        <span className="text-sm text-gray-600 truncate block max-w-55">
+        <span className="text-[10px] sm:text-[11px] text-gray-600 truncate block max-w-55">
           {row.message}
         </span>
       ),
@@ -351,7 +351,7 @@ const ComplaintsManagement = () => {
       key: "created_at",
       label: "Date",
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
           {formatDate(row.created_at)}
         </span>
       ),
@@ -378,7 +378,11 @@ const ComplaintsManagement = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* ================================================================
           PAGE HEADER — shared gradient-badge header, same component
           used on every other admin page.
@@ -434,19 +438,19 @@ const ComplaintsManagement = () => {
           Resolved or Closed in one action.
           ================================================================ */}
       {selectedComplaintIds.length > 0 && (
-        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">
             {selectedComplaintIds.length} complaint
             {selectedComplaintIds.length === 1 ? "" : "s"} selected
           </span>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full sm:w-auto">
             <Button
               variant="primary"
               size="sm"
               onClick={() =>
                 handleRequestBulkStatusUpdate(COMPLAINT_STATUS.RESOLVED)
               }
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
               Mark Resolved
             </Button>
@@ -456,7 +460,7 @@ const ComplaintsManagement = () => {
               onClick={() =>
                 handleRequestBulkStatusUpdate(COMPLAINT_STATUS.CLOSED)
               }
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
               Close
             </Button>

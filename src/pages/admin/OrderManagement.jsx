@@ -353,8 +353,15 @@ const OrderManagement = () => {
       label: "Customer",
       render: (row) => (
         <div>
-          <p className="text-sm text-gray-900">{row.customer?.name || "—"}</p>
-          <p className="text-xs text-gray-400">{row.customer?.phone || ""}</p>
+          <p className="text-[10px] sm:text-[11px] text-gray-900 leading-tight">
+            {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: same compact
+                stacked-cell shrink as ProductList's Product/Price columns, so this two-line
+                Customer cell fits the DataTable's fixed 36px row without clipping */}
+            {row.customer?.name || "—"}
+          </p>
+          <p className="text-[9px] text-gray-400 leading-tight">
+            {row.customer?.phone || ""}
+          </p>
         </div>
       ),
     },
@@ -362,7 +369,8 @@ const OrderManagement = () => {
       key: "total_amount",
       label: "Total",
       render: (row) => (
-        <span className="text-sm font-semibold text-gray-900">
+        <span className="text-[10px] sm:text-[11px] font-semibold text-gray-900">
+          {/* text-sm (14px) -> text-[10px] sm:text-[11px]: matches the rest of the table */}
           {formatPrice(row.total_amount)}
         </span>
       ),
@@ -378,7 +386,8 @@ const OrderManagement = () => {
       key: "created_at",
       label: "Date",
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
+          {/* text-sm (14px) -> text-[10px] sm:text-[11px]: matches the rest of the table */}
           {formatDate(row.created_at)}
         </span>
       ),
@@ -413,7 +422,11 @@ const OrderManagement = () => {
     navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", row.order_number));
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* ================================================================
           PAGE HEADER — shared gradient-badge header, same component used
           on every other admin page.
@@ -466,23 +479,23 @@ const OrderManagement = () => {
           screens, sits on one line from the small breakpoint upward.
           ================================================================ */}
       {selectedOrderNumbers.length > 0 && (
-        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">
             {selectedOrderNumbers.length} order
             {selectedOrderNumbers.length === 1 ? "" : "s"} selected
           </span>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full sm:w-auto">
             <Select
               options={BULK_STATUS_OPTIONS}
               value={bulkTargetStatus}
               onChange={(e) => setBulkTargetStatus(e.target.value)}
-              className="sm:w-48"
+              className="sm:w-40 py-1 pl-3 pr-8 text-xs"
             />
             <Button
               variant="primary"
               size="sm"
               onClick={() => setConfirmBulkStatusOpen(true)}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
               Update Status
             </Button>

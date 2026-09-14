@@ -393,6 +393,7 @@ const CustomerNavbar = () => {
                   placeholder="Search for products, brands..."
                   onChange={handleSearchInput}
                   onFocus={() => setSearchOpen(true)}
+                  maxLength={25}
                   className={cn(
                     "w-full pl-5 pr-11 py-2.5 text-sm rounded-full border transition-all duration-200",
                     "placeholder:text-gray-400 text-gray-900 bg-gray-50",
@@ -882,6 +883,7 @@ const CustomerNavbar = () => {
                           setMobileDrawerOpen(false);
                         }
                       }}
+                      maxLength={25}
                       className="w-full pl-9 pr-4 py-2.5 text-sm rounded-full border border-gray-200 bg-gray-50 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary-50 focus:bg-white transition-colors"
                     />
                     <AiOutlineSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

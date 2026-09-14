@@ -37,6 +37,11 @@ const DataTable = ({
   pageSize, // Currently selected rows-per-page value — forwarded to Pagination; the rows-per-page dropdown only renders when this and onPageSizeChange are both provided
   pageSizeOptions, // Selectable rows-per-page values — forwarded to Pagination
   onPageSizeChange, // Handler called with the new rows-per-page value when the user changes the dropdown
+  hidePagination = false, // When true, the footer strip (page numbers, rows-per-page
+  // dropdown, results count) is left out entirely. Meant for callers that show a short,
+  // fixed-size preview of a larger list — e.g. a dashboard widget rendering the 5 most
+  // recent records — where there is no real page to move to and a footer strip would
+  // just occupy space without doing anything.
 
   // --- Bulk selection ---
   selectable = false, // When true, renders checkboxes on every row and a "select all" header checkbox
@@ -46,6 +51,12 @@ const DataTable = ({
   isLoading = false, // When true, replaces the table body with SkeletonTable placeholder rows
   error = false, // When true, replaces the table body with an error message and retry button
   onRetry, // Called when the user clicks "Try again" in the error state
+  emptyTitle, // Optional override for the empty-state heading — falls back to
+  // EmptyState's own "No Results Found" default when omitted, so this stays
+  // fully backward compatible with every existing caller.
+  emptyDescription, // Optional override for the empty-state supporting line,
+  // paired with emptyTitle for callers that want a more specific message
+  // (e.g. distinguishing "no matches for your filters" from "nothing here yet").
 
   // --- Callbacks ---
   onSearch, // Called with the current search string whenever the search input changes
@@ -168,6 +179,7 @@ const DataTable = ({
               onChange={handleSearch}
               // Calls handleSearch on every keystroke
               placeholder={searchPlaceholder}
+              maxLength={25}
               className={cn(
                 "w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 bg-white",
                 // pl-9: left padding leaves space for the absolutely-positioned search icon
@@ -216,11 +228,18 @@ const DataTable = ({
               which pushes the pagination footer below down to the very bottom of the
               card instead of leaving it floating right under a short table */}
 
-          <table className="w-full text-[11px] sm:text-xs">
+          <table className="w-full text-[10px] sm:text-[11px] tracking-tight [word-spacing:-1px]">
             {/* w-full: table stretches to fill the scroll container */}
-            {/* text-[11px] sm:text-xs: reduced from the previous text-xs/text-sm pairing —
-                the cell content was reading too large relative to the compact row height,
-                so both breakpoints are dropped one notch smaller */}
+            {/* text-[10px] sm:text-[11px]: dropped one notch smaller again from the previous
+                text-[11px]/text-xs pairing — Rimsha's reference screenshot has noticeably
+                tighter, denser cell text than before, so both breakpoints shrink further
+                while still growing very slightly on sm+ for readability on bigger screens */}
+            {/* tracking-tight: pulls letters closer together on every cell (header and body
+                both inherit this from the table element) — matches the tight letter-spacing
+                in the reference image instead of the browser's default spacing */}
+            {/* [word-spacing:-1px]: Tailwind has no built-in word-spacing utility, so this is
+                an arbitrary-value class; word-spacing is CSS-inherited, so setting it once
+                here tightens the gap between words in every header label and cell value */}
 
             {/* Table header row — solid brand-gradient background with white uppercase
                 labels, replacing the old plain gray header for a more modern, on-theme look */}
@@ -232,10 +251,20 @@ const DataTable = ({
 
                 {/* Select all checkbox — only rendered in selectable mode */}
                 {selectable && (
-                  <th className="w-9 px-3 py-2 text-left">
+                  <th className="w-8 px-2.5 py-1.5 h-9 max-h-9 overflow-hidden align-middle text-left">
                     {/* w-9 px-3 py-2: narrower, shorter header cell than before — the main
                         source of the extra vertical height is trimmed here and on every
                         other header/row cell below */}
+                    {/* w-8 px-2.5 py-1.5: trimmed one notch further so the checkbox column
+                        doesn't read wider/taller than the data columns next to it */}
+                    {/* h-9 max-h-9 overflow-hidden: fixed 36px header-cell height that is now
+                        set DIRECTLY on this <th> (not just on the parent <tr>) — height alone
+                        on a table row is only a suggestion the browser can ignore if a cell's
+                        content needs more room, so max-h-9 + overflow-hidden here is what
+                        actually forces this cell (and therefore the whole row) to never grow
+                        past 36px */}
+                    {/* align-middle: keeps the checkbox vertically centered now that the row
+                        has a fixed height instead of growing to fit its content */}
                     <Checkbox
                       checked={
                         selectedIds.length === data.length && data.length > 0
@@ -255,10 +284,21 @@ const DataTable = ({
                     onClick={() => col.sortable && handleSort(col.key)}
                     // Only triggers sort when this specific column has sortable:true
                     className={cn(
-                      "px-3 py-2 text-left text-[10px] sm:text-[11px] font-bold text-white uppercase tracking-wider whitespace-nowrap",
+                      "px-2.5 py-1.5 h-9 max-h-9 overflow-hidden align-middle text-left text-[9px] sm:text-[10px] font-bold text-white uppercase tracking-tight whitespace-nowrap",
                       // px-3 py-2: tighter header cell padding than the old px-4 py-3
                       // text-[10px] sm:text-[11px] font-bold text-white: small, bold,
                       // high-contrast label against the gradient background
+                      // px-2.5 py-1.5: padding trimmed one notch further to match the denser
+                      // reference layout
+                      // h-9 max-h-9 overflow-hidden align-middle: fixed 36px height set
+                      // DIRECTLY on this <th>, the same fix as the checkbox header above —
+                      // this is what actually stops the row from growing, not the <tr>'s own
+                      // height alone
+                      // text-[9px] sm:text-[10px]: header label shrunk one notch smaller than
+                      // before to sit clearly below the (now also smaller) body text
+                      // tracking-tight: swapped from tracking-wider — the reference image's
+                      // header labels sit close together instead of spread out, so wide
+                      // letter-spacing was working against the compact look being asked for
                       col.sortable &&
                         "cursor-pointer hover:text-white/80 select-none",
                       // cursor-pointer: hand cursor signals this header is clickable
@@ -363,8 +403,13 @@ const DataTable = ({
                 // Empty state — shown when the fetch succeeded but returned zero records
                 <tr>
                   <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                    <EmptyState variant="noResults" />
-                    {/* noResults variant: magnifying glass icon with "No Results Found" message */}
+                    <EmptyState
+                      variant="noResults"
+                      title={emptyTitle}
+                      description={emptyDescription}
+                    />
+                    {/* noResults variant: magnifying glass icon with "No Results Found" message,
+                        or the caller's own title/description when provided via emptyTitle/emptyDescription */}
                   </td>
                 </tr>
               ) : (
@@ -378,10 +423,17 @@ const DataTable = ({
                     // page open the same detail view its "eye" action opens by clicking
                     // anywhere on the row, not just the small icon
                     className={cn(
-                      "hover:bg-primary-100 transition-colors duration-100",
+                      "hover:bg-primary-100 transition-colors duration-100 h-9",
                       // hover:bg-primary-100: stronger, more visible green hover tint —
                       // the previous hover:bg-primary-50/60 read as almost no color change
                       // transition-colors duration-100: fast smooth hover color change
+                      // h-9: FIXED 36px row height, matching Rimsha's reference screenshot —
+                      // kept the SAME 36px at every screen size (no sm:/lg: growth) so the
+                      // compact look doesn't quietly disappear on a bigger monitor, which is
+                      // what made the first attempt look like it hadn't shrunk at all. This
+                      // height on the <tr> is now backed up by the matching max-h-9 +
+                      // overflow-hidden set directly on every <td> below — the <tr> height
+                      // alone was never enough to stop a tall cell forcing the row to grow.
                       rowIndex % 2 === 1 && "bg-gray-50/60",
                       // Subtle zebra striping on every other row — this, together with the
                       // shorter cell padding below, is what makes long tables easy to scan
@@ -397,7 +449,14 @@ const DataTable = ({
                     {/* Row checkbox — only rendered in selectable mode */}
                     {selectable && (
                       <td
-                        className="w-9 px-3 py-1.5"
+                        className="w-8 px-2.5 py-1 h-9 max-h-9 overflow-hidden align-middle"
+                        // w-8 px-2.5 py-1: trimmed to match the smaller data-cell padding
+                        // h-9 max-h-9 overflow-hidden: fixed height set directly on this
+                        // cell too (not just the parent <tr>) so it can never be the cell
+                        // that forces the row taller
+                        // align-middle: centers the checkbox inside the now-fixed row height
+                        // instead of it sitting at the top when a neighboring cell wraps
+                        // onto two lines
                         onClick={(e) => e.stopPropagation()}
                         // Stops the click from bubbling up to the row's onRowClick handler,
                         // so ticking a row's checkbox selects it instead of also opening
@@ -417,10 +476,28 @@ const DataTable = ({
                       <td
                         key={col.key}
                         className={cn(
-                          "px-3 py-1.5 text-gray-700 whitespace-nowrap",
+                          "px-2.5 py-1 h-9 max-h-9 text-gray-700 whitespace-nowrap align-middle overflow-hidden leading-tight tracking-tight",
                           // px-3 py-1.5: noticeably shorter row height than the old px-4 py-3 —
                           // this is the main "choti choti lines" change, applied consistently
                           // to every admin table through this one shared component
+                          // px-2.5 py-1: padding trimmed one notch further now that the row's
+                          // own height is fixed by "h-9" on the <tr> above — this padding is
+                          // now just breathing room, not what sets the height
+                          // h-9 max-h-9 overflow-hidden: THE actual fix for "height kam nahi
+                          // ho rahi" — this must live on the <td> itself, not only the <tr>.
+                          // A table row's height on its own is just a suggestion the browser
+                          // ignores whenever any cell's content needs more room (e.g. a
+                          // column's render() using a bigger font like text-sm for a stacked
+                          // price + discount line); setting max-h-9 + overflow-hidden here
+                          // directly on every data cell is what stops that content from
+                          // silently forcing the whole row taller than 36px
+                          // align-middle: vertically centers this cell's content (whether it's
+                          // one line or two stacked lines, e.g. a column's render() returning
+                          // a price on top and a discount label underneath) inside the fixed
+                          // row height, matching the reference image
+                          // leading-tight tracking-tight: tighter line-height and letter-
+                          // spacing so two stacked lines (price + discount, etc.) both still
+                          // fit comfortably inside the fixed row height
                           col.className,
                           // Column-specific extra classes for alignment or width overrides
                         )}
@@ -450,8 +527,10 @@ const DataTable = ({
             strips Pagination's own card chrome (shadow/border/rounded/large padding) since
             this wrapper already provides all of that. Only used here — every other page that
             renders <Pagination /> directly (Products, OrderHistory, etc.) is completely
-            unaffected, since "compact" is opt-in and "card" (the original look) stays default. */}
-        {!isLoading && data.length > 0 && (
+            unaffected, since "compact" is opt-in and "card" (the original look) stays default.
+            Left out entirely when hidePagination is set, for callers with no real page to
+            move to. */}
+        {!hidePagination && !isLoading && data.length > 0 && (
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}

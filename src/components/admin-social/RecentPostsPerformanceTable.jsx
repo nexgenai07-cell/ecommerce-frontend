@@ -71,11 +71,15 @@ const RecentPostsPerformanceTable = () => {
       key: "caption",
       label: "Post Preview",
       render: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* gap-3 -> gap-2, w-10 h-10 -> w-7 h-7: same thumbnail fix as
+              ProductList/CategoryManagement/InventoryAlerts — 40px was taller
+              than the shared DataTable's fixed 36px row and was forcing this
+              row to grow past it */}
           <img
             src={row.image_url || "/placeholder-product.svg"}
             alt=""
-            className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+            className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
           />
           <p className="text-gray-900 truncate max-w-[180px]">{row.caption}</p>
         </div>

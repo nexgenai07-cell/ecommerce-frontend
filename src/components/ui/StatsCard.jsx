@@ -91,18 +91,26 @@ const StatsCard = ({
         "relative",
 
         // Base classes — applied to every stats card instance
-        "bg-white border border-gray-100 rounded-lg flex flex-col",
-        "p-3 gap-1.5",
-        // A touch more breathing room than the very first compact pass —
-        // still tight, but no longer cramped
+        "bg-white border border-gray-100 rounded-lg flex flex-col justify-between",
+        "p-2.5 gap-1",
+        // Tightened padding/gap so the card hugs its content instead of
+        // leaving obvious empty space around it.
 
-        // WIDTH — the card hugs its own content (title + icon row, or
-        // the value below, whichever is wider) instead of stretching to
-        // a fixed width, so it never leaves empty space after the icon.
-        // min-w-[130px] just stops it from getting uncomfortably
-        // cramped when both the title and the value are very short
-        // (e.g. "Active" / "2").
-        "w-fit min-w-[130px] shrink-0",
+        // FIXED SIZE — every StatsCard, on every page, is now exactly the
+        // same width AND height, whether or not it has a trend badge and
+        // no matter how short/long its title or value is. This is what
+        // keeps a row of cards lined up like a real grid even though the
+        // wrapper around them is just `flex flex-wrap` (so they can still
+        // drop to a new line on narrow screens instead of overflowing).
+        // The size itself steps up at each breakpoint instead of staying
+        // static, so cards stay comfortably readable on a big screen
+        // without ever exceeding the viewport on a small one. Heights are
+        // sized to the actual 3-row content (icon row + value + trend)
+        // with just enough padding to breathe, not extra empty space.
+        "w-[calc(50%-0.25rem)] h-[78px]",
+        "sm:w-[164px] sm:h-[84px]",
+        "lg:w-[176px] lg:h-[88px]",
+        "shrink-0",
 
         // ELEVATION — the card has a soft shadow baked into its resting
         // state (instead of only appearing on hover), so it visually
@@ -132,13 +140,17 @@ const StatsCard = ({
           sitting tight against the title. */}
       <div className="flex items-center justify-between gap-2">
         {/* Card title — descriptive label for the KPI metric */}
-        <p className="font-medium text-gray-500 text-xs truncate max-w-[140px]">
+        <p className="font-medium text-gray-500 text-[11px] truncate min-w-0 flex-1">
           {title}
           {/* font-medium: slightly bold for legibility */}
           {/* text-gray-500: muted gray — clearly secondary to the bold value below */}
-          {/* max-w-[140px] + truncate: caps the title's width so a long
-              title clips with "…" instead of crowding the icon at the
-              opposite end of the row */}
+          {/* text-[11px] (down from text-xs) + wider card above: gives even
+              the longest titles ("Categorized Products", "Top Products
+              Units Sold") enough room to show in full instead of getting
+              cut off with "…" */}
+          {/* min-w-0 + flex-1 + truncate: still clips as a last-resort
+              safety net on very narrow screens, but no longer the normal
+              case */}
         </p>
 
         {/* Icon container — only rendered when icon prop is provided.
@@ -149,9 +161,9 @@ const StatsCard = ({
           <div
             className={cn(
               "flex items-center justify-center shrink-0",
-              "w-7 h-7 rounded-md",
-              // 28px icon box, matching the compact text size used
-              // throughout this card
+              "w-6 h-6 rounded-md",
+              // 24px icon box (down from 28px) — matches the tighter
+              // overall card size
 
               // Soft shadow gives the icon box a sense of depth against
               // its own gradient fill
@@ -179,12 +191,13 @@ const StatsCard = ({
       </div>
 
       {/* Main KPI value — the most prominent element on the card */}
-      <p className="font-bold text-gray-900 text-lg truncate">
+      <p className="font-bold text-gray-900 text-base truncate">
         {value}
         {/* font-bold: heaviest weight — establishes clear visual hierarchy */}
         {/* text-gray-900: near-black for maximum contrast */}
-        {/* text-lg (down from text-xl) + truncate: smaller value text,
-            clipped instead of wrapping so it can't stretch the card taller */}
+        {/* text-base (down from text-lg) + truncate: smaller value text
+            to match the tighter card height, clipped instead of wrapping
+            so it can't stretch the card taller */}
       </p>
 
       {/* Trend badge — only rendered when trend prop is a non-empty string.
@@ -200,17 +213,19 @@ const StatsCard = ({
       {trend && (
         <span
           className={cn(
-            "inline-flex items-center gap-0.5 self-start mt-0.5 text-[9px] font-medium px-1 py-0.5 rounded max-w-full truncate",
+            "inline-flex items-center gap-0.5 self-start mt-0.5 text-[9px] font-medium max-w-full truncate",
             // mt-0.5: the small gap that keeps this badge clearly separate
             // from the value line above it
             // self-start: the badge only takes up as much width as its own
             // text needs, instead of stretching the full card width
             // max-w-full + truncate: long trend text (e.g. "Requires action")
             // clips with an ellipsis instead of overflowing the card
+            // No bg-*/rounded/padding anymore — just the colored
+            // text + arrow icon, no pill background behind it.
 
-            isPositive && "bg-success-light text-success",
-            isNegative && "bg-danger-light text-danger",
-            !isPositive && !isNegative && "bg-gray-100 text-gray-500",
+            isPositive && "text-success",
+            isNegative && "text-danger",
+            !isPositive && !isNegative && "text-gray-500",
           )}
           title={trendLabel ? `${trend} ${trendLabel}` : trend}
           // Full text (including trendLabel, when supplied) still available

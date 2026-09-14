@@ -45,10 +45,15 @@ const InventoryAlertsWidget = () => {
     <div
       className="
         bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4
+        h-[340px]
         shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)]
         hover:shadow-[0_4px_14px_-4px_rgba(16,24,40,0.10)]
         transition-shadow duration-300
       "
+      // h-[340px] — same fixed height as RecentOrdersTable's outer card, so
+      // the two cards in this grid row always match regardless of how
+      // many low-stock items there are. Extra items scroll inside this
+      // fixed height instead of growing the card itself.
     >
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">
@@ -70,7 +75,7 @@ const InventoryAlertsWidget = () => {
           description="No products are currently running low."
         />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-hide pr-1">
           {alerts.map((item) => (
             <div
               key={item.product_id}

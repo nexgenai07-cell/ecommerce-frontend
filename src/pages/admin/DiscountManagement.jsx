@@ -253,7 +253,9 @@ const DiscountManagement = () => {
       key: "code",
       label: "Code",
       render: (row) => (
-        <span className="font-mono text-sm font-semibold bg-gray-100 text-gray-800 px-2 py-1 rounded">
+        <span className="font-mono text-[10px] sm:text-[11px] font-semibold bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded">
+          {/* text-sm (14px) -> text-[10px] sm:text-[11px], px-2 py-1 -> px-1.5 py-0.5:
+              matches the compact sizing used across every other admin table now */}
           {row.code}
         </span>
       ),
@@ -274,7 +276,7 @@ const DiscountManagement = () => {
       key: "value",
       label: "Value",
       render: (row) => (
-        <span className="text-sm font-medium text-gray-900">
+        <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
           {row.type === "percent"
             ? `${row.value}% OFF`
             : `${formatPrice(row.value)} OFF`}
@@ -286,11 +288,11 @@ const DiscountManagement = () => {
       label: "Min Order",
       render: (row) =>
         row.min_order_amount ? (
-          <span className="text-sm text-gray-600">
+          <span className="text-[10px] sm:text-[11px] text-gray-600">
             {formatPrice(row.min_order_amount)}
           </span>
         ) : (
-          <span className="text-xs text-gray-300">—</span>
+          <span className="text-[9px] text-gray-300">—</span>
         ),
     },
     {
@@ -298,11 +300,15 @@ const DiscountManagement = () => {
       label: "Valid Period",
       render: (row) => {
         if (!row.end_date) {
-          return <span className="text-sm text-gray-500">Permanent</span>;
+          return (
+            <span className="text-[10px] sm:text-[11px] text-gray-500">
+              Permanent
+            </span>
+          );
         }
         const startText = row.start_date ? formatDate(row.start_date) : null;
         return (
-          <span className="text-sm text-gray-500">
+          <span className="text-[10px] sm:text-[11px] text-gray-500">
             {startText ? `${startText} - ` : "Until "}
             {formatDate(row.end_date)}
           </span>
@@ -355,7 +361,11 @@ const DiscountManagement = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-4 sm:gap-6 to gap-2 so the page matches the tighter
+    // rhythm already used on Product Management, instead of leaving large
+    // empty bands between each section.
+    <div className="flex flex-col gap-2">
       <PageHeader
         icon={<AiOutlinePercentage />}
         title="Discount Management"
@@ -408,17 +418,17 @@ const DiscountManagement = () => {
           checked. Stacks vertically on narrow screens and sits on one
           line from the small breakpoint upward. */}
       {selectedIds.length > 0 && (
-        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">
             {selectedIds.length} item{selectedIds.length === 1 ? "" : "s"}{" "}
             selected
           </span>
           <Button
             variant="danger"
             size="sm"
-            leftIcon={<AiOutlineDelete className="w-4 h-4" />}
+            leftIcon={<AiOutlineDelete className="w-3.5 h-3.5" />}
             onClick={() => setConfirmBulkDeleteOpen(true)}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
           >
             Delete
           </Button>

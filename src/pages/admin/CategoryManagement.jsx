@@ -17,8 +17,6 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import ConfirmModal from "../../components/ui/ConfirmModal";
-import EmptyState from "../../components/ui/EmptyState";
-import Spinner from "../../components/ui/Spinner";
 import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
 import CategoryStatsCards from "../../components/admin-categories/CategoryStatsCards";
@@ -62,14 +60,19 @@ const CategoryImageCell = ({ category }) => {
         src={category.image}
         alt={category.name}
         onError={() => setImageFailed(true)}
-        className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+        className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
+        // w-10 h-10 (40px) -> w-7 h-7 (28px): same fix as ProductList's thumbnail —
+        // 40px was taller than the DataTable's fixed 36px row, forcing every category
+        // row to grow past it
       />
     );
   }
 
   return (
-    <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0 ring-1 ring-black/5">
-      <AiOutlinePicture className="w-4.5 h-4.5" />
+    <div className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0 ring-1 ring-black/5">
+      {/* w-10 h-10 -> w-7 h-7: matches the real-image branch above so the placeholder
+          icon box is never taller than the fixed row height either */}
+      <AiOutlinePicture className="w-4 h-4" />
     </div>
   );
 };
@@ -234,7 +237,9 @@ const CategoryManagement = () => {
       key: "name",
       label: "Name",
       render: (row) => (
-        <span className="text-sm font-medium text-gray-900">{row.name}</span>
+        <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
+          {row.name}
+        </span>
       ),
     },
     {
@@ -256,7 +261,7 @@ const CategoryManagement = () => {
       key: "created_at",
       label: "Created Date",
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
           {formatDate(row.created_at)}
         </span>
       ),
@@ -356,7 +361,11 @@ const CategoryManagement = () => {
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-4 sm:gap-6 to gap-2 so the page matches the tighter
+    // rhythm already used on Product Management, instead of leaving large
+    // empty bands between each section.
+    <div className="flex flex-col gap-2">
       <PageHeader
         icon={<AiOutlineTag />}
         title="Category Management"
@@ -386,69 +395,59 @@ const CategoryManagement = () => {
         onExport={handleExport}
       />
 
-      <div
-        className="
-          bg-white rounded-2xl border border-gray-100 overflow-hidden
-          shadow-md
-          hover:shadow-[0_4px_14px_-4px_rgba(16,24,40,0.10)]
-          transition-all duration-300
-        "
-      >
-        {isLoading ? (
-          <div className="py-16 flex items-center justify-center">
-            <Spinner size="lg" />
-          </div>
-        ) : filteredCategories.length === 0 ? (
-          <div className="py-8">
-            <EmptyState
-              variant="noResults"
-              title="No Categories Found"
-              description={
-                hasActiveFilters
-                  ? "Try a different search term or date range."
-                  : "Create your first category to start organizing products."
-              }
-            />
-          </div>
-        ) : (
-          <div className="p-3 sm:p-4">
-            {/* Bulk action bar — appears only while one or more rows are
-                checked. Stacks vertically on narrow screens and sits on
-                one line from the small breakpoint upward. */}
-            {selectedIds.length > 0 && (
-              <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span className="text-sm font-medium text-gray-700">
-                  {selectedIds.length} item{selectedIds.length === 1 ? "" : "s"}{" "}
-                  selected
-                </span>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  leftIcon={<AiOutlineDelete className="w-4 h-4" />}
-                  onClick={() => setConfirmBulkDeleteOpen(true)}
-                  className="w-full sm:w-auto"
-                >
-                  Delete
-                </Button>
-              </div>
-            )}
-            <DataTable
-              columns={columns}
-              data={paginatedCategories}
-              keyField="id"
-              selectable
-              onSelectionChange={setSelectedIds}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalResults={filteredCategories.length}
-              onPageChange={setCurrentPage}
-              pageSize={pageSize}
-              pageSizeOptions={PAGE_SIZE_OPTIONS}
-              onPageSizeChange={handlePageSizeChange}
-            />
-          </div>
-        )}
-      </div>
+      {/* Bulk action bar — appears only while one or more rows are checked.
+          Rendered as a plain sibling here (matching Product/Discount/Order
+          Management), not nested inside an extra wrapper card. */}
+      {selectedIds.length > 0 && (
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">
+            {selectedIds.length} item{selectedIds.length === 1 ? "" : "s"}{" "}
+            selected
+          </span>
+          <Button
+            variant="danger"
+            size="sm"
+            leftIcon={<AiOutlineDelete className="w-3.5 h-3.5" />}
+            onClick={() => setConfirmBulkDeleteOpen(true)}
+            className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
+          >
+            Delete
+          </Button>
+        </div>
+      )}
+
+      {/* REMOVED: this table used to sit inside its own extra
+          "bg-white rounded-2xl border shadow-md" card with p-3 sm:p-4
+          padding, wrapped around a manual isLoading/empty-state check —
+          on top of DataTable's own card styling. That produced a visibly
+          double-boxed table with an extra padded shell around it, unlike
+          every other admin list page, which renders <DataTable /> directly.
+          DataTable already handles the loading skeleton and the empty
+          state internally via its isLoading prop and the emptyTitle/
+          emptyDescription overrides added for this exact case, so the
+          extra wrapper, the manual Spinner, and the manual EmptyState
+          call are no longer needed. */}
+      <DataTable
+        columns={columns}
+        data={paginatedCategories}
+        keyField="id"
+        selectable
+        onSelectionChange={setSelectedIds}
+        isLoading={isLoading}
+        emptyTitle="No Categories Found"
+        emptyDescription={
+          hasActiveFilters
+            ? "Try a different search term or date range."
+            : "Create your first category to start organizing products."
+        }
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalResults={filteredCategories.length}
+        onPageChange={setCurrentPage}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={handlePageSizeChange}
+      />
 
       <CategoryFormPanel
         key={formSessionId}

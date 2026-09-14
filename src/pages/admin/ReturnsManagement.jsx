@@ -192,11 +192,17 @@ const ReturnDetailModal = ({
       // type: "order" — matches the same type the backend itself uses for
       // every automatic return/order notification, so this message lands
       // in the customer's "Orders" notification tab alongside them.
+      // reference_type / reference_id — API 78 (v4) marks both fields as
+      // required on this endpoint. This modal always operates on a single
+      // open return, so the real return id is already available and is
+      // sent here instead of being left out.
       return sendNotification({
         user: customer.user,
         title: messageTitle,
         message: messageBody,
         type: "order",
+        reference_type: "return",
+        reference_id: returnItem.id,
         sent_via: "in_app",
       });
     },
@@ -888,7 +894,9 @@ const ReturnsManagement = () => {
       key: "order_number",
       label: "Order ID",
       render: (row) => (
-        <span className="text-sm text-gray-700">{row.order_number}</span>
+        <span className="text-[10px] sm:text-[11px] text-gray-700">
+          {row.order_number}
+        </span>
       ),
     },
     {
@@ -897,7 +905,7 @@ const ReturnsManagement = () => {
       render: (row) => (
         <div className="flex items-center gap-2">
           <Avatar name={row.customer_name} size="sm" />
-          <span className="text-sm text-gray-900">
+          <span className="text-[10px] sm:text-[11px] text-gray-900">
             {row.customer_name || "—"}
           </span>
         </div>
@@ -914,7 +922,7 @@ const ReturnsManagement = () => {
       key: "created_at",
       label: "Date",
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
           {formatDate(row.created_at)}
         </span>
       ),
@@ -981,7 +989,11 @@ const ReturnsManagement = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* ================================================================
           PAGE HEADER — shared gradient-badge header, same component used
           on every other admin page, rendered first as requested.
@@ -1079,8 +1091,8 @@ const ReturnsManagement = () => {
           decided ones that will be skipped is shown for clarity.
           ================================================================ */}
       {selectedReturnIds.length > 0 && (
-        <div className="bg-primary-50 border border-primary-100 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-xs font-medium text-gray-700">
             {selectedReturnIds.length} return
             {selectedReturnIds.length === 1 ? "" : "s"} selected
             {skippedSelectedCount > 0 && (
@@ -1090,13 +1102,13 @@ const ReturnsManagement = () => {
               </span>
             )}
           </span>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full sm:w-auto">
             <Button
               variant="primary"
               size="sm"
               disabled={selectedPendingReturns.length === 0}
               onClick={() => handleRequestBulkDecision(RETURN_STATUS.APPROVED)}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
               Approve
             </Button>
@@ -1105,7 +1117,7 @@ const ReturnsManagement = () => {
               size="sm"
               disabled={selectedPendingReturns.length === 0}
               onClick={() => handleRequestBulkDecision(RETURN_STATUS.REJECTED)}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
               Reject
             </Button>

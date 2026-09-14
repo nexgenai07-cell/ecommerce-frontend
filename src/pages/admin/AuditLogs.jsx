@@ -175,7 +175,7 @@ const AuditLogs = () => {
       key: "created_at",
       label: "Timestamp",
       render: (row) => (
-        <span className="text-sm text-gray-600">
+        <span className="text-[10px] sm:text-[11px] text-gray-600">
           {formatDate(row.created_at)}
         </span>
       ),
@@ -184,7 +184,7 @@ const AuditLogs = () => {
       key: "user",
       label: "User",
       render: (row) => (
-        <span className="text-sm font-medium text-gray-900">
+        <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
           {(typeof row.user === "object" ? row.user?.name : row.user) ||
             "System"}
         </span>
@@ -206,21 +206,25 @@ const AuditLogs = () => {
       key: "entity",
       label: "Entity",
       render: (row) => (
-        <span className="text-sm text-gray-700">{row.entity}</span>
+        <span className="text-[10px] sm:text-[11px] text-gray-700">
+          {row.entity}
+        </span>
       ),
     },
     {
       key: "entity_id",
       label: "Entity ID",
       render: (row) => (
-        <span className="text-sm text-gray-500 font-mono">{row.entity_id}</span>
+        <span className="text-[10px] sm:text-[11px] text-gray-500 font-mono">
+          {row.entity_id}
+        </span>
       ),
     },
     {
       key: "ip_address",
       label: "IP Address",
       render: (row) => (
-        <span className="text-sm text-gray-500 font-mono">
+        <span className="text-[10px] sm:text-[11px] text-gray-500 font-mono">
           {row.ip_address}
         </span>
       ),
@@ -237,7 +241,7 @@ const AuditLogs = () => {
             // double open when the link itself is clicked
             setSelectedLog(row);
           }}
-          className="text-sm text-primary font-medium hover:underline"
+          className="text-[10px] sm:text-[11px] text-primary font-medium hover:underline"
         >
           Details
         </button>
@@ -246,7 +250,11 @@ const AuditLogs = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       <PageHeader icon={<AiOutlineFileText />} title="Audit Logs" />
 
       {/* Layout: a flex-wrap row rather than a three-column grid.

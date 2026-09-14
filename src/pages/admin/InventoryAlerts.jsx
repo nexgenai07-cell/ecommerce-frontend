@@ -360,17 +360,22 @@ const InventoryAlerts = () => {
       key: "product",
       label: "Product",
       render: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* gap-3 -> gap-2, w-10 h-10 -> w-7 h-7: same fix as ProductList's Product
+              column — the 40px thumbnail was taller than the DataTable's fixed 36px
+              row and was forcing this row to grow past it */}
           <img
             src={row.primary_image || "/placeholder-product.svg"}
             alt={row.name}
-            className="w-10 h-10 rounded-lg object-cover border border-gray-100 shrink-0"
+            className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
           />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
               {row.name}
             </p>
-            <p className="text-xs text-gray-400">SKU: {row.sku || "—"}</p>
+            <p className="text-[9px] text-gray-400 leading-tight">
+              SKU: {row.sku || "—"}
+            </p>
           </div>
         </div>
       ),
@@ -394,10 +399,10 @@ const InventoryAlerts = () => {
         <span
           className={
             (row.available_stock ?? 0) === 0
-              ? "text-danger font-medium text-sm"
+              ? "text-danger font-medium text-[10px] sm:text-[11px]"
               : alertsByProductId[row.id]
-                ? "text-warning font-medium text-sm"
-                : "text-gray-900 text-sm"
+                ? "text-warning font-medium text-[10px] sm:text-[11px]"
+                : "text-gray-900 text-[10px] sm:text-[11px]"
           }
         >
           {row.available_stock ?? 0}
@@ -442,7 +447,11 @@ const InventoryAlerts = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* Shared gradient PageHeader — matches every other admin screen.
           Export Report button lives inside the header's `actions` slot. */}
       <PageHeader icon={<AiOutlineWarning />} title="Inventory Alerts" />

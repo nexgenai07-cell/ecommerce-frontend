@@ -140,7 +140,11 @@ const PostsList = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    // Vertical spacing between the header, stats cards, toolbar, and table
+    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
+    // already used on Product Management, instead of leaving large empty
+    // bands between each section.
+    <div className="flex flex-col gap-2">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader
         icon={<AiOutlineFileText />}

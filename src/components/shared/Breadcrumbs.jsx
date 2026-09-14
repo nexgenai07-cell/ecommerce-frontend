@@ -1,4 +1,3 @@
-// ============================================================
 // Breadcrumbs — SHARED, ROUTE-DRIVEN BREADCRUMB TRAIL
 // ============================================================
 // This single component is responsible for the breadcrumb trail on
@@ -32,9 +31,12 @@ import { Link, useLocation, matchPath } from "react-router-dom";
 
 import { useEffect } from "react";
 
-import { AiOutlineHome, AiOutlineRight } from "react-icons/ai";
+import { AiOutlineHome } from "react-icons/ai";
+import { MdKeyboardArrowRight } from "react-icons/md";
 // AiOutlineHome  — small icon prefixing the very first crumb, echoing
 //                  the "Home"/"Dashboard" destination it links to
+// MdKeyboardArrowRight — bolder, solid separator chevron between crumbs
+//                  (thin AiOutlineRight didn't read as "bold" even in black)
 
 import { ROUTES } from "../../constants/routes";
 import { BREADCRUMB_ROUTES } from "../../constants/breadcrumbs.config";
@@ -130,22 +132,21 @@ const Breadcrumbs = () => {
       }
     : null;
 
-  // The breadcrumb pill markup itself — identical on both sides of the
+  // The breadcrumb trail markup itself — identical on both sides of the
   // app, only the surrounding wrapper (below) differs, since the
   // customer side needs the shared Container's max-width/side-padding
   // and the admin side already sits inside AdminLayout's own padded
   // <main>.
+  //
+  // Flat, compact, single-line trail (no pill/box chrome) — matches the
+  // reference screenshot's style (Best Buy-style breadcrumb), themed
+  // with our own brand primary color instead of blue. Scrolls
+  // horizontally on narrow screens instead of wrapping onto a second
+  // line, so it always stays a single compact row no matter how deep
+  // the trail or how narrow the viewport.
   const breadcrumbPill = (
-    <nav
-      aria-label="Breadcrumb"
-      className={cn(
-        "flex items-center gap-1.5 text-sm flex-wrap w-fit max-w-full rounded-full px-4 py-2 border",
-        isAdminSide
-          ? "bg-white border-gray-200 shadow-sm text-gray-400"
-          : "bg-gray-50 border-gray-100 text-gray-400",
-      )}
-    >
-      <ol className="flex items-center gap-1.5 flex-wrap min-w-0">
+    <nav aria-label="Breadcrumb" className="w-full min-w-0">
+      <ol className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap whitespace-nowrap min-w-0">
         {crumbs.map((crumb, index) => {
           const isFirst = index === 0;
           const isLast = index === crumbs.length - 1;
@@ -157,14 +158,16 @@ const Breadcrumbs = () => {
           return (
             <li
               key={`${crumb.label}-${index}`}
-              className="flex items-center gap-1.5 min-w-0"
+              className="flex items-center gap-1 shrink-0 max-w-[38vw] sm:max-w-[220px]"
             >
-              {isFirst && <AiOutlineHome className="w-3.5 h-3.5 shrink-0" />}
+              {isFirst && (
+                <AiOutlineHome className="w-3 h-3 shrink-0 text-gray-400 mr-0.5" />
+              )}
 
               {isClickable ? (
                 <Link
                   to={crumb.path}
-                  className="font-medium hover:text-primary transition-colors truncate"
+                  className="text-[11px] sm:text-xs font-medium text-primary hover:text-primary-dark transition-colors truncate"
                 >
                   {crumb.label}
                 </Link>
@@ -172,8 +175,10 @@ const Breadcrumbs = () => {
                 <span
                   aria-current={isLast ? "page" : undefined}
                   className={cn(
-                    "truncate",
-                    isLast ? "text-gray-700 font-semibold" : "font-medium",
+                    "text-[11px] sm:text-xs truncate",
+                    isLast
+                      ? "text-black font-bold"
+                      : "text-primary font-medium",
                   )}
                 >
                   {crumb.label}
@@ -181,7 +186,7 @@ const Breadcrumbs = () => {
               )}
 
               {!isLast && (
-                <AiOutlineRight className="w-3 h-3 shrink-0 text-gray-300" />
+                <MdKeyboardArrowRight className="w-4 h-4 shrink-0 text-black ml-0.5" />
               )}
             </li>
           );
@@ -207,7 +212,7 @@ const Breadcrumbs = () => {
   // ------------------------------------------------------------
   if (isAdminSide) {
     return (
-      <div className="w-full mb-4 md:mb-6">
+      <div className="w-full mb-3 md:mb-4">
         {breadcrumbPill}
         {structuredDataScript}
       </div>
@@ -216,11 +221,11 @@ const Breadcrumbs = () => {
 
   // ------------------------------------------------------------
   // Customer side — wrapped in the same Container every storefront
-  // page uses, so the pill's left edge lines up exactly with the page
+  // page uses, so the trail's left edge lines up exactly with the page
   // heading/content rendered just below it.
   // ------------------------------------------------------------
   return (
-    <Container className="pt-4 sm:pt-6">
+    <Container className="pt-3 pb-1 sm:pt-4">
       {breadcrumbPill}
       {structuredDataScript}
     </Container>
