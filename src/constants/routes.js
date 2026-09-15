@@ -116,6 +116,11 @@ export const ROUTES = {
   // System-level admin tools
   ADMIN_AUDIT_LOGS: "/admin/audit-logs",
   ADMIN_NOTIFICATION_TEMPLATES: "/admin/notification-templates",
+  // ADMIN_PROFILE — the admin's own profile page (API 7 / API 8), reached
+  // from the "Profile" link in the TopHeader account dropdown. Reuses the
+  // exact same /api/v1/auth/me/ endpoint the customer profile page uses —
+  // there is no separate admin-only profile endpoint.
+  ADMIN_PROFILE: "/admin/profile",
 
   // ----------------------------
   // ERROR ROUTES

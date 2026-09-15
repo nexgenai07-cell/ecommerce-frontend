@@ -1,4 +1,3 @@
-// ============================================================
 // SalesOverTimeChart — SALES REPORT SUB-COMPONENT
 // ============================================================
 // Real data from API 83 (Sales Report), rendered as an area chart with
@@ -30,16 +29,21 @@ const METRIC_OPTIONS = [
   { key: "total_orders", label: "Orders" },
 ];
 
-const SalesOverTimeChart = ({ startDate, endDate }) => {
+const SalesOverTimeChart = ({ startDate, endDate, status }) => {
   const [metric, setMetric] = useState("total_revenue");
 
   const { data: response, isLoading } = useQuery({
-    queryKey: ["salesReport", "chart", startDate, endDate],
-    queryFn: ({ signal }) => getSalesReport({
-        start_date: startDate,
-        end_date: endDate,
-        period: "daily",
-      }, signal),
+    queryKey: ["salesReport", "chart", startDate, endDate, status],
+    queryFn: ({ signal }) =>
+      getSalesReport(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          period: "daily",
+          status, // Sold/Cancelled/Refunded/All filter, passed down from SalesReport.jsx
+        },
+        signal,
+      ),
   });
 
   const points = response?.data?.data || [];

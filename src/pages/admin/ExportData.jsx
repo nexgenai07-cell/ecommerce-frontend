@@ -1,19 +1,3 @@
-// SIGNIFICANTLY simplified from the original design. The entire
-// backend only has ONE export capability (API 90: GET
-// /api/v1/analytics/export/, params: start_date, end_date, type),
-// which only ever returns a CSV file. Everything in the mockup that
-// implied more than that — PDF/Excel format choice, a field-selection
-// builder, and a "Recent Exports" history with stored file sizes —
-// has NO backing endpoint anywhere in the API doc and was removed
-// rather than built as a non-functional shell.
-//
-// Only "sales" is explicitly confirmed as a real `type` value in the
-// docs (given as the literal example). The other 5 report types below
-// are OPTIMISTIC attempts — if the backend doesn't recognize a type
-// string, that export will likely fail or return an empty file; watch
-// the Network tab and toast errors to see which ones actually work,
-// and send a backend request to confirm/add the rest.
-
 import { useState } from "react";
 import {
   AiOutlineShoppingCart,
@@ -88,6 +72,17 @@ const CUSTOM_TYPE_OPTIONS = REPORT_TYPES.map((r) => ({
   label: r.title,
 }));
 
+// STATUS_OPTIONS — the optional status filter API 99 now accepts, but
+// ONLY when the chosen report type is "sales" or "revenue" (see the
+// conditional rendering below). Same accepted values as the Sales
+// Report / Revenue Report pages.
+const STATUS_OPTIONS = [
+  { value: "sold", label: "Sold" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "refunded", label: "Refunded" },
+  { value: "all", label: "All Statuses" },
+];
+
 const getDefaultRange = () => {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -108,16 +103,21 @@ const ExportData = () => {
     defaultRange.startDate,
   );
   const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
+  const [customStatus, setCustomStatus] = useState("sold");
   const [isCustomExporting, setIsCustomExporting] = useState(false);
 
   // Shared download-trigger logic — used by both the quick report
   // cards and the custom export builder below, so the actual
   // "turn the CSV blob into a downloaded file" mechanics live in one place
-  const triggerDownload = async (type, startDate, endDate) => {
+  const triggerDownload = async (type, startDate, endDate, status) => {
     const response = await exportReport({
       type,
       start_date: startDate || undefined,
       end_date: endDate || undefined,
+      // status only means anything to the backend for type "sales" or
+      // "revenue" — left undefined for every other report type so it's
+      // simply omitted from the request
+      status: type === "sales" || type === "revenue" ? status : undefined,
     });
     const blobUrl = URL.createObjectURL(response.data);
     const link = document.createElement("a");
@@ -146,7 +146,12 @@ const ExportData = () => {
   const handleCustomExport = async () => {
     setIsCustomExporting(true);
     try {
-      await triggerDownload(customType, customStartDate, customEndDate);
+      await triggerDownload(
+        customType,
+        customStartDate,
+        customEndDate,
+        customStatus,
+      );
       showSuccess("Export downloaded.");
     } catch (error) {
       showError("Failed to generate export. Please try again.");
@@ -212,6 +217,22 @@ const ExportData = () => {
             Generate Export
           </Button>
         </div>
+
+        {/* Status filter — only meaningful (and only accepted by the
+            backend) when the chosen report type is "sales" or
+            "revenue", so it's hidden entirely for every other type
+            instead of being sent and silently ignored. */}
+        {(customType === "sales" || customType === "revenue") && (
+          <div className="w-full sm:w-60">
+            <Select
+              label="Order Status"
+              options={STATUS_OPTIONS}
+              value={customStatus}
+              onChange={(e) => setCustomStatus(e.target.value)}
+            />
+          </div>
+        )}
+
         <p className="text-xs text-gray-400">
           Output format is always CSV — the backend's export endpoint doesn't
           support PDF or Excel.

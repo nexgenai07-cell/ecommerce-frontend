@@ -3,7 +3,7 @@ import { motion } from "framer-motion"; // motion.div wraps the page to animate 
 import { BsSpeedometer2 } from "react-icons/bs"; // Speedometer icon used inside the page header's gradient icon box — represents "overview"
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
-import { getMyOrders } from "../../api/orders.api"; // API function — fetches all orders placed by the logged-in customer
+import { getMyOrders, getMyOrderStats } from "../../api/orders.api"; // API functions — fetches the logged-in customer's orders, and their accurate total_orders/total_spent stats (API 56.1)
 import { getWishlist } from "../../api/wishlist.api"; // API function — fetches the customer's saved wishlist items
 import { getNotifications } from "../../api/notifications.api"; // API function — fetches all notifications for the customer
 import { getReturns } from "../../api/returns.api"; // API function — fetches all return requests filed by the customer
@@ -29,6 +29,16 @@ const AccountDashboard = () => {
   const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: QUERY_KEYS.MY_ORDERS,
     queryFn: ({ signal }) => getMyOrders(undefined, signal),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  // Order stats — API 56.1 — the accurate, backend-computed total_orders
+  // and total_spent for this customer, using the same "only a
+  // confirmed/shipped/out_for_delivery/delivered order counts" rule
+  // used everywhere else in the app. staleTime 2 min, same as orders.
+  const { data: orderStatsData } = useQuery({
+    queryKey: QUERY_KEYS.MY_ORDER_STATS,
+    queryFn: ({ signal }) => getMyOrderStats(signal),
     staleTime: 1000 * 60 * 2,
   });
 
@@ -68,12 +78,16 @@ const AccountDashboard = () => {
   // Only the 3 most recent orders are shown in the RecentOrdersTable preview
   const recentOrders = orders.slice(0, 3);
 
-  // Total money spent — sum of total_amount across all orders
-  // parseFloat guards against string values from the API; || 0 prevents NaN
-  const totalSpent = orders.reduce(
-    (sum, o) => sum + parseFloat(o.total_amount || 0),
-    0,
-  );
+  // Total Orders / Total Spent — sourced from API 56.1 (getMyOrderStats),
+  // NOT computed by summing/counting the orders array above. That list
+  // includes every order regardless of status (pending_payment, on_hold,
+  // cancelled, etc.), which previously produced an inflated number that
+  // didn't match what the backend and admin panel consider a real, paid
+  // order. total_spent is always returned as a string, so it's parsed
+  // with parseFloat here; both fall back to 0 while the query is loading.
+  const orderStats = orderStatsData?.data;
+  const totalOrdersCount = orderStats?.total_orders || 0;
+  const totalSpent = parseFloat(orderStats?.total_spent || 0);
 
   // Full wishlist items array — falls back to empty array
   const wishlistItems = wishlistData?.data?.items || [];
@@ -224,8 +238,8 @@ const AccountDashboard = () => {
             {/* ── Stats cards ──────────────────────────────────────────────────────
                 4-card grid showing key metrics derived from the API responses above */}
             <DashboardStats
-              orders={orders} // full orders array — used to compute orders.length
-              totalSpent={totalSpent} // pre-computed sum of all order totals
+              totalOrders={totalOrdersCount} // accurate paid-order count from API 56.1 (getMyOrderStats)
+              totalSpent={totalSpent} // accurate spend total from API 56.1 (getMyOrderStats)
               wishlistCount={wishlistItems.length} // total number of saved wishlist products
               pendingReturns={pendingReturns} // count of returns still awaiting review
             />

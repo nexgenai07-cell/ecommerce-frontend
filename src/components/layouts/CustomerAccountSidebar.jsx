@@ -233,7 +233,7 @@ const CustomerAccountSidebar = () => {
             {" "}
             {/* Row layout for avatar and text, with bottom margin */}
             <Avatar
-              src={user?.avatar} // Pass the user's avatar image URL
+              src={user?.profile_picture} // Pass the user's avatar image URL
               name={user?.name} // Pass the user's name (likely used as a fallback for initials)
               size="lg" // Large avatar size
               className="shrink-0" // Prevent the avatar from shrinking in the flex layout

@@ -21,10 +21,24 @@ import PageHeader from "../../components/shared/PageHeader";
 // here so Revenue Report finally matches the rest of the panel instead of
 // using its own plain <h1>.
 
+import Select from "../../components/ui/Select";
+// Select — powers the new Sold / Cancelled / Refunded / All status filter
+
 import RevenueStatsCards from "../../components/admin-analytics/RevenueStatsCards";
 import RevenueByPeriodChart from "../../components/admin-analytics/RevenueByPeriodChart";
 import RevenueYearComparisonChart from "../../components/admin-analytics/RevenueYearComparisonChart";
 import RevenueHeatmap from "../../components/admin-analytics/RevenueHeatmap";
+
+// STATUS_OPTIONS — identical filter to the one added to Sales Report
+// (API 93 shares the same revenue-status fix and the same optional
+// status query parameter as API 92). "sold" is the default and
+// matches this report's original, always-paid-orders-only behavior.
+const STATUS_OPTIONS = [
+  { value: "sold", label: "Sold" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "refunded", label: "Refunded" },
+  { value: "all", label: "All Statuses" },
+];
 
 const getDefaultRange = () => {
   const now = new Date();
@@ -85,6 +99,7 @@ const RevenueReport = () => {
   const defaultRange = getDefaultRange();
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
+  const [status, setStatus] = useState("sold");
   const [isExporting, setIsExporting] = useState(false);
 
   // Recomputed on every render so "Today" always means today, not the day
@@ -106,6 +121,7 @@ const RevenueReport = () => {
         type: "revenue",
         start_date: startDate,
         end_date: endDate,
+        status, // same filter currently selected on screen, so the downloaded file always matches what's shown
       });
       const blobUrl = URL.createObjectURL(response.data);
       const link = document.createElement("a");
@@ -180,6 +196,18 @@ const RevenueReport = () => {
               </Button>
             </div>
 
+            {/* Status filter row — Sold / Cancelled / Refunded / All.
+                Sits on its own row under the date pickers so it never
+                crowds the export button on a narrow phone screen. */}
+            <div className="w-full sm:w-45">
+              <Select
+                aria-label="Order status filter"
+                options={STATUS_OPTIONS}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              />
+            </div>
+
             {/* ==========================================================
                 QUICK-RANGE CHIPS — one-tap shortcuts sitting directly
                 below the date pickers. Horizontally scrollable with the
@@ -218,12 +246,26 @@ const RevenueReport = () => {
           has no relevance to a revenue analytics page and no
           associated action was clear from the mockup. */}
 
-      <RevenueStatsCards startDate={startDate} endDate={endDate} />
+      <RevenueStatsCards
+        startDate={startDate}
+        endDate={endDate}
+        status={status}
+      />
       {/* Note: "Net Revenue" and "Refunds Total" cards from the design
           are NOT included — API 84 returns only {period, revenue},
           with no gross/net/refund breakdown anywhere. */}
 
-      <RevenueByPeriodChart startDate={startDate} endDate={endDate} />
+      <RevenueByPeriodChart
+        startDate={startDate}
+        endDate={endDate}
+        status={status}
+      />
+      {/* Note: the status filter above intentionally does NOT extend to
+          RevenueYearComparisonChart or RevenueHeatmap below — both
+          pull their own independent, multi-year/multi-month data
+          windows unrelated to the startDate/endDate range controls on
+          this page, so wiring a same-page filter into them would not
+          have a coherent meaning. */}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RevenueYearComparisonChart />

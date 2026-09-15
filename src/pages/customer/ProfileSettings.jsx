@@ -52,7 +52,7 @@ const ProfileSettings = () => {
             <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
               <div className="p-1 rounded-full bg-white/20 backdrop-blur-sm shrink-0 w-fit">
                 <Avatar
-                  src={user?.avatar}
+                  src={user?.profile_picture}
                   name={user?.name}
                   size="xl"
                   className="ring-2 ring-white/30"

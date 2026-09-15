@@ -653,6 +653,17 @@ const AdminSidebar = () => {
                 </p>
               </div>
 
+              {/* Profile — navigates to the new Admin Profile page
+                  (API 7 / API 8) */}
+              <Link
+                to={ROUTES.ADMIN_PROFILE}
+                onClick={() => setProfileMenuOpen(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors border-b border-white/10"
+              >
+                <AiOutlineUser className="w-3.5 h-3.5" />
+                Profile
+              </Link>
+
               {/* The ONLY control that actually logs the admin out now
                   — the row below just opens this menu */}
               <button
@@ -685,7 +696,7 @@ const AdminSidebar = () => {
                 using the panel right now, not a fabricated presence
                 indicator */}
             <div className="relative shrink-0">
-              <Avatar src={user?.avatar} name={user?.name} size="sm" />
+              <Avatar src={user?.profile_picture} name={user?.name} size="sm" />
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full ring-2 ring-[#0a1622]" />
             </div>
 
@@ -784,6 +795,16 @@ const AdminSidebar = () => {
                     {user?.role === "admin" ? "Super Admin" : user?.role}
                   </p>
                 </div>
+                {/* Profile — navigates to the new Admin Profile page
+                    (API 7 / API 8) */}
+                <Link
+                  to={ROUTES.ADMIN_PROFILE}
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors border-b border-white/10"
+                >
+                  <AiOutlineUser className="w-3.5 h-3.5" />
+                  Profile
+                </Link>
                 <button
                   onClick={() => {
                     setProfileMenuOpen(false); // Close the dropdown first
@@ -804,7 +825,11 @@ const AdminSidebar = () => {
               aria-expanded={profileMenuOpen}
             >
               <div className="relative shrink-0">
-                <Avatar src={user?.avatar} name={user?.name} size="sm" />
+                <Avatar
+                  src={user?.profile_picture}
+                  name={user?.name}
+                  size="sm"
+                />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full ring-2 ring-[#0a1622]" />
               </div>
               <div className="flex-1 min-w-0 text-left">

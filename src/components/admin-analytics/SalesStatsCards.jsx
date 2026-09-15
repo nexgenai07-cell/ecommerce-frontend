@@ -42,15 +42,18 @@ const formatGrowth = (current, previous) => {
   // toFixed(1) -> rounds to one decimal place, e.g. "+521.1%"
 };
 
-const SalesStatsCards = ({ startDate, endDate }) => {
+const SalesStatsCards = ({ startDate, endDate, status }) => {
   // startDate, endDate -> the currently selected date range, passed down
   // from the SalesReport page so this component and the page stay in sync
+  // status -> the Sold/Cancelled/Refunded/All filter, also passed down
+  // from the SalesReport page — included in both queries below so these
+  // cards always agree with the chart and the CSV export
 
   // Current period — the real date range the admin has selected
   const { data: currentResponse, isLoading } = useQuery({
-    queryKey: ["salesReport", "current", startDate, endDate],
+    queryKey: ["salesReport", "current", startDate, endDate, status],
     // queryKey -> uniquely identifies this request so React Query knows
-    // when to refetch (whenever startDate/endDate change)
+    // when to refetch (whenever startDate/endDate/status change)
     queryFn: ({ signal }) =>
       getSalesReport(
         {
@@ -59,6 +62,7 @@ const SalesStatsCards = ({ startDate, endDate }) => {
           period: "daily",
           // period: "daily" -> ask the API for one data point per day so
           // the totals below are accurate for any custom range
+          status,
         },
         signal,
       ),
@@ -72,6 +76,7 @@ const SalesStatsCards = ({ startDate, endDate }) => {
       "previous",
       previousRange.startDate,
       previousRange.endDate,
+      status,
     ],
     queryFn: ({ signal }) =>
       getSalesReport(
@@ -79,6 +84,7 @@ const SalesStatsCards = ({ startDate, endDate }) => {
           start_date: previousRange.startDate,
           end_date: previousRange.endDate,
           period: "daily",
+          status,
         },
         signal,
       ),

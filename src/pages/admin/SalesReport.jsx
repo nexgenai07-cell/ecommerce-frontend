@@ -29,9 +29,25 @@ import PageHeader from "../../components/shared/PageHeader";
 // here so Sales Report finally matches the rest of the panel instead of
 // using its own plain <h1>.
 
+import Select from "../../components/ui/Select";
+// Select — powers the new Sold / Cancelled / Refunded / All status filter
+
 import SalesStatsCards from "../../components/admin-analytics/SalesStatsCards";
 import SalesOverTimeChart from "../../components/admin-analytics/SalesOverTimeChart";
 import DailyBreakdownTable from "../../components/admin-analytics/DailyBreakdownTable";
+
+// STATUS_OPTIONS — the status filter now available on the Sales Report
+// (API 92). "sold" is the default and matches the report's original,
+// always-paid-orders-only behavior — the other options let an admin
+// look at cancelled or refunded orders instead, or lift the filter
+// entirely with "all". The exact same value is also sent to the CSV
+// export (API 99) so the downloaded file always matches the screen.
+const STATUS_OPTIONS = [
+  { value: "sold", label: "Sold" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "refunded", label: "Refunded" },
+  { value: "all", label: "All Statuses" },
+];
 
 // Default range — the current calendar month to date, a reasonable
 // starting point before the admin picks their own custom range
@@ -92,6 +108,7 @@ const SalesReport = () => {
   const defaultRange = getDefaultRange();
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
+  const [status, setStatus] = useState("sold");
   const [isExporting, setIsExporting] = useState(false);
 
   // Recomputed on every render so "Today" always means today, not the day
@@ -104,12 +121,17 @@ const SalesReport = () => {
   // query) AND the Daily Breakdown table below — fetched once here
   // and passed down, so the table doesn't duplicate the same request
   const { data: response, isLoading } = useQuery({
-    queryKey: ["salesReport", "breakdown", startDate, endDate],
-    queryFn: ({ signal }) => getSalesReport({
-        start_date: startDate,
-        end_date: endDate,
-        period: "daily",
-      }, signal),
+    queryKey: ["salesReport", "breakdown", startDate, endDate, status],
+    queryFn: ({ signal }) =>
+      getSalesReport(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          period: "daily",
+          status,
+        },
+        signal,
+      ),
   });
 
   const dataPoints = response?.data?.data || [];
@@ -128,6 +150,7 @@ const SalesReport = () => {
         type: "sales",
         start_date: startDate,
         end_date: endDate,
+        status, // same filter currently selected on screen, so the downloaded file always matches what's shown
       });
       const blobUrl = URL.createObjectURL(response.data);
       const link = document.createElement("a");
@@ -202,6 +225,18 @@ const SalesReport = () => {
               </Button>
             </div>
 
+            {/* Status filter row — Sold / Cancelled / Refunded / All.
+                Sits on its own row under the date pickers so it never
+                crowds the CSV button on a narrow phone screen. */}
+            <div className="w-full sm:w-45">
+              <Select
+                aria-label="Order status filter"
+                options={STATUS_OPTIONS}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              />
+            </div>
+
             {/* ==========================================================
                 QUICK-RANGE CHIPS — one-tap shortcuts sitting directly
                 below the date pickers. Horizontally scrollable with the
@@ -240,9 +275,17 @@ const SalesReport = () => {
           documented Export Report endpoint only returns a CSV file,
           there's no PDF generation option anywhere in the API. */}
 
-      <SalesStatsCards startDate={startDate} endDate={endDate} />
+      <SalesStatsCards
+        startDate={startDate}
+        endDate={endDate}
+        status={status}
+      />
 
-      <SalesOverTimeChart startDate={startDate} endDate={endDate} />
+      <SalesOverTimeChart
+        startDate={startDate}
+        endDate={endDate}
+        status={status}
+      />
       {/* Note: "Sales by Category" and "Payment Methods" widgets from
           the design are NOT included — see the flag notes shared
           before this code: no category-revenue endpoint exists, and a

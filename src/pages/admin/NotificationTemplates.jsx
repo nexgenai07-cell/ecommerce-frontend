@@ -29,13 +29,15 @@ const TYPE_OPTIONS = [
   { value: "promotion", label: "Promotion" },
 ];
 
-// CONFIRMED — these 3 are the complete, accepted list of `sent_via`
-// values for API 74 (previously only documented as a generic
-// unconstrained "string", now explicitly confirmed).
+// CONFIRMED — these 4 are the complete, accepted list of `sent_via`
+// values for API 78 (Send Notification): "web", "email", "whatsapp",
+// and "in_app". Sending any other value is rejected with a 400 that
+// lists these exact accepted values.
 const CHANNEL_OPTIONS = [
   { value: "in_app", label: "In-App" },
+  { value: "web", label: "Web" },
   { value: "email", label: "Email" },
-  { value: "sms", label: "SMS" },
+  { value: "whatsapp", label: "WhatsApp" },
 ];
 
 const NotificationTemplates = () => {
@@ -80,11 +82,21 @@ const NotificationTemplates = () => {
       setTitle("");
       setMessage("");
       setSelectedCustomer(null);
+      // Clearing the fields makes titleError/messageError true again
+      // (empty value fails the "required" check), so submitAttempted
+      // and touched must also reset here — otherwise the now-empty
+      // form still renders "Title is required" / "Message is required"
+      // right after a successful send.
+      setSubmitAttempted(false);
+      setTouched({ title: false, message: false });
     },
     onError: (error) =>
-      showError(
-        error?.response?.data?.message || "Failed to send notification.",
-      ),
+      // API 78's error responses are returned under an "error" key
+      // (e.g. { "error": "title and message are required." }), not
+      // "message" — reading the wrong key here would always fall
+      // back to the generic text below instead of showing the real,
+      // specific reason the request was rejected.
+      showError(error?.response?.data?.error || "Failed to send notification."),
   });
 
   const canSend =
@@ -105,9 +117,28 @@ const NotificationTemplates = () => {
   const showTitleError = (touched.title || submitAttempted) && titleError;
   const showMessageError = (touched.message || submitAttempted) && messageError;
 
+  // Customer selection is only required when NOT broadcasting. Without
+  // this, turning the toggle off and typing (but not clicking) a
+  // search result left `selectedCustomer` null, `canSend` false, and
+  // handleSend silently returned — no request, no error, nothing.
+  const customerError =
+    !isBroadcast && !selectedCustomer
+      ? "Please select a customer from the search results"
+      : "";
+  const showCustomerError = submitAttempted && customerError;
+
   const handleSend = () => {
     setSubmitAttempted(true);
-    if (titleError || messageError || !canSend) return;
+    if (titleError || messageError || customerError) return;
+
+    // A selected customer with no linked user id would otherwise send
+    // `user: null` to API 78, which the backend treats as a broadcast —
+    // silently notifying everyone instead of the intended person.
+    if (!isBroadcast && !selectedCustomer?.user) {
+      showError("This customer has no linked user account.");
+      return;
+    }
+
     sendMutation.mutate();
   };
 
@@ -182,36 +213,34 @@ const NotificationTemplates = () => {
                 )}
               </>
             )}
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <Input
-              label="Title"
-              placeholder="Your order has shipped!"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, title: true }))}
-              error={showTitleError ? titleError : undefined}
-            />
-            {showTitleError && (
-              <p className="text-xs text-danger">{titleError}</p>
+            {showCustomerError && (
+              <p className="text-xs text-danger">{customerError}</p>
             )}
           </div>
 
-          <div className="flex flex-col gap-1">
-            <Textarea
-              label="Message"
-              placeholder="Write the notification content..."
-              rows={5}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, message: true }))}
-              error={showMessageError ? messageError : undefined}
-            />
-            {showMessageError && (
-              <p className="text-xs text-danger">{messageError}</p>
-            )}
-          </div>
+          {/* Input already renders the error prop as red text below the
+              field (see Input.jsx) — a second <p> here was duplicating
+              the same message a second time under the field. */}
+          <Input
+            label="Title"
+            placeholder="Your order has shipped!"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, title: true }))}
+            error={showTitleError ? titleError : undefined}
+          />
+
+          {/* Same duplication removed here — Textarea already renders
+              its own error text below the field (see Textarea.jsx). */}
+          <Textarea
+            label="Message"
+            placeholder="Write the notification content..."
+            rows={5}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, message: true }))}
+            error={showMessageError ? messageError : undefined}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <Select
@@ -232,6 +261,7 @@ const NotificationTemplates = () => {
             variant="primary"
             leftIcon={<AiOutlineSend className="w-4 h-4" />}
             onClick={handleSend}
+            disabled={!canSend}
             isLoading={sendMutation.isPending}
             className="self-end"
           >

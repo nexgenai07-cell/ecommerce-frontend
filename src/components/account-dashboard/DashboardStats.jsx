@@ -9,11 +9,16 @@ import formatPrice from "../../utils/formatPrice"; // Formats a raw number into 
 import StatsCard from "../ui/StatsCard"; // Same compact stats chip used across the admin panel (Dashboard, Returns, Audit Logs, etc.) — brought here so the customer account dashboard matches that visual language instead of keeping its own separate card design.
 
 // getStatsConfig — builds the 4-item stats array using live data passed in from the parent
-// Defined as a function (not a static array) so values like orders.length and formatPrice(totalSpent) are computed fresh each render
-const getStatsConfig = (orders, totalSpent, wishlistCount, pendingReturns) => [
+// Defined as a function (not a static array) so values like formatPrice(totalSpent) are computed fresh each render
+const getStatsConfig = (
+  totalOrders,
+  totalSpent,
+  wishlistCount,
+  pendingReturns,
+) => [
   {
     title: "Total Orders",
-    value: orders.length, // count of all orders the customer has ever placed
+    value: totalOrders, // accurate paid-order count from API 56.1 (getMyOrderStats) — NOT every order the customer has ever placed, only ones whose payment has been confirmed
     icon: <AiOutlineShoppingCart />,
     iconBg: "bg-info-light", // token-based light blue background
     iconColor: "text-info", // token-based blue icon color
@@ -57,7 +62,7 @@ const getStatsConfig = (orders, totalSpent, wishlistCount, pendingReturns) => [
 // any manual breakpoint tuning — the exact pattern already used for the
 // KPI row on the admin Dashboard.
 const DashboardStats = ({
-  orders,
+  totalOrders,
   totalSpent,
   wishlistCount,
   pendingReturns,
@@ -66,7 +71,7 @@ const DashboardStats = ({
 
   // Build the 4 stat objects using the live data passed in from the dashboard page
   const stats = getStatsConfig(
-    orders,
+    totalOrders,
     totalSpent,
     wishlistCount,
     pendingReturns,

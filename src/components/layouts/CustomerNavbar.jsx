@@ -687,7 +687,7 @@ const CustomerNavbar = () => {
                     className="flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-full hover:bg-primary-50 transition-colors duration-200 group"
                   >
                     <Avatar
-                      src={user?.avatar}
+                      src={user?.profile_picture}
                       name={user?.name}
                       size="sm"
                       className="ring-2 ring-transparent group-hover:ring-primary-100 transition-all duration-200"
@@ -712,7 +712,7 @@ const CustomerNavbar = () => {
                           <div className="absolute -right-2 -bottom-10 w-20 h-20 bg-white/10 rounded-full" />
                           <div className="relative flex items-center gap-3">
                             <Avatar
-                              src={user?.avatar}
+                              src={user?.profile_picture}
                               name={user?.name}
                               size="lg"
                               className="ring-4 ring-white/30"
@@ -822,7 +822,11 @@ const CustomerNavbar = () => {
                 {isAuthenticated ? (
                   <div className="px-5 py-4 border-b border-gray-100">
                     <div className="flex items-center gap-3">
-                      <Avatar src={user?.avatar} name={user?.name} size="lg" />
+                      <Avatar
+                        src={user?.profile_picture}
+                        name={user?.name}
+                        size="lg"
+                      />
                       <div className="min-w-0">
                         <p className="font-semibold text-gray-900 truncate">
                           {user?.name}

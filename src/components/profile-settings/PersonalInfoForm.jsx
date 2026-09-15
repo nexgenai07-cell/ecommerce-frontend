@@ -1,14 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineCheckCircle } from "react-icons/ai";
-import { HiOutlineUserCircle } from "react-icons/hi2";
+import { HiOutlineUserCircle, HiOutlineCamera } from "react-icons/hi2";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { updateMyProfile, sendVerificationEmail } from "../../api/auth.api";
+import useAuth from "../../hooks/useAuth";
 import { showSuccess, showError } from "../ui/Toast";
 import Avatar from "../ui/Avatar";
+import ChangeEmailModal from "./ChangeEmailModal";
 
 const personalInfoSchema = z.object({
   name: z
@@ -18,10 +20,25 @@ const personalInfoSchema = z.object({
     .min(3, "Name must be at least 3 characters")
     .max(50, "Name must be less than 50 characters")
     .regex(/^[A-Za-z\s'-]+$/, "Name can only contain letters"),
+  // Same Pakistani phone format already validated on Register.jsx, so
+  // the account-level phone number entered here follows the exact
+  // same rule as the one collected at sign-up.
+  phone: z
+    .string()
+    .trim()
+    .min(1, "Phone number is required")
+    .regex(
+      /^(\+92|0)[0-9]{10}$/,
+      "Please enter a valid Pakistani phone number",
+    ),
 });
 
 const PersonalInfoForm = ({ user }) => {
   const queryClient = useQueryClient();
+  const { updateProfile } = useAuth();
+  // updateProfile -> syncs Redux auth state (and localStorage) so the
+  // navbar/sidebar avatar, name, and email reflect a save immediately,
+  // without requiring a page refresh or a fresh login.
 
   const {
     register,
@@ -43,6 +60,7 @@ const PersonalInfoForm = ({ user }) => {
     mode: "onTouched",
     defaultValues: {
       name: user?.name || "",
+      phone: user?.phone || "",
     },
   });
 
@@ -50,29 +68,90 @@ const PersonalInfoForm = ({ user }) => {
     if (user) {
       reset({
         name: user.name || "",
+        phone: user.phone || "",
       });
     }
   }, [user, reset]);
+
+  // =============================================
+  // AVATAR UPLOAD — local file selection + preview
+  // =============================================
+  // The actual upload only happens when the form is submitted (Save
+  // Changes), together with any name/phone edit, in one single
+  // request — see updateMutation below.
+  const fileInputRef = useRef(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Revokes the previous local preview URL whenever a new one is
+  // created (or the component unmounts), so the browser doesn't keep
+  // an ever-growing list of unused object URLs in memory.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const handleAvatarClick = () => fileInputRef.current?.click();
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Basic client-side guardrails before it's ever sent anywhere —
+    // an image type and a sane size cap (5MB), matching the kind of
+    // limit already used for the complaint attachment upload.
+    if (!file.type.startsWith("image/")) {
+      showError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showError("Image is too large — please choose a file under 5MB.");
+      return;
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  // The avatar shown right now — the freshly picked local file while
+  // one is pending, otherwise whatever the backend already has saved
+  const displayedAvatarSrc = previewUrl || user?.profile_picture;
 
   // =============================================
   // UPDATE PROFILE MUTATION — API 8
   // =============================================
   const updateMutation = useMutation({
     mutationFn: (data) => updateMyProfile(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       showSuccess("Profile updated successfully!");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
+      updateProfile(response?.data || {});
+      // Clear the pending local file/preview now that it's been
+      // uploaded and saved — displayedAvatarSrc falls back to the
+      // freshly saved user.profile_picture from here on.
+      setSelectedFile(null);
+      setPreviewUrl(null);
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to update profile. Please try again.",
       );
     },
   });
 
   const onSubmit = (data) => {
-    updateMutation.mutate(data);
+    updateMutation.mutate({
+      name: data.name,
+      phone: data.phone,
+      // Only included when a new picture was actually picked —
+      // updateMyProfile() (auth.api.js) switches to multipart/form-data
+      // automatically whenever this key is present.
+      ...(selectedFile ? { profile_picture: selectedFile } : {}),
+    });
   };
 
   // =============================================
@@ -93,6 +172,21 @@ const PersonalInfoForm = ({ user }) => {
       );
     },
   });
+
+  // =============================================
+  // CHANGE EMAIL MODAL — API 8.1 / API 8.2
+  // =============================================
+  const [isChangeEmailOpen, setIsChangeEmailOpen] = useState(false);
+
+  // Called by ChangeEmailModal once the two-step flow completes —
+  // "updatedUser" is the fresh, already-updated profile object the
+  // confirm step (API 8.2) returns, with the new (now verified) email.
+  const handleEmailChanged = (updatedUser) => {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
+    if (updatedUser) updateProfile(updatedUser);
+  };
+
+  const canSave = (isDirty || selectedFile) && !updateMutation.isPending;
 
   return (
     <div className="relative bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
@@ -121,13 +215,41 @@ const PersonalInfoForm = ({ user }) => {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col sm:flex-row items-start gap-6">
-            {/* Avatar — read-only display; upload isn't supported by the backend yet */}
+            {/* Avatar — clickable, opens the hidden file input below.
+                A small camera badge in the corner signals it's
+                editable, and the ring becomes a hover target. */}
             <div className="shrink-0 mx-auto sm:mx-0">
-              <div className="p-1 rounded-full bg-linear-to-br from-primary via-primary-light to-primary-dark">
-                <div className="bg-white p-0.5 rounded-full">
-                  <Avatar src={user?.avatar} name={user?.name} size="xl" />
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                className="relative block rounded-full group focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Change profile picture"
+              >
+                <div className="p-1 rounded-full bg-linear-to-br from-primary via-primary-light to-primary-dark">
+                  <div className="bg-white p-0.5 rounded-full">
+                    <Avatar
+                      src={displayedAvatarSrc}
+                      name={user?.name}
+                      size="xl"
+                    />
+                  </div>
                 </div>
-              </div>
+                <span className="absolute bottom-0.5 right-0.5 w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-md ring-2 ring-white group-hover:bg-primary transition-colors">
+                  <HiOutlineCamera className="w-3.5 h-3.5" />
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                className="hidden"
+              />
+              {selectedFile && (
+                <p className="text-[11px] text-primary text-center mt-1.5">
+                  New photo selected — click Save to upload
+                </p>
+              )}
             </div>
 
             <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -154,8 +276,33 @@ const PersonalInfoForm = ({ user }) => {
                 )}
               </div>
 
-              {/* Email — read only with verified checkmark */}
+              {/* Phone Number */}
               <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="03001234567"
+                  autoComplete="tel"
+                  {...register("phone")}
+                  className={`
+                    w-full px-4 py-3 text-sm rounded-xl border bg-gray-50/50
+                    placeholder:text-gray-300 text-gray-900
+                    focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-white
+                    transition-all duration-200
+                    ${errors.phone ? "border-danger" : "border-gray-200"}
+                  `}
+                />
+                {errors.phone && (
+                  <p className="text-xs text-danger">{errors.phone.message}</p>
+                )}
+              </div>
+
+              {/* Email — read only with verified checkmark; changing it
+                  now goes through the two-step Change Email flow
+                  (API 8.1 / API 8.2) instead of being editable here */}
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Email Address
                 </label>
@@ -176,7 +323,19 @@ const PersonalInfoForm = ({ user }) => {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400">Email cannot be changed</p>
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-gray-400">
+                    Changing your email requires verifying the new address.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsChangeEmailOpen(true)}
+                    className="text-xs font-semibold text-primary hover:underline shrink-0 whitespace-nowrap"
+                  >
+                    Change Email
+                  </button>
+                </div>
 
                 {user?.email_verified === false && (
                   <div className="flex items-center justify-between gap-3 mt-1 p-3 bg-linear-to-r from-warning-light to-warning-light/40 rounded-xl border border-warning/20">
@@ -205,7 +364,7 @@ const PersonalInfoForm = ({ user }) => {
           <div className="flex justify-end pt-4 border-t border-gray-50">
             <button
               type="submit"
-              disabled={updateMutation.isPending || !isDirty}
+              disabled={!canSave}
               className="
                 px-7 py-3 bg-linear-to-r from-primary to-primary-dark text-white text-sm font-semibold rounded-xl
                 shadow-md shadow-primary/25
@@ -227,6 +386,12 @@ const PersonalInfoForm = ({ user }) => {
           </div>
         </form>
       </div>
+
+      <ChangeEmailModal
+        isOpen={isChangeEmailOpen}
+        onClose={() => setIsChangeEmailOpen(false)}
+        onSuccess={handleEmailChanged}
+      />
     </div>
   );
 };

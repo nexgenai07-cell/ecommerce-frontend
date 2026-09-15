@@ -1,25 +1,22 @@
-// Sits above the page content, to the right of AdminSidebar, on every
-// admin page except AdminLogin. Provides:
-// 1. A way to open/collapse the sidebar (mobile hamburger only)
-// 2. Admin profile menu with a working logout (shared with AdminSidebar
-//    via useAdminLogout)
-// NOTE: the notification bell (API 71 / API 73) and all of its logic
-// have been fully removed from this file per request — this header no
-// longer fetches, displays, or marks notifications as read in any way.
-
 import {
   AiOutlineMenu, // Hamburger / sidebar-toggle icon — used only on mobile now
   AiOutlineLogout, // Logout icon, shown inside the profile dropdown
   AiOutlineMail, // Small mail icon shown next to the admin's email in the dropdown header
+  AiOutlineUser, // Icon for the new "Profile" link in the dropdown
 } from "react-icons/ai";
 // react-icons/ai — same icon family already used throughout AdminSidebar,
 // kept consistent here so the sidebar and header don't look like they
 // came from two different icon sets
 
+import { Link } from "react-router-dom";
+// Link — used by the new "Profile" dropdown item to navigate to
+// ROUTES.ADMIN_PROFILE without a full page reload
+
 import cn from "../../utils/cn";
 import useAuth from "../../hooks/useAuth";
 import useUI from "../../hooks/useUI";
 import useAdminLogout from "../../hooks/useAdminLogout";
+import { ROUTES } from "../../constants/routes";
 import Popover from "../ui/Popover";
 import Avatar from "../ui/Avatar";
 import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
@@ -89,7 +86,7 @@ const TopHeader = () => {
                 aria-label="Admin menu"
               >
                 <Avatar
-                  src={user?.avatar}
+                  src={user?.profile_picture}
                   name={user?.name}
                   size="sm"
                   className="ring-2 ring-primary-100" // faint emerald ring around the avatar so it visually reads as "clickable / branded"
@@ -105,7 +102,7 @@ const TopHeader = () => {
                   attractive, on-brand banner instead of a plain white box */}
                 <div className="px-4 py-5 bg-linear-to-br from-primary to-primary-dark flex items-center gap-3">
                   <Avatar
-                    src={user?.avatar}
+                    src={user?.profile_picture}
                     name={user?.name}
                     size="lg"
                     className="ring-4 ring-white/30" // soft white ring gives the avatar a "floating card" look against the emerald gradient
@@ -135,6 +132,17 @@ const TopHeader = () => {
                     rounded
                   />
                 </div>
+
+                {/* Profile link — navigates to the new Admin Profile
+                  page (API 7 / API 8), closing the dropdown first */}
+                <Link
+                  to={ROUTES.ADMIN_PROFILE}
+                  onClick={close}
+                  className="w-full flex items-center gap-2 px-4 py-3.5 text-sm font-medium text-gray-700 hover:bg-surface-secondary transition-colors border-b border-border"
+                >
+                  <AiOutlineUser className="w-4 h-4" />
+                  Profile
+                </Link>
 
                 {/* Logout — closes the popover, then runs the shared
                   logout handler (API call + Redux clear + toast + redirect) */}

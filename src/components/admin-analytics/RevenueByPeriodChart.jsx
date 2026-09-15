@@ -14,14 +14,19 @@ import formatPrice from "../../utils/formatPrice";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
 
-const RevenueByPeriodChart = ({ startDate, endDate }) => {
+const RevenueByPeriodChart = ({ startDate, endDate, status }) => {
   const { data: response, isLoading } = useQuery({
-    queryKey: ["revenueReport", "weekly", startDate, endDate],
-    queryFn: ({ signal }) => getRevenueReport({
-        start_date: startDate,
-        end_date: endDate,
-        period: "weekly",
-      }, signal),
+    queryKey: ["revenueReport", "weekly", startDate, endDate, status],
+    queryFn: ({ signal }) =>
+      getRevenueReport(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          period: "weekly",
+          status, // Sold/Cancelled/Refunded/All filter, passed down from RevenueReport.jsx
+        },
+        signal,
+      ),
   });
 
   const points = response?.data?.data || [];

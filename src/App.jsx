@@ -214,6 +214,7 @@ const AuditLogs = lazy(() => import("./pages/admin/AuditLogs"));
 const NotificationTemplates = lazy(
   () => import("./pages/admin/NotificationTemplates"),
 );
+const AdminProfile = lazy(() => import("./pages/admin/AdminProfile"));
 
 // ============================================================
 // LAZY LOADED PAGES — Error pages
@@ -966,6 +967,17 @@ const AppRoutes = () => {
               <AdminProtectedRoute>
                 <Suspense fallback={<PageLoader />}>
                   <NotificationTemplates />
+                </Suspense>
+              </AdminProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ADMIN_PROFILE}
+            element={
+              <AdminProtectedRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <AdminProfile />
                 </Suspense>
               </AdminProtectedRoute>
             }

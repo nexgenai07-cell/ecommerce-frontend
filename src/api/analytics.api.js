@@ -62,11 +62,20 @@ export const getDashboardSummary = (signal) => {
 // ----------------------------
 // API - Get the sales report (Admin only)
 // ----------------------------
-// Fetches sales data broken down over time. The "params" object
-// can include:
+// Fetches sales data broken down over time, always using the locked
+// revenue-status counting rule (only confirmed/shipped/
+// out_for_delivery/delivered orders count as "sold" by default). The
+// "params" object can include:
 // - start_date / end_date: the date range to report on
 // - period: how the data should be grouped, e.g. "daily", "weekly",
 //   or "monthly"
+// - status: optional, defaults to "sold". One of "sold" (paid orders
+//   only, the historical default behavior), "cancelled" (cancelled
+//   orders that were never refunded), "refunded" (cancelled orders
+//   whose payment was refunded), "all" (every order, no filtering at
+//   all), or any exact order status string (e.g. "on_hold"). Pass the
+//   exact same value to exportReport() below so a CSV download always
+//   matches whatever is currently shown on screen.
 export const getSalesReport = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/sales/", { signal, params });
 };
@@ -75,9 +84,14 @@ export const getSalesReport = (params, signal) => {
 // API  - Get the revenue report (Admin only)
 // ----------------------------
 // Fetches revenue data (money earned), separate from raw sales counts.
-// The "params" object follows the same pattern:
+// The "params" object follows the same pattern as getSalesReport()
+// above:
 // - start_date / end_date: the date range to report on
 // - period: grouping interval, e.g. "daily", "weekly", "monthly"
+// - status: optional, defaults to "sold" — same accepted values as
+//   getSalesReport() above ("sold" | "cancelled" | "refunded" | "all"
+//   | an exact order status). Pass the same value through to
+//   exportReport() so the exported file matches the screen.
 export const getRevenueReport = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/revenue/", { signal, params });
 };
@@ -162,6 +176,17 @@ export const getInventoryAlerts = (signal) => {
 // - type: which kind of report to export. CONFIRMED accepted values:
 //   "sales", "orders", "discounts", "inventory", "returns",
 //   "complaints", "social_posts", "customers", "revenue", "products"
+// - status: optional, only applies when type is "sales" or "revenue".
+//   Same accepted values as getSalesReport()/getRevenueReport() above
+//   ("sold" | "cancelled" | "refunded" | "all" | an exact order
+//   status), defaults to "sold". Always send the same status value
+//   currently selected on the Sales/Revenue Report page so the
+//   downloaded file matches what's on screen.
+//
+// The "customers" export's Phone column is formatted as
+// +92XXXXXXXXXX and wrapped so Excel treats it as text instead of
+// stripping the leading 0/country code when the CSV is opened
+// directly.
 export const exportReport = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/export/", {
     signal,

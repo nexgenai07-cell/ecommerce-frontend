@@ -51,6 +51,11 @@ export const QUERY_KEYS = {
   // the same key would let one shape silently overwrite the other in
   // the cache and break whichever screen reads it next.
   MY_ORDERS_FULL: ["my-orders", "full-paginated"],
+  // MY_ORDER_STATS — API 56.1 (GET /api/v1/orders/stats/), the
+  // customer's own accurate { total_orders, total_spent }. Kept
+  // separate from MY_ORDERS since it's a different endpoint with a
+  // completely different response shape.
+  MY_ORDER_STATS: ["my-order-stats"],
   ORDER_DETAIL: (orderNumber) => ["order", orderNumber],
   ORDER_TRACKING: (orderNumber) => ["order-tracking", orderNumber],
   ADMIN_ORDERS: ["admin-orders"],

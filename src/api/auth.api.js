@@ -56,17 +56,110 @@ export const resetPassword = (data, signal) => {
 };
 
 // ----------------------------
-// API - Get the currently logged-in user's profile
+// API 7 - Get the currently logged-in user's profile
 // ----------------------------
+// Response now also includes profile_picture (an image URL, or null)
+// and addresses (the user's full saved address list, read-only here —
+// manage individual addresses via the Address Book endpoints instead).
+// This single endpoint serves BOTH the customer account profile page
+// AND the admin profile page — role is simply a field on the
+// response, there is no separate admin-only profile endpoint.
 export const getMyProfile = (signal) => {
   return axiosInstance.get("/api/v1/auth/me/", { signal });
 };
 
 // ----------------------------
-// API - Update the logged-in user's profile
+// API 8 - Update the logged-in user's profile
 // ----------------------------
+// Accepts a plain JSON body of { name, phone } when no picture is
+// being changed. When a new profile picture is attached, the request
+// is automatically switched to multipart/form-data instead so the
+// image file can actually be uploaded alongside the text fields.
+//
+// email is permanently read-only on this endpoint — changing it now
+// requires the two-step OTP flow below (requestEmailChange() /
+// confirmEmailChange(), API 8.1 / API 8.2) instead of ever being a
+// plain field on this form.
 export const updateMyProfile = (data, signal) => {
-  return axiosInstance.put("/api/v1/auth/me/update/", data, { signal });
+  // No picture in this update — send plain JSON, the simplest and
+  // lightest request shape, exactly as before.
+  if (!data.profile_picture) {
+    return axiosInstance.put("/api/v1/auth/me/update/", data, { signal });
+  }
+
+  // A picture file is attached — the request body must be built as
+  // FormData so the browser can send it as multipart/form-data.
+  const formData = new FormData();
+  if (data.name !== undefined) formData.append("name", data.name);
+  if (data.phone !== undefined) formData.append("phone", data.phone);
+  formData.append("profile_picture", data.profile_picture);
+
+  // IMPORTANT: axiosInstance has a default "Content-Type: application/json"
+  // header set at the instance level (see lib/axiosInstance.js). Axios only
+  // auto-detects FormData and generates the correct multipart boundary when
+  // NO Content-Type has already been set — since one IS already set here
+  // (at the instance level), we must explicitly clear it for this request by
+  // setting it to `undefined`. That lets axios/browser take over and attach
+  // the correct "multipart/form-data; boundary=..." header automatically.
+  // Do NOT hardcode "multipart/form-data" yourself — without the boundary
+  // parameter the backend can't parse the body and will silently fall back
+  // to default field values (or reject the file entirely).
+  return axiosInstance.put("/api/v1/auth/me/update/", formData, {
+    signal,
+    headers: { "Content-Type": undefined },
+  });
+};
+
+// ----------------------------
+// API 8.1 - Request an email address change (Step 1 of 2)
+// ----------------------------
+// Verifies the user's current password, then emails a 6-digit code to
+// the NEW address to confirm the user actually controls it. The
+// account's email is NOT changed by this call — only after
+// confirmEmailChange() (API 8.2) succeeds with the correct code.
+//
+// A best-effort heads-up notice is also sent to the OLD (current)
+// address at this step, in case this request wasn't made by the
+// actual account owner.
+//
+// Request shape: { password: string, new_email: string }
+// Response (200): { message: string }
+// Possible 400 errors (returned under an "error" key):
+// - "password and new_email are required."
+// - "Incorrect password."
+// - "That is already your current email address."
+// - "A user with this email already exists."
+export const requestEmailChange = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/me/email/change/", data, {
+    signal,
+  });
+};
+
+// ----------------------------
+// API 8.2 - Confirm an email address change (Step 2 of 2)
+// ----------------------------
+// Validates the 6-digit code sent to the new address by
+// requestEmailChange() above. Only on a valid, unexpired code does
+// the account's email actually change — email_verified is set to
+// true at the same time, since receiving and re-entering this code
+// already proves the new address is reachable.
+//
+// Request shape: { otp: string (6 digits) }
+// Response (200): { message: string, user: {...} } — "user" is the
+// full profile object, same shape as getMyProfile(), with the new
+// email already reflected. Refresh the profile query on success so
+// the UI shows the new, now-verified email immediately.
+// Possible 400 errors (returned under an "error" key):
+// - "otp is required."
+// - "No pending email change found. Call /me/email/change/ first."
+// - "Invalid code."
+// - "Code has expired. Please request a new one."
+// - "That email is no longer available." (someone else registered it
+//   between step 1 and step 2)
+export const confirmEmailChange = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/me/email/confirm/", data, {
+    signal,
+  });
 };
 
 // ----------------------------

@@ -32,12 +32,14 @@ const formatGrowth = (current, previous) => {
   // toFixed(1) -> rounds to one decimal place, e.g. "+521.1%"
 };
 
-const RevenueStatsCards = ({ startDate, endDate }) => {
+const RevenueStatsCards = ({ startDate, endDate, status }) => {
   // startDate, endDate -> currently selected range, passed down from the
   // RevenueReport page so everything stays in sync
+  // status -> the Sold/Cancelled/Refunded/All filter, also passed down
+  // from the RevenueReport page
 
   const { data: currentResponse, isLoading } = useQuery({
-    queryKey: ["revenueReport", "current", startDate, endDate],
+    queryKey: ["revenueReport", "current", startDate, endDate, status],
     // queryKey -> uniquely identifies this request for caching/refetching
     queryFn: ({ signal }) =>
       getRevenueReport(
@@ -46,6 +48,7 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
           end_date: endDate,
           period: "daily",
           // period: "daily" -> one data point per day for an accurate total
+          status,
         },
         signal,
       ),
@@ -59,6 +62,7 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
       "previous",
       previousRange.startDate,
       previousRange.endDate,
+      status,
     ],
     queryFn: ({ signal }) =>
       getRevenueReport(
@@ -66,6 +70,7 @@ const RevenueStatsCards = ({ startDate, endDate }) => {
           start_date: previousRange.startDate,
           end_date: previousRange.endDate,
           period: "daily",
+          status,
         },
         signal,
       ),

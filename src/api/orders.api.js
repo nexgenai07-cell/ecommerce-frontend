@@ -58,6 +58,33 @@ export const getMyOrders = (params, signal) => {
 };
 
 // ----------------------------
+// API 56.1 - Get the logged-in customer's own order stats
+// ----------------------------
+// Returns exactly two numbers for the current customer: total_orders
+// and total_spent. Both are computed using the same locked counting
+// rule used everywhere else in the app — only an order whose status
+// is confirmed, shipped, out_for_delivery, or delivered counts;
+// pending_payment, on_hold, and cancelled orders never count, even a
+// cancelled order that was paid and later refunded.
+//
+// No request body/params. Response shape:
+//   { total_orders: number, total_spent: string }
+// total_spent always comes back as a string (e.g. "0.00" for a
+// customer with no qualifying orders yet) — parse it with
+// parseFloat()/Number() before formatting for display.
+//
+// This is the ONLY correct source for the customer account
+// dashboard's "Total Orders" / "Total Spent" cards — see
+// AccountDashboard.jsx. Do NOT rebuild these numbers by summing
+// getMyOrders() above on the frontend: that list includes every
+// order regardless of status, which produces an inflated total that
+// doesn't match what the backend (and the admin panel) consider a
+// real, paid order.
+export const getMyOrderStats = (signal) => {
+  return axiosInstance.get("/api/v1/orders/stats/", { signal });
+};
+
+// ----------------------------
 // API - Get full details of a specific order (CUSTOMER-OWNED ONLY)
 // ----------------------------
 // Fetches everything about one specific order, identified by its
