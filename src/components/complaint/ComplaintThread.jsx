@@ -26,6 +26,7 @@ import {
   getComplaintMessages,
   postComplaintMessage,
 } from "../../api/complaints.api";
+import useComplaintSocket from "../../hooks/useComplaintSocket";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import {
@@ -55,6 +56,12 @@ const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
   });
 
   const messages = extractListData(data);
+
+  // Live updates — appends any message posted by the other party
+  // straight into the cache the instant it arrives, so the thread
+  // stays current without polling. Sending still goes through the
+  // REST mutation below regardless of this connection's state.
+  useComplaintSocket(complaintId);
 
   // Keeps the thread scrolled to the bottom whenever the number of
   // messages changes — covers both the initial load and every new

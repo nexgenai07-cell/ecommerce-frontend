@@ -136,3 +136,33 @@ export const postComplaintMessage = (id, data, signal) => {
     signal,
   });
 };
+
+// ----------------------------
+// Helper — build the correct ws:// or wss:// base URL
+// ----------------------------
+// Same conversion chat.api.js already uses for its own sockets — the
+// REST base URL's scheme is swapped from http(s) to ws(s), everything
+// else about it stays the same.
+const getWebSocketBaseUrl = () => {
+  const restBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  return restBaseUrl.replace(/^http/, "ws");
+};
+
+// ----------------------------
+// WebSocket Connection - Live complaint chat updates
+// ----------------------------
+// Both the complaint's owning customer and any admin viewing it join
+// the same socket, identified by the complaint's id. The backend
+// authenticates the connection from the JWT access token passed as a
+// query parameter (there's no other way to attach an Authorization
+// header to a native WebSocket handshake), and closes the connection
+// with 4401 if that token is missing/invalid/expired, or 4403 if the
+// requester isn't allowed to view this particular complaint.
+//
+// This only delivers messages sent AFTER the socket connects — the
+// existing thread history still has to be loaded separately via
+// getComplaintMessages() above when the chat screen first opens.
+export const createComplaintWebSocket = (complaintId, token) => {
+  const wsUrl = `${getWebSocketBaseUrl()}/ws/complaints/${complaintId}/?token=${token}`;
+  return new WebSocket(wsUrl);
+};

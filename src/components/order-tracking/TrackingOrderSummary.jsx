@@ -58,13 +58,14 @@ const TrackingOrderSummary = ({ order }) => {
             <p className="text-sm text-gray-400">Payment</p>
             {/* Inner row grouping the payment method text and the success badge together */}
             <div className="flex items-center gap-2">
-              {/* All payments now go through Stripe — label reflects the actual
-                  order.payment.status returned by the API instead of a
-                  removed payment_method field (COD/Easypaisa/card) */}
+              {/* method_label comes straight from the backend now (e.g.
+                  "QR Payment" or "Card via Stripe") — populated whenever a
+                  payment record exists, regardless of its current status. */}
               <p className="text-sm text-gray-700">
-                {order?.payment?.status === "paid"
-                  ? "Card via Stripe"
-                  : "Awaiting Payment"}
+                {order?.payment?.method_label ||
+                  (order?.payment?.status === "paid"
+                    ? "Card via Stripe"
+                    : "Awaiting Payment")}
               </p>
               {/* SUCCESS badge */}
               {/* Only show the "Success" badge if the order's payment status is exactly "paid" */}

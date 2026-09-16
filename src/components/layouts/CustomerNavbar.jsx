@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 
 import {
@@ -45,8 +45,17 @@ const CustomerNavbar = () => {
 
   // ===== REDUX STATE =====
   const { user, isAuthenticated, logoutUser } = useAuth();
-  const { count: cartCount, handleSyncCart } = useCart();
-  const { count: wishlistCount, handleSetWishlist } = useWishlist();
+  const { count: cartCount, handleSyncCart, handleClearCart } = useCart();
+  const {
+    count: wishlistCount,
+    handleSetWishlist,
+    handleClearWishlist,
+  } = useWishlist();
+  const queryClient = useQueryClient();
+  // ^ Needed on logout to drop the cached cart/wishlist/notifications
+  // data — otherwise the navbar badges keep showing the last logged-in
+  // user's numbers (stale) until a full page refresh, since nothing
+  // else tells these queries to refetch just because auth state changed.
 
   // ===== LOCAL UI STATE =====
   const [isSticky, setIsSticky] = useState(false);
@@ -300,6 +309,22 @@ const CustomerNavbar = () => {
     } finally {
       setIsLogoutConfirmOpen(false);
       logoutUser();
+
+      // Reset local Redux state immediately so the heart/cart icons
+      // don't keep showing the previous account's items for a split
+      // second before the queries below settle.
+      handleClearCart();
+      handleClearWishlist();
+
+      // Wishlist and notifications are logged-in-only data — just drop
+      // them from cache so the navbar badges go back to 0/hidden right
+      // away instead of staying stale until a refresh.
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
+      // Cart still works for guests, so re-fetch (not remove) — this
+      // pulls whatever guest cart now applies instead of just zeroing it.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+
       setUserDropdownOpen(false);
       setMobileDrawerOpen(false);
       showSuccess("Logged out successfully");

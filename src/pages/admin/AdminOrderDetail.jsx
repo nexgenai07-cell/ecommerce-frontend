@@ -655,11 +655,26 @@ const AdminOrderDetail = () => {
                 {order.payment?.status || "—"}
               </span>
             </div>
-            {order.payment?.stripe_payment_intent_id && (
+            {order.payment?.method_label && (
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-gray-500 shrink-0">Stripe Intent</span>
+                <span className="text-gray-500">Method</span>
+                <span className="font-medium text-gray-900">
+                  {order.payment.method_label}
+                </span>
+              </div>
+            )}
+            {/* Unified transaction reference — the QR transfer reference for
+                QR orders, or Stripe's PaymentIntent id for card orders,
+                both returned under the same "reference" field. Falls back
+                to the raw stripe_payment_intent_id field for orders that
+                predate this unified field. */}
+            {(order.payment?.reference ||
+              order.payment?.stripe_payment_intent_id) && (
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-500 shrink-0">Reference</span>
                 <span className="font-mono text-xs text-gray-600 truncate max-w-35">
-                  {order.payment.stripe_payment_intent_id}
+                  {order.payment.reference ||
+                    order.payment.stripe_payment_intent_id}
                 </span>
               </div>
             )}

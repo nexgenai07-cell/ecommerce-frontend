@@ -174,8 +174,14 @@ const AddressFormModal = ({
       onClose();
     },
     onError: (error) => {
+      // Validation failures now come back as { "error": "<message>" }
+      // instead of DRF's default per-field shape — read that first so
+      // the real reason (e.g. "Shipping address looks too short...")
+      // reaches the customer instead of the generic fallback below.
       showError(
-        error?.response?.data?.message || "Failed to save this address.",
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "Failed to save this address.",
       );
     },
   });

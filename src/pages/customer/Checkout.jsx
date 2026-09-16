@@ -33,7 +33,13 @@ import { getCart, addToCart } from "../../api/cart.api";
 // fetch an existing order's details (needed for the resume-payment flow),
 // and to cancel a pending order (used by the "Cancel Order" action below —
 // same endpoint OrderDetail.jsx already uses for this)
-import { checkout, getOrderDetail, cancelOrder } from "../../api/orders.api";
+import {
+  checkout,
+  getOrderDetail,
+  cancelOrder,
+  sendCheckoutOtp,
+  verifyCheckoutOtp,
+} from "../../api/orders.api";
 // API function to create a Stripe Payment Intent for an existing order (API 69)
 import { createPaymentIntent } from "../../api/payments.api";
 // Custom hook providing authentication state (isAuthenticated flag and logged-in user info)
@@ -60,6 +66,9 @@ import CheckoutStepper from "../../components/checkout/CheckoutStepper";
 import ContactForm from "../../components/checkout/ContactForm";
 // Sub-component handling delivery address fields (name, street, city, etc.)
 import AddressForm from "../../components/checkout/AddressForm";
+// Sub-component asking the customer to confirm the emailed 6-digit
+// code before their order is created
+import CheckoutOtpStep from "../../components/checkout/CheckoutOtpStep";
 // Sub-component for selecting shipping method (standard/express)
 import ShippingMethod from "../../components/checkout/ShippingMethod";
 // Sub-component rendering the Stripe Payment Element + "Pay Now" button
@@ -124,6 +133,15 @@ const SHIPPING_COSTS = {
   standard: 299, // Standard delivery — flat Rs. 299, always (no free threshold)
   express: 999, // Express shipping costs 999
 };
+
+// How long the "Resend code" link stays disabled after a checkout
+// verification code is sent. The backend enforces its own resend
+// cooldown and returns the exact remaining seconds via
+// retry_after_seconds when a resend is attempted too soon — this
+// default just gives the customer a sensible countdown to look at in
+// the meantime, and is overridden by the server's value if it ever
+// disagrees.
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
 // =============================================
 // CHECKOUT LOADING SKELETON
@@ -305,6 +323,9 @@ const Checkout = () => {
   // =============================================
   // CHECKOUT STEP STATE
   // "details"  -> filling contact/address/shipping, order not created yet
+  // "otp"      -> confirming the emailed 6-digit code, order still not
+  //               created yet — required immediately before every
+  //               checkout() call
   // "payment"  -> order created (pending_payment), Stripe Payment Element shown
   //               (only reached when paymentMethod === "stripe")
   // "qr"       -> order created (pending_payment), QR code + proof upload
@@ -346,6 +367,33 @@ const Checkout = () => {
   // that actually matter right before the cart gets cleared, and use that
   // frozen snapshot instead of the live cart once we're on the payment step.
   const [orderSnapshot, setOrderSnapshot] = useState(null);
+
+  // =============================================
+  // CHECKOUT OTP VERIFICATION STATE
+  // Holds the customer's in-progress code entry and the details form
+  // values gathered on the previous step, so the order can be placed
+  // with them the moment verification succeeds.
+  // =============================================
+  // The details form's values, captured on submit and reused once
+  // the code is verified — the checkout() call needs them, but the
+  // details step is no longer on screen by then.
+  const [pendingCheckoutData, setPendingCheckoutData] = useState(null);
+  // Current value of the 6-digit code input.
+  const [otp, setOtp] = useState("");
+  // Inline error shown under the code input (invalid/expired code, etc.)
+  const [otpError, setOtpError] = useState("");
+  // The masked confirmation message from the send-otp response, e.g.
+  // "A verification code has been sent to ab***@gmail.com."
+  const [otpConfirmationMessage, setOtpConfirmationMessage] = useState("");
+  // Seconds remaining before "Resend code" becomes clickable again.
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  // Ticks otpCooldown down to 0 once a second while it's active.
+  useEffect(() => {
+    if (otpCooldown <= 0) return undefined;
+    const timer = setTimeout(() => setOtpCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
 
   // =============================================
   // CANCEL ORDER (payment / qr steps)
@@ -601,6 +649,64 @@ const Checkout = () => {
   }, [resumeOrderData]);
 
   // =============================================
+  // SEND CHECKOUT VERIFICATION CODE
+  // POST /api/v1/orders/checkout/send-otp/
+  // Runs first, right after the details form is submitted — the order
+  // itself isn't created until the code sent here is confirmed.
+  // Also reused for the "Resend code" action on the OTP step.
+  // =============================================
+  const sendOtpMutation = useMutation({
+    mutationFn: () => sendCheckoutOtp(),
+
+    onSuccess: (response) => {
+      setOtpConfirmationMessage(response.data?.message || "");
+      setOtpError("");
+      setOtp("");
+      setOtpCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+      setStep("otp");
+    },
+
+    onError: (error) => {
+      // A code was already requested too recently — the customer can
+      // still use the one already in their inbox, so this keeps them on
+      // the OTP step (in case the resend was triggered from there) and
+      // syncs the cooldown to the server's exact remaining time.
+      if (error?.response?.status === 429) {
+        const retryAfter = error.response.data?.retry_after_seconds;
+        if (retryAfter) setOtpCooldown(retryAfter);
+        setStep("otp");
+        return;
+      }
+
+      showError(
+        error?.response?.data?.error ||
+          "Failed to send verification code. Please try again.",
+      );
+    },
+  });
+
+  // =============================================
+  // VERIFY CHECKOUT VERIFICATION CODE
+  // POST /api/v1/orders/checkout/verify-otp/
+  // On success, immediately places the order with the details captured
+  // on the previous step — checkoutMutation (below) is defined further
+  // down this component, but is only ever called here once the user has
+  // actually submitted the OTP form, by which point it's fully set up.
+  // =============================================
+  const verifyOtpMutation = useMutation({
+    mutationFn: () => verifyCheckoutOtp({ otp }),
+
+    onSuccess: () => {
+      setOtpError("");
+      checkoutMutation.mutate(pendingCheckoutData);
+    },
+
+    onError: (error) => {
+      setOtpError(error?.response?.data?.error || "Invalid or expired code.");
+    },
+  });
+
+  // =============================================
   // CHECKOUT MUTATION (API 52)
   // POST /api/v1/orders/checkout/
   // Success pe cart clear hoti hai aur turant Payment Intent create hoti hai
@@ -767,18 +873,47 @@ const Checkout = () => {
     },
   });
 
-  // Form submit — Step 1 (details -> creates order + payment intent).
-  // react-hook-form's own validation only covers email/phone/shipping
-  // method now — the delivery address is picked separately (see
-  // selectedAddressId state), so it needs its own check here before
-  // the order is actually placed.
+  // Form submit — Step 1 (details -> sends the checkout verification
+  // code and moves to the OTP step). react-hook-form's own validation
+  // only covers email/phone/shipping method now — the delivery
+  // address is picked separately (see selectedAddressId state), so it
+  // needs its own check here before moving on. The order itself is
+  // only created once the code sent here is confirmed (see
+  // verifyOtpMutation above).
   const onSubmit = (data) => {
     if (!selectedAddressId) {
       setAddressError("Please select or add a delivery address.");
       return;
     }
     setAddressError("");
-    checkoutMutation.mutate(data);
+    setPendingCheckoutData(data);
+    sendOtpMutation.mutate();
+  };
+
+  // Called by CheckoutOtpStep's form submit, once 6 digits have been typed.
+  const handleVerifyOtp = () => {
+    if (otp.length !== 6) {
+      setOtpError("Please enter the full 6-digit code.");
+      return;
+    }
+    verifyOtpMutation.mutate();
+  };
+
+  // "Resend code" action on the OTP step — reuses the same mutation
+  // the initial send used, so both paths share one cooldown and one
+  // error-handling path.
+  const handleResendOtp = () => {
+    if (otpCooldown > 0 || sendOtpMutation.isPending) return;
+    sendOtpMutation.mutate();
+  };
+
+  // "Edit order details" link on the OTP step — takes the customer
+  // back to the details form. A fresh code is requested automatically
+  // the next time they submit it, since each code is single-use.
+  const handleEditDetails = () => {
+    setStep("details");
+    setOtp("");
+    setOtpError("");
   };
 
   // Called by PaymentMethod once stripe.confirmPayment() reports "succeeded"
@@ -806,9 +941,21 @@ const Checkout = () => {
   // this, which the payment result page reads to determine the outcome.
   const stripeReturnUrl = `${window.location.origin}${ROUTES.PAYMENT_RESULT}?order=${orderNumber}`;
 
-  // Combined loading flag for the Step 1 button (order creation + intent creation both run back-to-back)
+  // Combined loading flag for the Step 1 button — covers the checkout
+  // verification code being sent, order creation, and intent creation,
+  // since all three now run back-to-back before the payment step shows.
   const isPlacingOrder =
-    checkoutMutation.isPending || createIntentMutation.isPending;
+    sendOtpMutation.isPending ||
+    checkoutMutation.isPending ||
+    createIntentMutation.isPending;
+
+  // Combined loading flag for the OTP step's submit button — covers
+  // verifying the code plus the checkout/intent calls that follow it
+  // immediately on success.
+  const isVerifyingOtp =
+    verifyOtpMutation.isPending ||
+    checkoutMutation.isPending ||
+    createIntentMutation.isPending;
 
   // While the cart is still being fetched, show the full-page skeleton
   // instead of letting the form and order summary render with empty/zero
@@ -947,6 +1094,31 @@ const Checkout = () => {
                     </button>
                   </div>
                 </motion.form>
+              ) : step === "otp" ? (
+                <motion.div
+                  key="otp-step"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex flex-col gap-5"
+                >
+                  <CheckoutOtpStep
+                    confirmationMessage={otpConfirmationMessage}
+                    otp={otp}
+                    onOtpChange={(value) => {
+                      setOtp(value);
+                      if (otpError) setOtpError("");
+                    }}
+                    error={otpError}
+                    onVerify={handleVerifyOtp}
+                    isVerifying={isVerifyingOtp}
+                    onResend={handleResendOtp}
+                    isResending={sendOtpMutation.isPending}
+                    cooldownSeconds={otpCooldown}
+                    onEditDetails={handleEditDetails}
+                  />
+                </motion.div>
               ) : step === "qr" ? (
                 <motion.div
                   key="qr-step"

@@ -1,4 +1,3 @@
-// ============================================================
 // useAdminLogout - CUSTOM HOOK
 // ============================================================
 // WHY THIS HOOK EXISTS:
@@ -15,6 +14,12 @@
 import { useState } from "react";
 // useState — used to control whether the "Are you sure?" confirmation
 // modal is currently open
+
+import { useQueryClient } from "@tanstack/react-query";
+// useQueryClient — lets us drop every cached query (orders, complaints,
+// analytics, notifications, etc.) on logout, so nothing from this
+// admin's session lingers on screen — or leaks into the next admin's
+// session on a shared machine — until a manual refresh.
 
 import { useNavigate } from "react-router-dom";
 // useNavigate — React Router hook, lets us redirect the browser to a
@@ -48,6 +53,8 @@ import { ROUTES } from "../constants/routes";
 const useAdminLogout = () => {
   const navigate = useNavigate();
   // Grab the navigate function so we can redirect after logout completes
+
+  const queryClient = useQueryClient();
 
   const { logoutUser } = useAuth();
   // Pull the Redux-clearing logout action out of our auth hook
@@ -87,6 +94,12 @@ const useAdminLogout = () => {
       // Clears user, token, refreshToken, isAuthenticated, and role
       // from BOTH Redux state and localStorage (handled inside the
       // authSlice's own "logout" reducer)
+
+      // Drop every cached query — without this, badge counts and
+      // cached lists from this admin's session kept showing (stale)
+      // until a manual refresh, since nothing else tells them to
+      // refetch just because auth state changed.
+      queryClient.clear();
 
       showSuccess("Logged out successfully");
       // Confirms to the admin that the action completed

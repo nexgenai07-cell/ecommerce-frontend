@@ -39,13 +39,32 @@ const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
   const [previewUrl, setPreviewUrl] = useState("");
   const [transactionId, setTransactionId] = useState("");
   const [fieldError, setFieldError] = useState("");
+  const [transactionIdError, setTransactionIdError] = useState("");
+
+  // Transaction ID is optional, but once the customer types something
+  // it should actually look like a real reference number rather than
+  // stray punctuation or keyboard-mashing — an empty value always
+  // passes, since the field itself is optional.
+  const validateTransactionId = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (trimmed.length < 4) return "Transaction ID looks too short.";
+    if (trimmed.length > 40) return "Transaction ID is too long.";
+    if (!/^[A-Za-z0-9-]+$/.test(trimmed)) {
+      return "Only letters, numbers, and hyphens are allowed.";
+    }
+    if (/(.)\1{3,}/.test(trimmed)) {
+      return "Please enter a valid transaction ID.";
+    }
+    return "";
+  };
 
   const uploadMutation = useMutation({
     mutationFn: () =>
       uploadQrProof({
         order_number: orderNumber,
         screenshot,
-        transaction_id: transactionId || undefined,
+        transaction_id: transactionId.trim() || undefined,
       }),
     onSuccess: (response) => {
       queryClient.invalidateQueries({
@@ -81,6 +100,11 @@ const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
   const handleSubmit = () => {
     if (!screenshot) {
       setFieldError("Please attach a screenshot of your payment.");
+      return;
+    }
+    const transactionIdValidationError = validateTransactionId(transactionId);
+    if (transactionIdValidationError) {
+      setTransactionIdError(transactionIdValidationError);
       return;
     }
     uploadMutation.mutate();
@@ -132,7 +156,14 @@ const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
         label="Transaction ID (optional)"
         placeholder="e.g. the reference number from your app"
         value={transactionId}
-        onChange={(e) => setTransactionId(e.target.value)}
+        onChange={(e) => {
+          setTransactionId(e.target.value);
+          if (transactionIdError) setTransactionIdError("");
+        }}
+        onBlur={() =>
+          setTransactionIdError(validateTransactionId(transactionId))
+        }
+        error={transactionIdError}
       />
 
       <Button

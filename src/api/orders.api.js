@@ -43,6 +43,49 @@ export const checkout = (data, signal) => {
 };
 
 // ----------------------------
+// API - Request a checkout verification code
+// ----------------------------
+// Sends a 6-digit one-time code to the logged-in customer's account
+// email. Every checkout() call must be immediately preceded by this
+// call and a successful verifyCheckoutOtp() call, in that exact
+// order — each code is single-use, so a customer placing more than
+// one order needs a fresh code each time.
+//
+// No request body. Success response includes a masked confirmation
+// message (e.g. "A verification code has been sent to ab***@gmail.com.")
+// and expires_in_minutes — how long the code itself stays valid.
+//
+// Possible errors:
+// - 400: the account has no email on file to send the code to
+// - 429: another code was requested too recently; the response
+//   includes retry_after_seconds, the number of seconds to wait
+//   before this can be called again
+// - 502: the email could not be sent
+export const sendCheckoutOtp = (signal) => {
+  return axiosInstance.post("/api/v1/orders/checkout/send-otp/", undefined, {
+    signal,
+  });
+};
+
+// ----------------------------
+// API - Verify a checkout verification code
+// ----------------------------
+// Confirms the code sent by sendCheckoutOtp() above. On success, the
+// customer has valid_for_minutes (returned in the response) to
+// complete checkout() before a new code is required again.
+//
+// data: { otp: "123456" }
+//
+// Every failure comes back as 400 Bad Request, with the reason under
+// an "error" key: the code is missing from the request, no code was
+// ever requested, the code has expired, or it doesn't match.
+export const verifyCheckoutOtp = (data, signal) => {
+  return axiosInstance.post("/api/v1/orders/checkout/verify-otp/", data, {
+    signal,
+  });
+};
+
+// ----------------------------
 // API - Get the logged-in customer's own orders
 // ----------------------------
 // Fetches orders placed by the currently logged-in customer. Used on

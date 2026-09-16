@@ -68,9 +68,18 @@ const PaymentInfo = ({ order }) => {
   // first-time "Payment Under Review" wording.
   const [justUploadedOrderStatus, setJustUploadedOrderStatus] = useState(null);
 
-  // Stripe's own PaymentIntent id is the real transaction reference for
-  // card orders — no more locally-generated "-PLT-ZM00" suffix.
-  const txnId = payment.stripe_payment_intent_id || "—";
+  // A single, unified transaction reference for either payment method —
+  // the QR transaction ref for QR orders, or Stripe's own PaymentIntent
+  // id for card orders. Falls back to the raw stripe_payment_intent_id
+  // field for orders fetched before this field existed on the API.
+  const txnId = payment.reference || payment.stripe_payment_intent_id || "—";
+
+  // Human-readable payment method name, e.g. "QR Payment" or "Card via
+  // Stripe" — comes straight from the backend now instead of being
+  // guessed on the frontend from payment.method.
+  const methodLabel =
+    payment.method_label ||
+    (isQr ? "QR Payment (Easypaisa/JazzCash)" : "Card Payment (Stripe)");
 
   // How many times this order's QR proof has been rejected so far —
   // NEW (Sep 2026, API 57 backend fix): now included on payment
@@ -122,27 +131,22 @@ const PaymentInfo = ({ order }) => {
 
           {/* Payment method name + transaction ID stacked vertically */}
           <div>
-            <p className="text-sm font-medium text-gray-800">
-              {isQr
-                ? "QR Payment (Easypaisa/JazzCash)"
-                : "Card Payment (Stripe · Test Mode)"}
+            <p className="text-sm font-medium text-gray-800">{methodLabel}</p>
+            {/* Reference line — the QR transfer reference for QR orders, or
+                Stripe's PaymentIntent id for card orders, both under one
+                unified field so this never needs to branch by method again. */}
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              Ref: {txnId}
             </p>
-            {isQr ? (
-              payment.screenshot_url && (
-                <a
-                  href={payment.screenshot_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary hover:underline mt-0.5 inline-block"
-                >
-                  View uploaded screenshot
-                </a>
-              )
-            ) : (
-              // Stripe's real PaymentIntent id — used to look this payment up in the Stripe Dashboard
-              <p className="text-xs text-gray-400 mt-0.5 font-mono">
-                TXN: {txnId}
-              </p>
+            {isQr && payment.screenshot_url && (
+              <a
+                href={payment.screenshot_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-primary hover:underline mt-0.5 inline-block"
+              >
+                View uploaded screenshot
+              </a>
             )}
           </div>
         </div>
