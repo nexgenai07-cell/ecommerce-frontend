@@ -696,7 +696,12 @@ const AdminSidebar = () => {
                 using the panel right now, not a fabricated presence
                 indicator */}
             <div className="relative shrink-0">
-              <Avatar src={user?.profile_picture} name={user?.name} size="sm" />
+              <Avatar
+                src={user?.profile_picture}
+                name={user?.name}
+                size="sm"
+                className="ring-2 ring-primary"
+              />
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full ring-2 ring-[#0a1622]" />
             </div>
 
@@ -829,6 +834,7 @@ const AdminSidebar = () => {
                   src={user?.profile_picture}
                   name={user?.name}
                   size="sm"
+                  className="ring-2 ring-primary"
                 />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full ring-2 ring-[#0a1622]" />
               </div>

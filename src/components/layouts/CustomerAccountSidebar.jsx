@@ -24,6 +24,7 @@ import { getMyOrders } from "../../api/orders.api"; // Import the API function t
 import { getNotifications } from "../../api/notifications.api"; // Import the API function that fetches notifications
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on notifications endpoint)
 import { getMyProfile } from "../../api/auth.api"; // Import the API function that fetches the current user's profile
+import calculateProfileCompletion from "../../utils/calculateProfileCompletion"; // Shared completion calculation, also used by ProfileSettings so both "Verified Profile" badges stay in sync
 import Avatar from "../ui/Avatar"; // Import Avatar component to display the user's profile picture
 import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
 
@@ -166,17 +167,11 @@ const CustomerAccountSidebar = () => {
 
   // =============================================
   // PROFILE COMPLETION PERCENTAGE
-  // Calculates what percentage of fields are filled in
-  // name, email, phone — if all three are filled, it's 100%
+  // Shared with ProfileSettings.jsx so the "Verified Profile" badge
+  // shown here in the sidebar and the one on the main profile page
+  // always agree on whether the profile counts as complete.
   // =============================================
-  const calculateProfileCompletion = () => {
-    // Function to calculate how complete the user's profile is
-    const fields = [profile.name, profile.email, profile.phone]; // The three fields being checked
-    const filledFields = fields.filter(Boolean).length; // Count how many of those fields have a truthy value (are filled in)
-    return Math.round((filledFields / fields.length) * 100); // Calculate the percentage filled, rounded to the nearest whole number
-  };
-
-  const profileCompletion = calculateProfileCompletion(); // Run the calculation and store the result
+  const profileCompletion = calculateProfileCompletion(profile);
 
   // =============================================
   // LOGOUT HANDLER

@@ -715,7 +715,7 @@ const CustomerNavbar = () => {
                       src={user?.profile_picture}
                       name={user?.name}
                       size="sm"
-                      className="ring-2 ring-transparent group-hover:ring-primary-100 transition-all duration-200"
+                      className="ring-2 ring-primary transition-all duration-200"
                     />
                     <span className="text-sm font-semibold text-gray-700 max-w-24 truncate group-hover:text-primary transition-colors">
                       {user?.name?.split(" ")[0] || "Account"}

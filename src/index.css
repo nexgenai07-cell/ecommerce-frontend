@@ -364,7 +364,28 @@
   animation: gradientBorderMove 6s linear infinite; /* Slow 6-second loop, linear = constant, smooth speed */
 }
 /* ---------------------------------------------------------------- */
-/* ProductsFilters.jsx — dual-handle price range slider. Two native   */
+/* TopHeader.jsx (admin profile dropdown) — smooth fade + scale +   */
+/* slide-down entrance when the panel mounts. Popover.jsx mounts    */
+/* the panel abruptly (no exit-animation lifecycle), so this is a   */
+/* lightweight CSS-only entrance rather than a full framer-motion   */
+/* enter/exit, matching the polish of the customer navbar's         */
+/* AnimatePresence dropdown without touching the shared Popover.    */
+/* ---------------------------------------------------------------- */
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-dropdown-in {
+  animation: dropdownIn 0.16s ease-out;
+  transform-origin: top right;
+}
+
 /* <input type="range"> elements sit stacked in the same box; each     */
 /* one's own track is made fully transparent here so only its round   */
 /* thumb stays visible/clickable, while the component itself draws    */

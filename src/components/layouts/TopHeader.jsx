@@ -20,7 +20,9 @@ import { ROUTES } from "../../constants/routes";
 import Popover from "../ui/Popover";
 import Avatar from "../ui/Avatar";
 import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
-import Badge from "../ui/Badge";
+// Badge is no longer used here — the role now renders as a pill inside
+// the gradient header itself (same treatment as the customer navbar's
+// "Admin"/"Customer" pill), so the separate Badge-based role row is gone.
 // Spinner, showError, extractListData, formatDate, QUERY_KEYS, and the
 // notifications API functions are NOT imported anymore — they were only
 // ever used by the notification bell that has now been removed
@@ -76,8 +78,11 @@ const TopHeader = () => {
             // styling (cn() uses twMerge internally, so the last
             // conflicting class always wins) — this is what makes the
             // dropdown look like a distinct, on-brand card instead of
-            // Popover's plain default shell.
-            panelClassName="w-62 rounded-2xl border-0 shadow-2xl ring-1 ring-black/5 p-0"
+            // Popover's plain default shell. Widened to w-72 (from w-62)
+            // to match the customer navbar's dropdown and give the
+            // gradient header room to breathe; capped so it never runs
+            // off-screen on narrow viewports.
+            panelClassName="w-64 max-w-[calc(100vw-2rem)] rounded-xl border-0 shadow-2xl ring-1 ring-black/5 p-0 animate-dropdown-in"
             trigger={
               // No chevron icon next to the avatar — the avatar itself
               // is the only trigger for the dropdown.
@@ -89,73 +94,74 @@ const TopHeader = () => {
                   src={user?.profile_picture}
                   name={user?.name}
                   size="sm"
-                  className="ring-2 ring-primary-100" // faint emerald ring around the avatar so it visually reads as "clickable / branded"
+                  className="ring-2 ring-primary" // green ring around the avatar so it visually reads as "clickable / branded"
                 />
               </button>
             }
           >
             {({ close }) => (
               <>
-                {/* Gradient profile header — uses the project's own
-                  primary / primary-dark tokens (Tailwind v4 linear
-                  gradient syntax) so the dropdown opens with an
-                  attractive, on-brand banner instead of a plain white box */}
-                <div className="px-4 py-5 bg-linear-to-br from-primary to-primary-dark flex items-center gap-3">
-                  <Avatar
-                    src={user?.profile_picture}
-                    name={user?.name}
-                    size="lg"
-                    className="ring-4 ring-white/30" // soft white ring gives the avatar a "floating card" look against the emerald gradient
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">
-                      {user?.name || "Admin"}
-                    </p>
-                    <p className="flex items-center gap-1 text-xs text-primary-50/90 truncate mt-0.5">
-                      <AiOutlineMail className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{user?.email}</span>
-                    </p>
+                {/* Gradient profile header — compacted: smaller padding,
+                  a smaller avatar, and the role pill sits tighter under
+                  the name/email instead of floating with a big gap. */}
+                <div className="relative px-4 py-3.5 bg-linear-to-br from-primary via-primary to-primary-dark overflow-hidden">
+                  <div className="absolute -right-6 -top-6 w-20 h-20 bg-white/10 rounded-full pointer-events-none" />
+                  <div className="absolute -right-2 -bottom-8 w-16 h-16 bg-white/10 rounded-full pointer-events-none" />
+                  <div className="relative flex items-center gap-2.5">
+                    <Avatar
+                      src={user?.profile_picture}
+                      name={user?.name}
+                      size="md"
+                      className="ring-2 ring-white/30 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {user?.name || "Admin"}
+                      </p>
+                      <p className="flex items-center gap-1 text-xs text-primary-50/90 truncate">
+                        <AiOutlineMail className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{user?.email}</span>
+                      </p>
+                      <span className="relative inline-block mt-1 px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full text-[9px] font-bold uppercase tracking-wider text-white">
+                        {user?.role === "admin" ? "Super Admin" : user?.role}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Role row — sits directly under the gradient header on
-                  a plain surface background, so the emerald banner
-                  above stays the clear visual focal point */}
-                <div className="px-4 py-3 border-b border-border bg-surface flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">
-                    Role
-                  </span>
-                  <Badge
-                    label={user?.role === "admin" ? "Super Admin" : user?.role}
-                    variant="success"
-                    size="sm"
-                    rounded
-                  />
+                {/* Menu items — icon-in-a-box treatment matching the
+                  customer navbar's account menu, tightened up (smaller
+                  icon boxes, less vertical padding per row). */}
+                <div className="py-1.5">
+                  <Link
+                    to={ROUTES.ADMIN_PROFILE}
+                    onClick={close}
+                    className="flex items-center gap-2.5 mx-1.5 px-2.5 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors group"
+                  >
+                    <span className="flex items-center justify-center w-7 h-7 rounded-md bg-primary-50 text-primary group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
+                      <AiOutlineUser className="w-3.5 h-3.5" />
+                    </span>
+                    Profile
+                  </Link>
                 </div>
 
-                {/* Profile link — navigates to the new Admin Profile
-                  page (API 7 / API 8), closing the dropdown first */}
-                <Link
-                  to={ROUTES.ADMIN_PROFILE}
-                  onClick={close}
-                  className="w-full flex items-center gap-2 px-4 py-3.5 text-sm font-medium text-gray-700 hover:bg-surface-secondary transition-colors border-b border-border"
-                >
-                  <AiOutlineUser className="w-4 h-4" />
-                  Profile
-                </Link>
-
-                {/* Logout — closes the popover, then runs the shared
-                  logout handler (API call + Redux clear + toast + redirect) */}
-                <button
-                  onClick={() => {
-                    close();
-                    requestLogout();
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-3.5 text-sm font-medium text-danger hover:bg-danger-light transition-colors"
-                >
-                  <AiOutlineLogout className="w-4 h-4" />
-                  Logout
-                </button>
+                {/* Logout — visually separated with a top border and its
+                  own icon box, same pattern as the customer dropdown's
+                  logout row, tightened to match. */}
+                <div className="border-t border-border py-1.5">
+                  <button
+                    onClick={() => {
+                      close();
+                      requestLogout();
+                    }}
+                    className="flex items-center gap-2.5 mx-1.5 px-2.5 py-2 rounded-lg w-[calc(100%-0.75rem)] text-sm font-medium text-danger hover:bg-danger-light transition-colors group"
+                  >
+                    <span className="flex items-center justify-center w-7 h-7 rounded-md bg-danger-light text-danger group-hover:bg-danger group-hover:text-white transition-colors shrink-0">
+                      <AiOutlineLogout className="w-3.5 h-3.5" />
+                    </span>
+                    Logout
+                  </button>
+                </div>
               </>
             )}
           </Popover>

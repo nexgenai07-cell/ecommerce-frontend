@@ -4,13 +4,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineCheckCircle } from "react-icons/ai";
-import { HiOutlineUserCircle, HiOutlineCamera } from "react-icons/hi2";
+import {
+  HiOutlineUserCircle,
+  HiOutlineCamera,
+  HiOutlinePhoto,
+  HiOutlineTrash,
+} from "react-icons/hi2";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { updateMyProfile, sendVerificationEmail } from "../../api/auth.api";
 import useAuth from "../../hooks/useAuth";
 import { showSuccess, showError } from "../ui/Toast";
 import Avatar from "../ui/Avatar";
 import ChangeEmailModal from "./ChangeEmailModal";
+import CameraCaptureModal from "./CameraCaptureModal";
 
 const personalInfoSchema = z.object({
   name: z
@@ -74,14 +80,29 @@ const PersonalInfoForm = ({ user }) => {
   }, [user, reset]);
 
   // =============================================
-  // AVATAR UPLOAD — local file selection + preview
+  // AVATAR PHOTO PICKER — local file selection + preview
   // =============================================
-  // The actual upload only happens when the form is submitted (Save
-  // Changes), together with any name/phone edit, in one single
-  // request — see updateMutation below.
-  const fileInputRef = useRef(null);
+  // The actual upload (or removal) only happens when the form is
+  // submitted (Save Changes), together with any name/phone edit, in
+  // one single request — see updateMutation below.
+  //
+  // Clicking the avatar opens a small menu with three choices:
+  //   - Take Photo          -> opens a live camera preview (via the
+  //                            CameraCaptureModal below) and lets the
+  //                            user snap a photo, on both desktop
+  //                            webcams and mobile device cameras
+  //   - Choose from Gallery -> opens the regular file/photo picker
+  //   - Remove Photo        -> only shown when a photo is currently
+  //                            set, clears it instead of forcing a
+  //                            re-upload just to get rid of it
+  const galleryInputRef = useRef(null);
+  const avatarMenuRef = useRef(null);
+
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [isAvatarRemoved, setIsAvatarRemoved] = useState(false);
 
   // Revokes the previous local preview URL whenever a new one is
   // created (or the component unmounts), so the browser doesn't keep
@@ -92,10 +113,40 @@ const PersonalInfoForm = ({ user }) => {
     };
   }, [previewUrl]);
 
-  const handleAvatarClick = () => fileInputRef.current?.click();
+  // Closes the photo options menu when the user clicks anywhere
+  // outside of it, so it behaves like a standard dropdown.
+  useEffect(() => {
+    if (!isAvatarMenuOpen) return;
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files?.[0];
+    const handleClickOutside = (event) => {
+      if (
+        avatarMenuRef.current &&
+        !avatarMenuRef.current.contains(event.target)
+      ) {
+        setIsAvatarMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isAvatarMenuOpen]);
+
+  const toggleAvatarMenu = () => setIsAvatarMenuOpen((open) => !open);
+
+  const openGalleryPicker = () => {
+    setIsAvatarMenuOpen(false);
+    galleryInputRef.current?.click();
+  };
+
+  const openCameraModal = () => {
+    setIsAvatarMenuOpen(false);
+    setIsCameraModalOpen(true);
+  };
+
+  // Shared by both photo sources (the gallery file input and a frame
+  // captured from CameraCaptureModal) so a chosen image is validated
+  // and previewed the exact same way no matter where it came from.
+  const applySelectedFile = (file) => {
     if (!file) return;
 
     // Basic client-side guardrails before it's ever sent anywhere —
@@ -113,11 +164,40 @@ const PersonalInfoForm = ({ user }) => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
+    // A freshly chosen photo replaces any pending removal request.
+    setIsAvatarRemoved(false);
+  };
+
+  const handleAvatarFileSelected = (e) => {
+    applySelectedFile(e.target.files?.[0]);
+
+    // Resetting the input's value lets the user pick the exact same
+    // file again later (e.g. after removing it) and still have the
+    // change event fire — browsers don't fire "change" a second time
+    // for an identical selection otherwise.
+    e.target.value = "";
+  };
+
+  // Called by CameraCaptureModal with the photo the user just snapped.
+  const handleCameraCapture = (file) => applySelectedFile(file);
+
+  const handleRemovePhoto = () => {
+    setIsAvatarMenuOpen(false);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setIsAvatarRemoved(true);
   };
 
   // The avatar shown right now — the freshly picked local file while
-  // one is pending, otherwise whatever the backend already has saved
-  const displayedAvatarSrc = previewUrl || user?.profile_picture;
+  // one is pending, an empty avatar while a removal is pending,
+  // otherwise whatever the backend already has saved.
+  const displayedAvatarSrc =
+    previewUrl || (isAvatarRemoved ? "" : user?.profile_picture);
+
+  // Whether the "Remove Photo" option should be offered at all — no
+  // point showing it when there's nothing set to remove.
+  const hasAvatarToRemove = Boolean(displayedAvatarSrc);
 
   // =============================================
   // UPDATE PROFILE MUTATION — API 8
@@ -126,13 +206,25 @@ const PersonalInfoForm = ({ user }) => {
     mutationFn: (data) => updateMyProfile(data),
     onSuccess: (response) => {
       showSuccess("Profile updated successfully!");
+      // Writes the freshly saved profile straight into the query
+      // cache so "user" (passed down from ProfileSettings/AdminProfile)
+      // updates in the very same render as the local overrides being
+      // cleared below. Relying only on invalidateQueries here left a
+      // gap — its background refetch takes a moment to land, and in
+      // that gap "user" still held the old profile_picture, so the
+      // old (or just-removed) photo would flash back on screen for an
+      // instant before snapping to the correct one.
+      queryClient.setQueryData(QUERY_KEYS.MY_PROFILE, (previous) =>
+        previous ? { ...previous, data: response?.data } : previous,
+      );
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
       updateProfile(response?.data || {});
-      // Clear the pending local file/preview now that it's been
-      // uploaded and saved — displayedAvatarSrc falls back to the
-      // freshly saved user.profile_picture from here on.
+      // Clear the pending local file/preview/removal now that it's
+      // been saved — displayedAvatarSrc falls back to the freshly
+      // saved user.profile_picture from here on.
       setSelectedFile(null);
       setPreviewUrl(null);
+      setIsAvatarRemoved(false);
     },
     onError: (error) => {
       showError(
@@ -147,10 +239,15 @@ const PersonalInfoForm = ({ user }) => {
     updateMutation.mutate({
       name: data.name,
       phone: data.phone,
-      // Only included when a new picture was actually picked —
-      // updateMyProfile() (auth.api.js) switches to multipart/form-data
-      // automatically whenever this key is present.
-      ...(selectedFile ? { profile_picture: selectedFile } : {}),
+      // A new file takes priority over a pending removal (picking a
+      // photo after tapping Remove simply replaces it). Sending
+      // profile_picture explicitly as null tells the backend to
+      // clear the existing picture rather than leave it untouched.
+      ...(selectedFile
+        ? { profile_picture: selectedFile }
+        : isAvatarRemoved
+          ? { profile_picture: null }
+          : {}),
     });
   };
 
@@ -186,7 +283,8 @@ const PersonalInfoForm = ({ user }) => {
     if (updatedUser) updateProfile(updatedUser);
   };
 
-  const canSave = (isDirty || selectedFile) && !updateMutation.isPending;
+  const canSave =
+    (isDirty || selectedFile || isAvatarRemoved) && !updateMutation.isPending;
 
   return (
     <div className="relative bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
@@ -215,39 +313,93 @@ const PersonalInfoForm = ({ user }) => {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col sm:flex-row items-start gap-6">
-            {/* Avatar — clickable, opens the hidden file input below.
-                A small camera badge in the corner signals it's
-                editable, and the ring becomes a hover target. */}
-            <div className="shrink-0 mx-auto sm:mx-0">
+            {/* Avatar — clickable, opens a small menu with Take Photo /
+                Choose from Gallery / Remove Photo. A camera badge in
+                the corner signals it's editable, and the ring becomes
+                a hover target. */}
+            <div
+              ref={avatarMenuRef}
+              className="relative shrink-0 mx-auto sm:mx-0"
+            >
               <button
                 type="button"
-                onClick={handleAvatarClick}
+                onClick={toggleAvatarMenu}
                 className="relative block rounded-full group focus:outline-none focus:ring-2 focus:ring-primary/40"
                 aria-label="Change profile picture"
+                aria-haspopup="true"
+                aria-expanded={isAvatarMenuOpen}
               >
-                <div className="p-1 rounded-full bg-linear-to-br from-primary via-primary-light to-primary-dark">
-                  <div className="bg-white p-0.5 rounded-full">
-                    <Avatar
-                      src={displayedAvatarSrc}
-                      name={user?.name}
-                      size="xl"
-                    />
-                  </div>
-                </div>
+                <Avatar
+                  src={displayedAvatarSrc}
+                  name={user?.name}
+                  size="xl"
+                  className="ring-4 ring-primary ring-offset-2 ring-offset-white"
+                />
+                {/* Plain green ring border directly on the photo circle —
+                    a clean ring-primary border with a small white gap,
+                    no extra padding wrapper divs. */}
                 <span className="absolute bottom-0.5 right-0.5 w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-md ring-2 ring-white group-hover:bg-primary transition-colors">
                   <HiOutlineCamera className="w-3.5 h-3.5" />
                 </span>
               </button>
+
+              {/* Photo options menu — anchored under the avatar and
+                  centered on narrow screens so it always stays inside
+                  the viewport instead of running off the edge. */}
+              {isAvatarMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute z-20 top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-xl border border-gray-100 shadow-lg shadow-gray-900/10 py-1.5 overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={openCameraModal}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <HiOutlineCamera className="w-4 h-4 text-gray-400 shrink-0" />
+                    Take Photo
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={openGalleryPicker}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <HiOutlinePhoto className="w-4 h-4 text-gray-400 shrink-0" />
+                    Choose from Gallery
+                  </button>
+                  {hasAvatarToRemove && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleRemovePhoto}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger hover:bg-danger-light/10 transition-colors border-t border-gray-50"
+                    >
+                      <HiOutlineTrash className="w-4 h-4 shrink-0" />
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Gallery picker — opens the regular file/photo library */}
               <input
-                ref={fileInputRef}
+                ref={galleryInputRef}
                 type="file"
                 accept="image/*"
-                onChange={handleAvatarChange}
+                onChange={handleAvatarFileSelected}
                 className="hidden"
               />
+
               {selectedFile && (
                 <p className="text-[11px] text-primary text-center mt-1.5">
                   New photo selected — click Save to upload
+                </p>
+              )}
+              {isAvatarRemoved && !selectedFile && (
+                <p className="text-[11px] text-danger text-center mt-1.5">
+                  Photo will be removed — click Save to confirm
                 </p>
               )}
             </div>
@@ -391,6 +543,12 @@ const PersonalInfoForm = ({ user }) => {
         isOpen={isChangeEmailOpen}
         onClose={() => setIsChangeEmailOpen(false)}
         onSuccess={handleEmailChanged}
+      />
+
+      <CameraCaptureModal
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onCapture={handleCameraCapture}
       />
     </div>
   );
