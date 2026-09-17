@@ -9,8 +9,16 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  HiOutlineTag,
+  HiOutlineMapPin,
+  HiOutlineBuildingOffice2,
+  HiOutlinePhone,
+  HiCheckCircle,
+} from "react-icons/hi2";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
+import Select from "../ui/Select";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { createAddress, updateAddress } from "../../api/addresses.api";
 import { showSuccess, showError } from "../ui/Toast";
@@ -26,8 +34,22 @@ const PROVINCES = [
   "Balochistan",
   "Azad Kashmir",
   "Gilgit-Baltistan",
-  "Islamabad",
 ];
+
+// Options shape the shared Select component expects — built once from
+// the plain province name list above so both stay in sync.
+const PROVINCE_OPTIONS = PROVINCES.map((p) => ({ value: p, label: p }));
+
+// Hard character ceilings enforced both on the input itself (via
+// maxLength / onChange filtering below) and in the schema. Keeping a
+// single source of truth here means the visible limit the customer
+// hits while typing always matches the limit the schema will
+// ultimately validate against.
+const LABEL_MAX_LENGTH = 30;
+const ADDRESS_MAX_LENGTH = 150;
+const CITY_MAX_LENGTH = 35;
+const POSTAL_CODE_LENGTH = 5;
+const PHONE_MAX_LENGTH = 13;
 
 // Validation schema — matches the exact fields the backend accepts on
 // both POST /api/v1/addresses/ and PUT /api/v1/addresses/{id}/:
@@ -38,13 +60,13 @@ const addressSchema = z.object({
     .string()
     .trim()
     .min(1, "Give this address a label (e.g. Home, Office)")
-    .max(30, "Label is too long"),
+    .max(LABEL_MAX_LENGTH, "Label is too long"),
   shipping_address: z
     .string()
     .trim()
     .min(1, "Address is required")
     .min(5, "Please enter a complete address")
-    .max(150, "Address is too long")
+    .max(ADDRESS_MAX_LENGTH, "Address is too long")
     .regex(
       /^[A-Za-z0-9\s,.#/'-]+$/,
       "Address can only contain letters, numbers, and , . # / ' -",
@@ -55,7 +77,7 @@ const addressSchema = z.object({
     .string()
     .trim()
     .min(1, "City is required")
-    .max(60, "City name is too long")
+    .max(CITY_MAX_LENGTH, "City name is too long")
     .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters")
     .refine((val) => !/(.)\1{3,}/.test(val), "Please enter a valid city name"),
   province: z.string().trim().optional(),
@@ -66,8 +88,8 @@ const addressSchema = z.object({
     .trim()
     .optional()
     .refine(
-      (val) => !val || /^\d{5}$/.test(val),
-      "Postal code must be exactly 5 digits",
+      (val) => !val || new RegExp(`^\\d{${POSTAL_CODE_LENGTH}}$`).test(val),
+      `Postal code must be exactly ${POSTAL_CODE_LENGTH} digits`,
     ),
   // Optional on the backend — validated only when non-empty. Anchored
   // regex already rejects letters/symbols outright since the whole
@@ -188,6 +210,22 @@ const AddressFormModal = ({
 
   const onSubmit = (data) => saveMutation.mutate(data);
 
+  // Shared input classes — centralised here so every field in this
+  // form (label, address, city, postal code, phone) renders with the
+  // exact same rounded, focus-ring, error-state look. Passing an
+  // "hasError" flag keeps the border/ring color in sync with
+  // react-hook-form's live validation state.
+  const inputClasses = (hasError) => `
+    w-full px-4 py-2.5 text-sm rounded-xl border bg-white
+    placeholder:text-gray-300 text-gray-900
+    focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+    transition-all duration-150
+    ${hasError ? "border-danger focus:ring-danger" : "border-gray-200 hover:border-gray-300"}
+  `;
+
+  const labelClasses =
+    "flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider";
+
   return (
     <Modal
       isOpen={isOpen}
@@ -199,20 +237,16 @@ const AddressFormModal = ({
       <div className="flex flex-col gap-4">
         {/* Label */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          <label className={labelClasses}>
+            <HiOutlineTag className="w-3.5 h-3.5 text-primary" />
             Label
           </label>
           <input
             type="text"
             placeholder="Home, Office, etc."
+            maxLength={LABEL_MAX_LENGTH}
             {...register("label")}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              placeholder:text-gray-300 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors.label ? "border-danger" : "border-gray-200"}
-            `}
+            className={inputClasses(errors.label)}
           />
           {errors.label && (
             <p className="text-xs text-danger">{errors.label.message}</p>
@@ -221,21 +255,17 @@ const AddressFormModal = ({
 
         {/* Street address */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          <label className={labelClasses}>
+            <HiOutlineMapPin className="w-3.5 h-3.5 text-primary" />
             Street Address
           </label>
           <input
             type="text"
             placeholder="House #, street name"
             autoComplete="street-address"
+            maxLength={ADDRESS_MAX_LENGTH}
             {...register("shipping_address")}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              placeholder:text-gray-300 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors.shipping_address ? "border-danger" : "border-gray-200"}
-            `}
+            className={inputClasses(errors.shipping_address)}
           />
           {errors.shipping_address && (
             <p className="text-xs text-danger">
@@ -247,21 +277,29 @@ const AddressFormModal = ({
         {/* City + Province + Postal Code */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            <label className={labelClasses}>
+              <HiOutlineBuildingOffice2 className="w-3.5 h-3.5 text-primary" />
               City
             </label>
             <input
               type="text"
               placeholder="Lahore"
               autoComplete="address-level2"
+              maxLength={CITY_MAX_LENGTH}
               {...register("city")}
-              className={`
-                w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-                placeholder:text-gray-300 text-gray-900
-                focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-                transition-all
-                ${errors.city ? "border-danger" : "border-gray-200"}
-              `}
+              onChange={(e) => {
+                // City names are letters only — strip digits, symbols,
+                // and any other disallowed character the instant it's
+                // typed or pasted, so the field itself enforces the
+                // same rule the schema's regex checks on submit,
+                // rather than only complaining after the fact.
+                // maxLength above stops the character count once it
+                // reaches CITY_MAX_LENGTH, so nothing beyond that
+                // limit can be entered either.
+                e.target.value = e.target.value.replace(/[^A-Za-z\s'-]/g, "");
+                register("city").onChange(e);
+              }}
+              className={inputClasses(errors.city)}
             />
             {errors.city && (
               <p className="text-xs text-danger">{errors.city.message}</p>
@@ -272,22 +310,21 @@ const AddressFormModal = ({
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
               Province
             </label>
-            <select
+            {/* Uses the shared Select component (same one already used on
+                Checkout, Discounts, Orders, etc.) instead of a raw native
+                <select> so the closed field — rounded corners, border
+                color, focus ring, chevron icon — matches the rest of the
+                app's theme instead of the browser's unstyled default.
+                The "label" prop is left unset here on purpose: this form
+                already renders its own small-caps gray label above, in
+                the same style as City and Postal Code beside it, so
+                Select is only used for the field itself. */}
+            <Select
+              placeholder="Select (optional)"
+              options={PROVINCE_OPTIONS}
               {...register("province")}
-              className="
-                w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-                text-gray-900 cursor-pointer appearance-none border-gray-200
-                focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-                transition-all
-              "
-            >
-              <option value="">Select (optional)</option>
-              {PROVINCES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+              className="rounded-xl"
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -297,17 +334,20 @@ const AddressFormModal = ({
             <input
               type="text"
               inputMode="numeric"
-              maxLength={5}
+              maxLength={POSTAL_CODE_LENGTH}
               placeholder="54000 (optional)"
               autoComplete="postal-code"
               {...register("postal_code")}
-              className={`
-                w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-                placeholder:text-gray-300 text-gray-900
-                focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-                transition-all
-                ${errors.postal_code ? "border-danger" : "border-gray-200"}
-              `}
+              onChange={(e) => {
+                // Postal codes are digits only — the same "block it at
+                // the keystroke, don't just flag it afterwards"
+                // approach used for phone below. maxLength caps the
+                // count at POSTAL_CODE_LENGTH once the digits themselves
+                // are already clean.
+                e.target.value = e.target.value.replace(/\D/g, "");
+                register("postal_code").onChange(e);
+              }}
+              className={inputClasses(errors.postal_code)}
             />
             {errors.postal_code && (
               <p className="text-xs text-danger">
@@ -319,29 +359,28 @@ const AddressFormModal = ({
 
         {/* Phone */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          <label className={labelClasses}>
+            <HiOutlinePhone className="w-3.5 h-3.5 text-primary" />
             Phone (optional)
           </label>
           <input
             type="tel"
             inputMode="tel"
-            maxLength={13}
+            maxLength={PHONE_MAX_LENGTH}
             placeholder="03XXXXXXXXX"
             autoComplete="tel"
             {...register("phone")}
             onChange={(e) => {
+              // Same digit-plus-leading-"+"-only filter used on the
+              // Register page's phone field, kept identical here so a
+              // customer sees the exact same typing behaviour in both
+              // places.
               e.target.value = e.target.value
                 .replace(/[^\d+]/g, "")
                 .replace(/(?!^)\+/g, "");
               register("phone").onChange(e);
             }}
-            className={`
-              w-full px-4 py-2.5 text-sm rounded-xl border bg-white
-              placeholder:text-gray-300 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-              transition-all
-              ${errors.phone ? "border-danger" : "border-gray-200"}
-            `}
+            className={inputClasses(errors.phone)}
           />
           {errors.phone && (
             <p className="text-xs text-danger">{errors.phone.message}</p>
@@ -349,13 +388,20 @@ const AddressFormModal = ({
         </div>
 
         {/* Set as default */}
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <label
+          className="
+            flex items-center gap-2.5 cursor-pointer select-none
+            rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3
+            hover:border-gray-300 transition-colors
+          "
+        >
           <input
             type="checkbox"
             {...register("is_default")}
             className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
-          <span className="text-sm text-gray-600">
+          <span className="flex items-center gap-1.5 text-sm text-gray-600">
+            <HiCheckCircle className="w-4 h-4 text-primary" />
             Set as my default address
           </span>
         </label>
