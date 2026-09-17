@@ -144,7 +144,7 @@ const PostsList = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader
         icon={<AiOutlineFileText />}
@@ -184,40 +184,46 @@ const PostsList = () => {
         hasActiveFilters={hasActiveFilters}
       />
 
-      {/* Posts grid */}
-      {isLoading ? (
-        <div className="py-16 flex items-center justify-center">
-          <Spinner size="lg" />
-        </div>
-      ) : isError ? (
-        <div className="py-16 flex flex-col items-center gap-3">
-          <p className="text-sm text-gray-400">Something went wrong.</p>
-          <Button variant="secondary" onClick={refetch}>
-            Try again
-          </Button>
-        </div>
-      ) : posts.length === 0 ? (
-        <EmptyState
-          variant="noResults"
-          title="No Posts Found"
-          description="Create your first social post to get started."
-        />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              onEdit={(p) =>
-                navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST, {
-                  state: { editPost: p },
-                })
-              }
-              onDeleteRequest={setPostToDelete}
-            />
-          ))}
-        </div>
-      )}
+      {/* Posts grid — wrapped in a flex-1 container so this section (not
+          the standalone Pagination card below it) absorbs any extra
+          vertical space the page has to give. Without this, a page with
+          only one or two posts left the Pagination card floating right
+          under the grid instead of pinned to the bottom of the screen. */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {isLoading ? (
+          <div className="py-16 flex items-center justify-center">
+            <Spinner size="lg" />
+          </div>
+        ) : isError ? (
+          <div className="py-16 flex flex-col items-center gap-3">
+            <p className="text-sm text-gray-400">Something went wrong.</p>
+            <Button variant="secondary" onClick={refetch}>
+              Try again
+            </Button>
+          </div>
+        ) : posts.length === 0 ? (
+          <EmptyState
+            variant="noResults"
+            title="No Posts Found"
+            description="Create your first social post to get started."
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {posts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onEdit={(p) =>
+                  navigate(ROUTES.ADMIN_SOCIAL_CREATE_POST, {
+                    state: { editPost: p },
+                  })
+                }
+                onDeleteRequest={setPostToDelete}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <Pagination
         currentPage={currentPage}

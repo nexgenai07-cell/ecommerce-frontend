@@ -993,7 +993,7 @@ const ReturnsManagement = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* ================================================================
           PAGE HEADER — shared gradient-badge header, same component used
           on every other admin page, rendered first as requested.
@@ -1125,7 +1125,7 @@ const ReturnsManagement = () => {
         </div>
       )}
 
-      <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)]">
+      <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)] flex flex-col flex-1 min-h-0">
         <DataTable
           columns={columns}
           data={visibleReturns}

@@ -289,7 +289,7 @@ const CustomerManagement = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader icon={<AiOutlineTeam />} title="Customers" />
       {/* Note: "+ Add Customer" from the design is NOT included — there

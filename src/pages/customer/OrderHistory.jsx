@@ -146,15 +146,20 @@ const OrderHistory = () => {
     // relative + overflow-hidden hosts the decorative ambient gradient glow
     // behind the header without it bleeding into the navbar/footer or causing
     // horizontal scrollbars — same treatment as Wishlist and Notifications
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-hidden flex-1 flex flex-col min-h-0">
+      {/* flex-1 flex flex-col min-h-0: lets this page stretch to fill the
+          height CustomerAccountLayout's <main> now hands down, so the
+          pagination footer further below can be pinned to the bottom of
+          the screen instead of hugging right under one or two order
+          cards. */}
       {/* Ambient background glow — soft emerald blur behind the page header,
           purely decorative (pointer-events-none), keeps this page visually
           consistent with the other account pages
           -z-10 keeps it strictly behind all real content                    */}
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-xl h-144 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      <Container className="py-6 sm:py-8">
-        <div className="flex flex-col gap-6">
+      <Container className="py-6 sm:py-8 flex-1 flex flex-col min-h-0">
+        <div className="flex flex-col gap-6 flex-1 min-h-0">
           {/* ── Filters: icon-box heading + status tabs + date range dropdown ──
               Receives the date-window-filtered orders so tab counts stay
               accurate for whichever date range is currently selected        */}
@@ -279,9 +284,20 @@ const OrderHistory = () => {
               "rows per page" dropdown stays reachable even while everything
               currently fits on a single page.                               */}
           {!isLoading && !isError && filteredOrders.length > 0 && (
-            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white">
+            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white flex-1 flex flex-col min-h-0">
+              {/* flex-1 flex flex-col min-h-0: this card now stretches to
+                  fill the remaining page height, so the Pagination footer
+                  below is pinned at the bottom of the screen even when
+                  there's only one or two orders on the page. */}
               <AnimatePresence mode="popLayout">
-                <div className="flex flex-col gap-4 p-4 sm:p-5">
+                <div className="flex flex-col gap-4 p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto">
+                  {/* flex-1 min-h-0: absorbs the extra space inside the
+                      card, leaving blank room below the last order card
+                      instead of the footer below it climbing up.
+                      overflow-y-auto: safety net in case the card list is
+                      ever taller than the available space, so cards
+                      scroll within their own area rather than pushing the
+                      pagination footer off-screen. */}
                   {paginatedOrders.map((order, index) => (
                     <OrderCard
                       key={order.order_number}

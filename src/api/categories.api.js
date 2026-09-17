@@ -189,7 +189,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API - Get a list of all categories
+// API 23 - Get a list of all categories
 // ----------------------------
 // Fetches every category currently available. Used by CUSTOMERS
 // for browsing/filtering products by category (e.g. a category
@@ -201,8 +201,25 @@ import axiosInstance from "../lib/axiosInstance";
 // customers or admins. That internal flag itself is never sent back
 // in this response, so the frontend has no way to detect "this used
 // to exist and was deleted" — it just quietly stops appearing.
-export const getCategories = (signal) => {
-  return axiosInstance.get("/api/v1/categories/", { signal });
+//
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 23): this endpoint now
+// also accepts optional query params — search (matches category
+// name), start_date / end_date (against created_at), ordering (name,
+// -name, created_at, -created_at, product_count, -product_count),
+// and OPT-IN pagination (page, page_size). Pagination only activates
+// when `page` is explicitly sent:
+//   - params omitted (or page left out) -> response is UNCHANGED, the
+//     same plain array as always. Every call site that just wants the
+//     complete category list (navbar, footer, shop-page filter
+//     checkboxes, every dropdown in this project) keeps calling this
+//     with no params at all and needs no changes whatsoever.
+//   - page sent -> response becomes the standard paginated shape
+//     { count, next, previous, results }. Only the admin Category
+//     Management table uses this, so it can offer real server-side
+//     search/date-range/sort/pagination instead of fetching the full
+//     list and filtering it in the browser (see CategoryManagement.jsx).
+export const getCategories = (params, signal) => {
+  return axiosInstance.get("/api/v1/categories/", { signal, params });
 };
 
 // ----------------------------

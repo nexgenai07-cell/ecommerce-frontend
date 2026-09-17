@@ -26,7 +26,12 @@ const CustomerAccountLayout = () => {
             min-w-0 prevents flex children from overflowing their container
             pb-20 adds bottom padding on mobile so content isn't hidden behind
             the bottom tab bar; md:pb-0 removes that padding on desktop        */}
-        <main className="flex-1 min-w-0 pb-20 md:pb-0">
+        <main className="flex-1 min-w-0 pb-20 md:pb-0 flex flex-col">
+          {/* flex flex-col added: turns "main" into a flex column so the
+              account page rendered by <Outlet /> (e.g. OrderHistory,
+              NotificationHistory) can use "flex-1" to stretch to the
+              bottom of the screen, letting their pagination footer stay
+              pinned at the bottom even with just one or two rows. */}
           {/* Breadcrumb trail — sits inside the content column, next to the
               sidebar rather than spanning above it. */}
           <Breadcrumbs />

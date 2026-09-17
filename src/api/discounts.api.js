@@ -11,17 +11,38 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API  - Get the list of all discount coupons (Admin only)
+// API 39 - Get the list of all discount coupons (Admin only)
 // ----------------------------
-// Fetches every discount coupon that currently exists in the system,
-// whether active, expired, or manually disabled — EXCEPT any coupon
-// whose internal is_delete flag is true, which the backend now
-// filters out of this response automatically. Used on the admin's
-// "Discounts" management page. Called with NO params from
-// DiscountManagement now — all filtering/search/pagination happens
-// client-side there instead, since the backend doesn't reliably honor
-// query params on this endpoint (confirmed via Network tab: switching
-// filters wasn't actually narrowing anything down).
+// Fetches discount coupons — EXCEPT any coupon whose internal
+// is_delete flag is true, which the backend filters out of this
+// response automatically.
+//
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 39): the response
+// SHAPE HAS CHANGED, and this is NOT opt-in — it was previously a
+// plain array of every coupon; it is now ALWAYS the standard
+// paginated shape { count, next, previous, results }, even if no
+// params are sent at all. The row data itself is unchanged (same
+// fields per coupon), only the outer envelope is different.
+//
+// This endpoint now also accepts real query params:
+//   - search    -> matches the coupon code (case-insensitive)
+//   - type      -> filters by discount type (matches the "type" field
+//                   used when creating/editing a coupon above)
+//   - status    -> "active" | "expired" — derived server-side from
+//                   is_active + end_date, NOT a stored column. There
+//                   is no "inactive" status value; a coupon that is
+//                   is_active: false but not yet expired simply isn't
+//                   returned by either "active" or "expired" — it's
+//                   only excluded when a status filter is applied at
+//                   all, and included as normal when no status filter
+//                   is sent.
+//   - ordering  -> created_at, -created_at, code, -code, value,
+//                   -value, end_date, -end_date
+//   - page / page_size -> standard pagination
+// DiscountManagement now sends these directly and reads `.results` /
+// `.count` from the response instead of fetching everything and
+// filtering/sorting/paginating it in the browser (see
+// DiscountManagement.jsx and DiscountFilters.jsx).
 export const getDiscounts = (params, signal) => {
   return axiosInstance.get("/api/v1/discounts/", { signal, params });
 };
@@ -54,7 +75,8 @@ export const createDiscount = (data, signal) => {
 // in edit mode, so a coupon doesn't get flagged as a duplicate of
 // itself. Response shape (confirmed with backend): { exists: boolean }
 export const checkDiscountCodeExists = (code, excludeId, signal) => {
-  return axiosInstance.get("/api/v1/discounts/check-code/", { signal,
+  return axiosInstance.get("/api/v1/discounts/check-code/", {
+    signal,
     params: { code, exclude_id: excludeId },
   });
 };

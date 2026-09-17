@@ -47,6 +47,11 @@ const AdminLayout = () => {
 
       <div
         className={cn(
+          "flex flex-col min-h-screen",
+          // flex flex-col min-h-screen: this column (TopHeader + main) now
+          // stretches to at least the full viewport height, so "main" below
+          // has real extra room to hand down to "flex-1" page content
+          // instead of just shrink-wrapping to whatever the page needs.
           "transition-all duration-300 ease-in-out",
           "ml-0",
           sidebarOpen ? "md:ml-60" : "md:ml-16",
@@ -54,7 +59,17 @@ const AdminLayout = () => {
       >
         <TopHeader />
 
-        <main className="p-4 md:p-6 lg:p-8">
+        <main className="p-4 md:p-6 lg:p-8 flex-1 flex flex-col">
+          {/* flex-1: grows to fill whatever height is left under TopHeader
+              (at least down to the bottom of the viewport, more once the
+              page's own content is taller than the screen)
+              flex flex-col: makes this a flex column so the page rendered
+              by <Outlet /> below can itself opt into "flex-1" and stretch
+              all the way down — this is what lets a shared table's
+              pagination footer sit pinned at the bottom of the screen
+              instead of hugging right under the last row when there are
+              only one or two rows. */}
+
           {/* Breadcrumb trail — sits above every admin page's own
               PageHeader/content. Renders nothing on the dashboard root
               or on routes without a breadcrumbs.config.js entry. */}

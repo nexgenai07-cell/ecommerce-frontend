@@ -138,8 +138,20 @@ const DataTable = ({
   };
 
   return (
-    <div className={cn("flex flex-col gap-4", className)}>
+    <div className={cn("flex flex-col gap-4 flex-1 min-h-0", className)}>
       {/* Outer wrapper stacks the search bar, table, and pagination with consistent spacing */}
+      {/* flex-1 min-h-0: lets this whole component grow to fill any extra
+          vertical space its parent page hands down (now that AdminLayout /
+          CustomerLayout / CustomerAccountLayout pass real height through
+          their own flex-1 chains). This is what pushes the pagination
+          footer inside the card below all the way to the bottom of the
+          screen even when the table only has one or two rows, instead of
+          it sitting right under the last row. min-h-0 stops this flex
+          item from refusing to shrink below its content size, which is
+          what a flex child needs for flex-1 to actually take effect
+          inside a flex-column parent. Harmless when a page doesn't
+          stretch this component's parent — flex-1/min-h-0 do nothing
+          outside of a flex container with real extra space to give. */}
 
       {/* Search bar — only rendered when searchable prop is true */}
       {searchable && (

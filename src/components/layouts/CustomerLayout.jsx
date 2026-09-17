@@ -39,7 +39,13 @@ const CustomerLayout = () => {
     <div className="min-h-screen flex flex-col bg-white">
       <CustomerNavbar />
 
-      <main className="flex-1 w-full">
+      <main className="flex-1 w-full flex flex-col">
+        {/* flex flex-col added alongside the existing flex-1: this turns
+            "main" into a flex column so the page rendered by <Outlet />
+            can itself use "flex-1" to stretch down to the bottom of the
+            screen — needed so a shared table's pagination footer sits
+            pinned at the true bottom of the page even when there's only
+            one or two rows, instead of hugging right under them. */}
         {!hideBreadcrumb && <Breadcrumbs />}
 
         <Suspense

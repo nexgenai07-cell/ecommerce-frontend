@@ -108,12 +108,23 @@ export const getOrdersAnalytics = (params, signal) => {
 };
 
 // ----------------------------
-// API  - Get the best-selling products list (Admin only)
+// API 95 - Get the best-selling products list (Admin only)
 // ----------------------------
 // Fetches which products have sold the most within a given period.
 // The "params" object can include:
 // - start_date / end_date: the date range to analyze
-// - limit: how many top products to return (e.g. top 10)
+// - limit: how many top products to return (e.g. top 10) — default 5
+// - category_id: NEW (16 Sep 2026, Filtering Fix pass) — single value
+//   or comma-separated, narrows results to those categories
+// - page / page_size: NEW, OPT-IN real pagination beyond `limit`'s
+//   cap. IMPORTANT: only activates when `page` is explicitly sent —
+//   without it, the response is UNCHANGED (a plain array sliced to
+//   `limit`, exactly as before). With `page` sent, the response
+//   becomes { count, results } instead, and page/page_size takes over
+//   from limit — lets a future "see all" view page through rankings
+//   beyond the top 5/50. The Products Performance page (see
+//   ProductsPerformance.jsx) now sends category_id but never sends
+//   page, so it keeps getting the plain array as always.
 export const getBestSellers = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/products/best-sellers/", {
     signal,
@@ -122,12 +133,15 @@ export const getBestSellers = (params, signal) => {
 };
 
 // ----------------------------
-// API  - Get the low-performing products list (Admin only)
+// API 96 - Get the low-performing products list (Admin only)
 // ----------------------------
 // Fetches which products are selling POORLY — useful for admins to
 // identify items that may need a discount, better marketing, or
 // removal from the catalog. The "params" object can include:
 // - limit: how many low-performing products to return
+// - category_id / page / page_size: NEW (16 Sep 2026, Filtering Fix
+//   pass) — same opt-in pagination contract as getBestSellers above.
+//   No page in this project currently consumes this endpoint.
 export const getLowPerformingProducts = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/products/low-performing/", {
     signal,

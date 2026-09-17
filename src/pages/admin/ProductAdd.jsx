@@ -176,7 +176,7 @@ const ProductAdd = () => {
 
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(signal),
+    queryFn: ({ signal }) => getCategories(undefined, signal),
     staleTime: 1000 * 60 * 10,
   });
   const categories = extractListData(categoriesResponse);

@@ -1,15 +1,25 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AiOutlinePlus, AiOutlineEye, AiOutlineMessage } from "react-icons/ai";
 
-import { getWhatsAppSessions, getWhatsAppLogs } from "../../api/whatsapp.api";
-import { getCustomers } from "../../api/customers.api";
+import {
+  getWhatsAppSessions,
+  getWhatsAppConversations,
+} from "../../api/whatsapp.api";
+// getWhatsAppConversations — NEW (API 116.1, 16 Sep 2026 Filtering Fix
+// pass). One row per distinct phone number that has EVER exchanged a
+// message, already paired with its linked customer's name and total
+// message count server-side. getWhatsAppSessions is kept ONLY for the
+// two stat cards below ("Active Sessions" / "Bot-Handled"), since that
+// is a genuinely different, still-small-and-bounded concept —
+// currently mid-flow bot sessions — not the full conversation history.
 import { ROUTES } from "../../constants/routes";
 import extractListData from "../../utils/extractListData";
 import formatRelativeTime from "../../utils/formatRelativeTime";
 import downloadCsv from "../../utils/downloadCsv";
-import { showSuccess } from "../../components/ui/Toast";
+import useDebounce from "../../hooks/useDebounce";
+import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Avatar from "../../components/ui/Avatar";
@@ -28,16 +38,21 @@ import NumbersFilters from "../../components/admin-whatsapp/NumbersFilters";
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
+// Backend's page_size cap on /api/v1/admin/whatsapp/conversations/
+// (API 116.1) — same cap already used for the on-screen pagination,
+// now also used to pull an exported list in as few requests as
+// possible.
+const EXPORT_PAGE_SIZE = 100;
+
 const NumbersManagement = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  // pageSize — how many WhatsApp numbers are shown per page, controlled
-  // by the "Rows per page" dropdown in the table footer. The session
-  // list is filtered client-side above, so this only affects the slice
-  // taken below — no network request is re-fired.
+  // pageSize — how many WhatsApp numbers are shown per page, sent to
+  // the backend as `page_size` alongside `page` on every request.
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
   // page value, since staying on a deep page of a now-differently-sized
@@ -47,116 +62,74 @@ const NumbersManagement = () => {
     setCurrentPage(1);
   };
 
+  // Waits 400ms after the admin stops typing before actually
+  // searching — avoids firing a new network request on every single
+  // keystroke, same pattern used on every other admin list page.
+  const debouncedSearch = useDebounce(search, 400);
+
   // --------------------------------------------------
-  // The numbers table is built from API 94 (currently active
-  // sessions) — the only REAL, bounded source of "known numbers".
-  // There's no paginated "all WhatsApp numbers ever seen" endpoint,
-  // so this deliberately shows currently-active numbers rather than
-  // pretending to cover the design's "2,842 total" figure.
+  // ACTIVE SESSION STATS — API 94, unrelated to the table below. These
+  // two stat cards specifically describe numbers currently mid-flow
+  // with the bot right now, which is a different, smaller concept than
+  // "every number that has ever messaged" (the table's data source).
   // --------------------------------------------------
-  const { data: sessionsResponse, isLoading } = useQuery({
+  const { data: sessionsResponse, isLoading: isLoadingSessions } = useQuery({
     queryKey: ["whatsappNumbers", "sessions"],
     queryFn: ({ signal }) => getWhatsAppSessions(signal),
   });
-  const allSessions = extractListData(sessionsResponse);
+  const activeSessions = extractListData(sessionsResponse);
 
-  // Real customer name lookup — one precise search-by-phone request
-  // PER SESSION, instead of the old approach of fetching up to 200
-  // customers and hoping the match was somewhere in there. allSessions
-  // is already a small, bounded list (currently-active WhatsApp
-  // sessions only — see the comment above), so looking up every
-  // session's real name this way is safe and accurate, and no longer
-  // silently fails once the customer base grows past 200. The
-  // backend's `search` param is now confirmed to match phone numbers
-  // directly.
-  const customerLookupQueries = useQueries({
-    queries: allSessions.map((session) => ({
-      queryKey: ["whatsappNumbers", "customerLookup", session.phone_number],
-      queryFn: ({ signal }) =>
-        getCustomers({ search: session.phone_number, page_size: 1 }, signal),
-      staleTime: 1000 * 60 * 5,
-    })),
+  // --------------------------------------------------
+  // CONVERSATIONS TABLE QUERY — API 116.1 (NEW, 16 Sep 2026 Filtering
+  // Fix pass). Real server-side search (phone number OR linked
+  // customer name) and real pagination, already paired with each
+  // number's customer name and message count — no more per-session
+  // customer lookups or per-row chat-count requests.
+  // --------------------------------------------------
+  const {
+    data: conversationsResponse,
+    isLoading: isLoadingConversations,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      "whatsappNumbers",
+      "conversations",
+      debouncedSearch,
+      currentPage,
+      pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getWhatsAppConversations(
+        {
+          search: debouncedSearch || undefined,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
+    keepPreviousData: true,
   });
 
-  // Builds a phone -> customer lookup map, keyed by phone number so it
-  // stays correct regardless of filtering/pagination order afterward
-  const customerByPhone = {};
-  allSessions.forEach((session, index) => {
-    const match = extractListData(customerLookupQueries[index]?.data)[0];
-    if (match) customerByPhone[session.phone_number] = match;
-  });
-
-  const findCustomer = (phone) => customerByPhone[phone] || null;
-  // Same signature as before — every other usage of findCustomer()
-  // below (search filtering, the table render, CSV export) works
-  // unchanged.
-  // CONFIRMED: the backend's `search` param now normalizes phone
-  // formatting before matching (spaces, dashes, and a "+" country
-  // code prefix are stripped, then compared as digits) — so this
-  // correctly matches even when WhatsApp's phone format differs from
-  // how the customer's phone was originally stored.
-
-  const filteredSessions = search
-    ? allSessions.filter((s) => {
-        const customer = findCustomer(s.phone_number);
-        return (
-          s.phone_number.includes(search) ||
-          customer?.name?.toLowerCase().includes(search.toLowerCase())
-        );
-      })
-    : allSessions;
-
-  // Real pagination over the filtered list, sized by the currently
-  // selected `pageSize` and moving with `currentPage`, matching how
-  // every other admin table in this project paginates.
-  const totalPages = Math.max(1, Math.ceil(filteredSessions.length / pageSize));
-  const visibleSessions = filteredSessions.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
-
-  // Search changes are wired directly to setSearch + setCurrentPage(1)
-  // inline where NumbersFilters is rendered below (a new search term
-  // changes which rows match, so the page count can shrink — resetting
-  // to page 1 avoids landing on a page number that no longer exists
-  // for the new filtered result set).
-
-  // Real per-row chat count — only for the small, currently-VISIBLE
-  // page of rows (not all sessions at once), matching the same
-  // bounded-N+1 reasoning used elsewhere in this admin panel
-  const chatCountQueries = useQueries({
-    queries: visibleSessions.map((session) => ({
-      queryKey: ["whatsappNumbers", "chatCount", session.phone_number],
-      queryFn: ({ signal }) =>
-        getWhatsAppLogs({ phone_number: session.phone_number }, signal),
-    })),
-  });
-
-  // Rows are pre-enriched with the customer record and chat count
-  // before being handed to DataTable, so each column's render function
-  // can read everything it needs straight off the row object.
-  const tableRows = visibleSessions.map((session, index) => ({
-    ...session,
-    customer: findCustomer(session.phone_number),
-    chatCount: extractListData(chatCountQueries[index]?.data).length,
-  }));
+  const tableRows = extractListData(conversationsResponse);
+  const totalCount = conversationsResponse?.data?.count ?? tableRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const isLoading = isLoadingSessions || isLoadingConversations;
 
   const columns = [
     {
-      key: "customer",
+      key: "customer_name",
       label: "Customer",
       render: (row) => (
         <div className="flex items-center gap-2">
-          <Avatar name={row.customer?.name || row.phone_number} size="sm" />
+          <Avatar name={row.customer_name || row.phone_number} size="sm" />
           <div className="min-w-0">
             <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
-              {row.customer?.name || "Unknown"}
+              {/* customer_name is null when no matching customer record
+                  is found (API 116.1) — show just the phone number in
+                  that case, matching the confirmed frontend note. */}
+              {row.customer_name || "Unknown"}
             </p>
-            {row.customer?.email && (
-              <p className="text-[9px] text-gray-400 truncate leading-tight">
-                {row.customer.email}
-              </p>
-            )}
           </div>
         </div>
       ),
@@ -166,25 +139,30 @@ const NumbersManagement = () => {
       label: "Phone Number",
     },
     {
-      key: "chatCount",
+      key: "message_count",
       label: "Total Chats",
     },
     {
-      key: "last_active",
+      key: "last_message_at",
       label: "Last Active",
-      render: (row) => formatRelativeTime(row.last_active),
+      render: (row) => formatRelativeTime(row.last_message_at),
     },
     {
-      key: "status",
-      label: "Status",
-      render: () => (
-        <Badge label="Active" variant="success" size="sm" rounded />
+      key: "is_admin",
+      label: "Last Message From",
+      render: (row) => (
+        <Badge
+          label={row.is_admin ? "Admin" : "Customer"}
+          variant={row.is_admin ? "info" : "gray"}
+          size="sm"
+          rounded
+        />
       ),
     },
     {
       key: "actions",
       label: "Actions",
-      render: (row) => (
+      render: () => (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -202,23 +180,59 @@ const NumbersManagement = () => {
     },
   ];
 
-  const handleExport = () => {
-    downloadCsv(
-      tableRows.map((row) => ({
-        name: row.customer?.name || "Unknown",
-        phone: row.phone_number,
-        total_chats: row.chatCount,
-        last_active: row.last_active,
-      })),
-      [
-        { key: "name", label: "Customer" },
-        { key: "phone", label: "Phone Number" },
-        { key: "total_chats", label: "Total Chats" },
-        { key: "last_active", label: "Last Active" },
-      ],
-      "whatsapp-numbers",
-    );
-    showSuccess("Export downloaded.");
+  // Exports EVERY conversation matching the current search (not just
+  // the page on screen right now), looping pages if needed — the same
+  // page-looping pattern used for every other admin table's export.
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const baseParams = {
+        search: debouncedSearch || undefined,
+        page_size: EXPORT_PAGE_SIZE,
+      };
+
+      const allConversations = [];
+      let page = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await getWhatsAppConversations({
+          ...baseParams,
+          page,
+        });
+        allConversations.push(...extractListData(response));
+        const matchingTotal = response?.data?.count ?? allConversations.length;
+        if (allConversations.length >= matchingTotal || !response?.data?.next) {
+          break;
+        }
+        page += 1;
+      }
+
+      if (allConversations.length === 0) {
+        showError("No numbers match the current search to export.");
+        return;
+      }
+
+      downloadCsv(
+        allConversations.map((conversation) => ({
+          name: conversation.customer_name || "Unknown",
+          phone: conversation.phone_number,
+          total_chats: conversation.message_count,
+          last_active: conversation.last_message_at,
+        })),
+        [
+          { key: "name", label: "Customer" },
+          { key: "phone", label: "Phone Number" },
+          { key: "total_chats", label: "Total Chats" },
+          { key: "last_active", label: "Last Active" },
+        ],
+        "whatsapp-numbers",
+      );
+      showSuccess("Export downloaded.");
+    } catch (error) {
+      showError("Failed to export numbers. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -226,7 +240,7 @@ const NumbersManagement = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* Shared gradient PageHeader — matches every other admin screen. */}
       <PageHeader
         icon={<AiOutlineMessage />}
@@ -255,12 +269,14 @@ const NumbersManagement = () => {
       <div className="flex flex-wrap gap-2">
         <StatsCard
           title="Active Sessions"
-          value={isLoading ? "—" : allSessions.length}
+          value={isLoadingSessions ? "—" : activeSessions.length}
         />
         <StatsCard
           title="Bot-Handled"
           value={
-            isLoading ? "—" : allSessions.filter((s) => !s.is_admin).length
+            isLoadingSessions
+              ? "—"
+              : activeSessions.filter((s) => !s.is_admin).length
           }
         />
       </div>
@@ -274,6 +290,7 @@ const NumbersManagement = () => {
           setCurrentPage(1);
         }}
         onExport={handleExport}
+        isExporting={isExporting}
       />
 
       <DataTable
@@ -284,9 +301,11 @@ const NumbersManagement = () => {
         // Opens the same conversation log page as the eye icon when any
         // part of the row is clicked
         isLoading={isLoading}
+        error={isError}
+        onRetry={refetch}
         currentPage={currentPage}
         totalPages={totalPages}
-        totalResults={filteredSessions.length}
+        totalResults={totalCount}
         onPageChange={setCurrentPage}
         pageSize={pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}

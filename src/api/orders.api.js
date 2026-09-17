@@ -86,7 +86,7 @@ export const verifyCheckoutOtp = (data, signal) => {
 };
 
 // ----------------------------
-// API - Get the logged-in customer's own orders
+// API 56 - Get the logged-in customer's own orders
 // ----------------------------
 // Fetches orders placed by the currently logged-in customer. Used on
 // the "My Orders" page in the customer account section.
@@ -96,6 +96,15 @@ export const verifyCheckoutOtp = (data, signal) => {
 // for how the frontend fetches every page to guarantee the customer's
 // complete order history is always shown, regardless of how many
 // orders they have.
+//
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 56): `status` (NEW) is
+// now a confirmed, working filter — pending, confirmed, shipped,
+// delivered, cancelled — combinable with the existing `start_date` /
+// `end_date` params. OrderHistory.jsx still fetches the complete order
+// history (this customer's own orders are a small, bounded list), so
+// its status-tab counts and date-range filtering can stay accurate
+// across every tab at once; this new param is documented here for any
+// future page that only needs one status at a time server-side.
 export const getMyOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/orders/", { signal, params });
 };
@@ -255,9 +264,15 @@ export const filterAdminOrders = (params, signal) => {
 // is used on the admin Customers page, inside the customer detail
 // drawer, to show that exact customer's order history.
 //
-// `params` can additionally include status / search / page / page_size —
-// all of which combine correctly with customer_id on the backend, e.g.:
-//   getCustomerOrders(20, { status: "delivered", page: 2, page_size: 20 })
+// `params` can additionally include status / search / ordering / page /
+// page_size — all of which combine correctly with customer_id on the
+// backend, e.g.:
+//   getCustomerOrders(20, { status: "delivered", ordering: "-total_amount", page: 2, page_size: 20 })
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 62): `ordering` is
+// wired up on the Customer Detail Drawer's Orders tab so a customer's
+// full order history sorts server-side, instead of only re-sorting
+// whichever single page happened to already be loaded (see
+// CustomerDetailDrawer.jsx).
 export const getCustomerOrders = (customerId, params = {}, signal) => {
   return filterAdminOrders({ ...params, customer_id: customerId }, signal);
   // Reuses filterAdminOrders so both functions always stay in sync —

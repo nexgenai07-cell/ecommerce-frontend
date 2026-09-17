@@ -9,9 +9,10 @@ import {
 } from "react-icons/ai";
 
 import { getPostsCalendar } from "../../api/social.api";
-// getPostsCalendar — API 83: only documents a `month` param. Day/Week
-// view toggles from the design were removed — no finer-grained
-// endpoint exists to power them.
+// getPostsCalendar — API 106 (16 Sep 2026 Filtering Fix pass) now also
+// documents a `platform` param, alongside the existing `month` param.
+// Day/Week view toggles from the design were removed — no finer-
+// grained endpoint exists to power them.
 
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -48,18 +49,19 @@ const Calendar = () => {
   const monthParam = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}`;
 
   const { data: response, isLoading } = useQuery({
-    queryKey: QUERY_KEYS.SOCIAL_CALENDAR.concat(monthParam),
-    queryFn: ({ signal }) => getPostsCalendar({ month: monthParam }, signal),
+    queryKey: QUERY_KEYS.SOCIAL_CALENDAR.concat(monthParam, platformFilter),
+    queryFn: ({ signal }) =>
+      getPostsCalendar(
+        { month: monthParam, platform: platformFilter || undefined },
+        signal,
+      ),
   });
 
-  const allPosts = extractListData(response);
-
-  // Platform filter applied CLIENT-SIDE — a month's worth of posts is
-  // a small, already-fetched dataset, so filtering here is both
-  // simpler and more reliable than guessing an undocumented server param
-  const posts = platformFilter
-    ? allPosts.filter((post) => post.platform === platformFilter)
-    : allPosts;
+  const posts = extractListData(response);
+  // UPDATED (16 Sep 2026, Filtering Fix pass, API 106): the platform
+  // filter is now sent to the backend as `platform=` and applied
+  // server-side, instead of fetching the whole month's posts and
+  // filtering them in the browser.
 
   // Build the calendar grid — every day cell for this month, aligned
   // to a Monday-start week (matching the design)

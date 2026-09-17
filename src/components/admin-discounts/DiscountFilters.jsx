@@ -11,6 +11,22 @@ const TYPE_OPTIONS = [
   { value: "fixed", label: "Fixed Amount" },
 ];
 
+// Sort options for the new "ordering" query param (API 39, 16 Sep 2026
+// Filtering Fix pass). "Newest First" (-created_at) is the default the
+// page loads with, so it's excluded from the active-filter count below
+// the same way Category Management's Sort chip works.
+const DEFAULT_ORDERING = "-created_at";
+const SORT_OPTIONS = [
+  { value: "-created_at", label: "Newest First" },
+  { value: "created_at", label: "Oldest First" },
+  { value: "code", label: "Code (A-Z)" },
+  { value: "-code", label: "Code (Z-A)" },
+  { value: "-value", label: "Value (High-Low)" },
+  { value: "value", label: "Value (Low-High)" },
+  { value: "end_date", label: "Expiring Soonest" },
+  { value: "-end_date", label: "Expiring Latest" },
+];
+
 /**
  * DiscountFilters
  *
@@ -32,6 +48,9 @@ const TYPE_OPTIONS = [
  * - onSearchChange:  (value) => void.
  * - typeFilter:      Current type filter value ("" = all types).
  * - onTypeChange:    (value) => void.
+ * - ordering:        Current "ordering" query value (API 39). Defaults
+ *                    to "-created_at" (Newest First) on the page.
+ * - onOrderingChange: (value) => void.
  * - onClearFilters:  () => void — resets every field to its default.
  * - hasActiveFilters: Whether the "Clear all" link should be shown.
  * - onExport:        Handler for the Export button.
@@ -45,6 +64,8 @@ const DiscountFilters = ({
   onSearchChange,
   typeFilter,
   onTypeChange,
+  ordering,
+  onOrderingChange,
   onClearFilters,
   hasActiveFilters,
   onExport,
@@ -53,9 +74,13 @@ const DiscountFilters = ({
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
 
   const activeFilterCount = [activeStatus, typeFilter].filter(Boolean).length;
+  // Sort is intentionally excluded from this count — "Newest First" is
+  // the default the page loads with, so having it selected isn't
+  // really an "active filter" from the admin's point of view.
 
   const selectedType = TYPE_OPTIONS.find((opt) => opt.value === typeFilter);
   const selectedStatus = statusTabs.find((tab) => tab.key === activeStatus);
+  const selectedSort = SORT_OPTIONS.find((opt) => opt.value === ordering);
 
   return (
     <div className="relative">
@@ -123,6 +148,30 @@ const DiscountFilters = ({
                     isSelected={typeFilter === opt.value}
                     onClick={() => {
                       onTypeChange(opt.value);
+                      close();
+                    }}
+                  />
+                ))}
+              </>
+            )}
+          </FilterChip>
+
+          <FilterChip
+            label="Sort"
+            valueLabel={selectedSort ? selectedSort.label : "select sort"}
+            isActive={ordering !== DEFAULT_ORDERING}
+            onClear={() => onOrderingChange(DEFAULT_ORDERING)}
+            panelClassName="w-48 max-w-[90vw] p-1.5"
+          >
+            {({ close }) => (
+              <>
+                {SORT_OPTIONS.map((opt) => (
+                  <OptionRow
+                    key={opt.value}
+                    label={opt.label}
+                    isSelected={ordering === opt.value}
+                    onClick={() => {
+                      onOrderingChange(opt.value);
                       close();
                     }}
                   />

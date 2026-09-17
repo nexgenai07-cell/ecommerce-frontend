@@ -53,6 +53,11 @@ const DEFAULT_ORDERING = "-created_at";
  *                     sort) is currently active — controls whether the
  *                     "Clear all" link is shown.
  * - onExport:         Handler for the Export button.
+ * - isExporting:      Whether an export is currently in progress —
+ *                     shows a loading state on the Export button
+ *                     (exporting all filtered products can take a few
+ *                     sequential requests for a large catalog, not
+ *                     just one).
  */
 const ProductFilters = ({
   categoryOptions,
@@ -61,6 +66,7 @@ const ProductFilters = ({
   onClearFilters,
   hasActiveFilters,
   onExport,
+  isExporting,
 }) => {
   // Whether the filter-chips row below the top bar is shown at all.
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
@@ -98,6 +104,7 @@ const ProductFilters = ({
         areFiltersOpen={areFiltersOpen}
         onToggleFilters={() => setAreFiltersOpen((prev) => !prev)}
         onExport={onExport}
+        isExporting={isExporting}
       />
 
       {areFiltersOpen && (

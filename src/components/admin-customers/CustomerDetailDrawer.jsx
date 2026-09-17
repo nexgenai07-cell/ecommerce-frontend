@@ -83,10 +83,11 @@ const ORDER_STATUS_LABELS = {
 };
 
 // --------------------------------------------------
-// Sort options — re-orders whichever page of orders is CURRENTLY
-// loaded (there is no documented `ordering` param on the orders
-// filter endpoint, so this does not trigger a new network request —
-// same pattern already used on the main Orders page)
+// Sort options — sent to the backend as the `ordering` query param
+// (API 62, 16 Sep 2026 Filtering Fix pass) so a customer's order
+// history is sorted server-side across their ENTIRE order history,
+// not just whichever page happens to already be loaded in the
+// browser.
 // --------------------------------------------------
 const ORDERS_SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
@@ -94,15 +95,6 @@ const ORDERS_SORT_OPTIONS = [
   { value: "-total_amount", label: "Amount: High to Low" },
   { value: "total_amount", label: "Amount: Low to High" },
 ];
-
-const ORDERS_SORTERS = {
-  "-created_at": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-  "-total_amount": (a, b) =>
-    (Number(b.total_amount) || 0) - (Number(a.total_amount) || 0),
-  total_amount: (a, b) =>
-    (Number(a.total_amount) || 0) - (Number(b.total_amount) || 0),
-};
 
 // Selectable "rows per page" values shown in the orders sub-table's
 // pagination dropdown, matching the backend's page_size cap of 100.
@@ -271,6 +263,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
       ordersPage,
       ordersStatusFilter,
       debouncedOrdersSearch,
+      ordersSortBy,
       ordersPageSize,
     ],
     queryFn: ({ signal }) =>
@@ -279,6 +272,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
         {
           status: ordersStatusFilter || undefined,
           search: debouncedOrdersSearch || undefined,
+          ordering: ordersSortBy,
           page: ordersPage,
           page_size: ordersPageSize,
         },
@@ -288,11 +282,6 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
   });
 
   const ordersList = extractListData(ordersResponse);
-  // Client-side re-sort of the currently loaded page (see comment on
-  // ORDERS_SORTERS above for why this isn't a backend request)
-  const sortedOrders = [...ordersList].sort(
-    ORDERS_SORTERS[ordersSortBy] || (() => 0),
-  );
 
   const totalOrdersCount = ordersResponse?.data?.count ?? ordersList.length;
   const ordersTotalPages = Math.max(
@@ -447,7 +436,10 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
                   icon={<AiOutlineSortAscending className="w-4 h-4" />}
                   ariaLabel="Sort orders"
                   value={ordersSortBy}
-                  onChange={setOrdersSortBy}
+                  onChange={(value) => {
+                    setOrdersSortBy(value);
+                    setOrdersPage(1);
+                  }}
                   options={ORDERS_SORT_OPTIONS}
                 />
               </div>
@@ -465,7 +457,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
                 <div className="py-10 text-center text-sm text-danger">
                   Failed to load orders.
                 </div>
-              ) : sortedOrders.length === 0 ? (
+              ) : ordersList.length === 0 ? (
                 <EmptyState
                   variant={hasOrdersFilterActive ? "noResults" : "noOrders"}
                   title={
@@ -482,7 +474,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
                 />
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {sortedOrders.map((order) => (
+                  {ordersList.map((order) => (
                     <div
                       key={order.order_number}
                       className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors"
@@ -515,7 +507,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
             </div>
 
             {/* Pagination — only shown once orders have actually loaded */}
-            {!isOrdersLoading && sortedOrders.length > 0 && (
+            {!isOrdersLoading && ordersList.length > 0 && (
               <Pagination
                 currentPage={ordersPage}
                 totalPages={ordersTotalPages}

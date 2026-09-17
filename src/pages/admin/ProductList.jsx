@@ -68,6 +68,7 @@ const ProductList = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const debouncedSearch = useDebounce(filters.search, 400);
 
@@ -100,7 +101,7 @@ const ProductList = () => {
   // --------------------------------------------------
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(signal),
+    queryFn: ({ signal }) => getCategories(undefined, signal),
     staleTime: 1000 * 60 * 10,
   });
   const categoryOptions = extractListData(categoriesResponse).map((c) => ({
@@ -192,66 +193,77 @@ const ProductList = () => {
   }, [isErrorSearch, searchQueryError]);
 
   // --------------------------------------------------
-  // LOW STOCK QUERY — dedicated endpoint (API 38), always fetched (its
-  // count feeds the "Low Stock" stat card regardless of which status
-  // filter is currently selected), and used as the actual table data
-  // source whenever the "Low Stock" status filter is selected.
+  // LOW STOCK COUNT — always fetched (unpaginated), feeds the "Low
+  // Stock" stat card regardless of which status filter is currently
+  // selected. No params are sent, so per API 38's opt-in pagination
+  // rule the response stays the complete plain array it always was.
   // --------------------------------------------------
-  // This endpoint is intentionally NOT paginated by the backend — it
-  // returns the complete list of currently low-stock products in one
-  // response, which is expected to stay a short, bounded list (it's an
-  // exception report, not the full catalog). Search/category/price are
-  // applied to this small list in the browser when combined with the
-  // Low Stock filter, which is safe here precisely because the list is
-  // always small — this is NOT the same "fetch everything" pattern
-  // used before, since the backend itself defines this as a small,
-  // complete result set by design.
-  const {
-    data: lowStockResponse,
-    isLoading: isLoadingLowStock,
-    isError: isErrorLowStock,
-    refetch: refetchLowStock,
-  } = useQuery({
-    queryKey: QUERY_KEYS.LOW_STOCK_PRODUCTS,
-    queryFn: ({ signal }) => getLowStockProducts(signal),
-    staleTime: 1000 * 60 * 2,
-  });
-  const lowStockProducts = extractListData(lowStockResponse);
+  const { data: lowStockCountResponse, isLoading: isLoadingLowStockCount } =
+    useQuery({
+      queryKey: QUERY_KEYS.LOW_STOCK_PRODUCTS,
+      queryFn: ({ signal }) => getLowStockProducts(undefined, signal),
+      staleTime: 1000 * 60 * 2,
+    });
+  const lowStockCount = extractListData(lowStockCountResponse).length;
 
-  const lowStockFiltered = lowStockProducts.filter((product) => {
-    const term = debouncedSearch.trim().toLowerCase();
-    const matchesSearch =
-      !term ||
-      product.name?.toLowerCase().includes(term) ||
-      product.sku?.toLowerCase().includes(term);
-    const matchesCategory =
-      !filters.categoryId ||
-      String(product.category?.id) === String(filters.categoryId);
-    return matchesSearch && matchesCategory;
+  // --------------------------------------------------
+  // LOW STOCK TABLE QUERY — real server-side search, category
+  // filtering, and pagination (API 38, 16 Sep 2026 Filtering Fix
+  // pass), used as the actual table data source whenever the "Low
+  // Stock" status filter is selected. `page` is explicitly sent here,
+  // so the backend switches into its paginated
+  // { count, next, previous, results } shape for this request only —
+  // the count query above never sends `page`, so it is unaffected.
+  // --------------------------------------------------
+  const {
+    data: lowStockTableResponse,
+    isLoading: isLoadingLowStockTable,
+    isError: isErrorLowStockTable,
+    refetch: refetchLowStockTable,
+  } = useQuery({
+    queryKey: [
+      "adminProducts",
+      "lowStockTable",
+      debouncedSearch,
+      filters.categoryId,
+      currentPage,
+      pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getLowStockProducts(
+        {
+          q: debouncedSearch || undefined,
+          category_id: filters.categoryId || undefined,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
+    enabled: isLowStockView,
+    staleTime: 1000 * 30,
+    keepPreviousData: true,
   });
-  const lowStockPaged = lowStockFiltered.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  const lowStockTableProducts = extractListData(lowStockTableResponse);
+  const lowStockTableTotalCount = lowStockTableResponse?.data?.count ?? 0;
 
   // --------------------------------------------------
   // Which data source actually feeds the table right now
   // --------------------------------------------------
-  const activeProducts = isLowStockView ? lowStockPaged : searchResults;
+  const activeProducts = isLowStockView ? lowStockTableProducts : searchResults;
   const activeTotalCount = isLowStockView
-    ? lowStockFiltered.length
+    ? lowStockTableTotalCount
     : searchTotalCount;
   const activeTotalPages = Math.ceil(activeTotalCount / pageSize) || 1;
   const isLoading = isLowStockView
-    ? isLoadingLowStock
-    : isLoadingSearch || isLoadingLowStock;
-  // (isLoadingLowStock is included even in the normal view because the
-  // "Low Stock" stat card below always depends on it, regardless of
+    ? isLoadingLowStockTable
+    : isLoadingSearch || isLoadingLowStockCount;
+  // (isLoadingLowStockCount is included even in the normal view because
+  // the "Low Stock" stat card below always depends on it, regardless of
   // which status filter is currently active)
-  const isError = isLowStockView ? isErrorLowStock : isErrorSearch;
+  const isError = isLowStockView ? isErrorLowStockTable : isErrorSearch;
   const refetch = () => {
     refetchSearch();
-    refetchLowStock();
+    refetchLowStockTable();
   };
 
   // --------------------------------------------------
@@ -280,7 +292,6 @@ const ProductList = () => {
     },
   );
   const totalCount = totalCountResponse?.data?.count ?? 0;
-  const lowStockCount = lowStockProducts.length;
 
   // --------------------------------------------------
   // BULK DELETE — API 21, called once per selected id (no bulk endpoint
@@ -309,39 +320,132 @@ const ProductList = () => {
     }
   };
 
-  const handleExport = () => {
-    const rows = activeProducts.map((product) => {
-      const available = product.available_stock ?? product.total_stock ?? 0;
-      const stockHealth =
-        available === 0
-          ? "Out of Stock"
-          : available <= 5
-            ? "Low Stock"
-            : "In Stock";
-      return {
-        name: product.name,
-        sku: product.sku || "",
-        category: product.category?.name || "",
-        price: product.price,
-        stock: product.total_stock ?? 0,
-        stockHealth,
-        onWebsite: product.is_active ? "Yes" : "No",
-      };
-    });
+  // Shared row shape for the CSV, used by both export paths below.
+  const buildExportRow = (product) => {
+    const available = product.available_stock ?? product.total_stock ?? 0;
+    const stockHealth =
+      available === 0
+        ? "Out of Stock"
+        : available <= 5
+          ? "Low Stock"
+          : "In Stock";
+    return {
+      name: product.name,
+      sku: product.sku || "",
+      category: product.category?.name || "",
+      price: product.price,
+      stock: product.total_stock ?? 0,
+      stockHealth,
+      onWebsite: product.is_active ? "Yes" : "No",
+    };
+  };
 
-    downloadCsv(
-      rows,
-      [
-        { key: "name", label: "Product Name" },
-        { key: "sku", label: "SKU" },
-        { key: "category", label: "Category" },
-        { key: "price", label: "Price" },
-        { key: "stock", label: "Stock" },
-        { key: "stockHealth", label: "Stock Health" },
-        { key: "onWebsite", label: "On Website" },
-      ],
-      "products",
-    );
+  // Backend's page_size cap on /api/v1/products/search/ (API 29) — same
+  // cap already used for the on-screen pagination (see PAGE_SIZE_OPTIONS
+  // above), now also used here to pull the export in as few requests as
+  // possible instead of one page at a time.
+  const EXPORT_PAGE_SIZE = 100;
+
+  // --------------------------------------------------
+  // EXPORT — pulls EVERY product matching the currently applied filters
+  // from the backend (not just whatever page happens to be on screen
+  // right now), then builds the CSV from that full set. Low Stock now
+  // uses the same page-looping approach as every other view, since
+  // API 38's fuller table mode (16 Sep 2026 Filtering Fix pass) is
+  // itself real, server-side pagination rather than one small complete
+  // list.
+  // --------------------------------------------------
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      let rows;
+
+      if (isLowStockView) {
+        const baseParams = {
+          q: debouncedSearch || undefined,
+          category_id: filters.categoryId || undefined,
+          page_size: EXPORT_PAGE_SIZE,
+        };
+
+        const allLowStockProducts = [];
+        let lowStockPage = 1;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const response = await getLowStockProducts({
+            ...baseParams,
+            page: lowStockPage,
+          });
+          allLowStockProducts.push(...extractListData(response));
+          const totalCount =
+            response?.data?.count ?? allLowStockProducts.length;
+          if (
+            allLowStockProducts.length >= totalCount ||
+            !response?.data?.next
+          ) {
+            break;
+          }
+          lowStockPage += 1;
+        }
+
+        rows = allLowStockProducts.map(buildExportRow);
+      } else {
+        const baseParams = {
+          q: debouncedSearch || undefined,
+          category_id: filters.categoryId || undefined,
+          in_stock:
+            filters.status === "in_stock"
+              ? true
+              : filters.status === "out_of_stock"
+                ? false
+                : undefined,
+          min_price: filters.minPrice || undefined,
+          max_price: filters.maxPrice || undefined,
+          ordering: filters.ordering,
+          page_size: EXPORT_PAGE_SIZE,
+        };
+
+        const allProducts = [];
+        let page = 1;
+        // Keep fetching pages until we've collected every result the
+        // backend says exists for these filters (response.count) —
+        // handles catalogs larger than one page transparently.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const response = await searchProducts({ ...baseParams, page });
+          allProducts.push(...extractListData(response));
+          const totalCount = response?.data?.count ?? allProducts.length;
+          if (allProducts.length >= totalCount || !response?.data?.next) {
+            break;
+          }
+          page += 1;
+        }
+
+        rows = allProducts.map(buildExportRow);
+      }
+
+      if (rows.length === 0) {
+        showError("No products match the current filters to export.");
+        return;
+      }
+
+      downloadCsv(
+        rows,
+        [
+          { key: "name", label: "Product Name" },
+          { key: "sku", label: "SKU" },
+          { key: "category", label: "Category" },
+          { key: "price", label: "Price" },
+          { key: "stock", label: "Stock" },
+          { key: "stockHealth", label: "Stock Health" },
+          { key: "onWebsite", label: "On Website" },
+        ],
+        "products",
+      );
+    } catch (error) {
+      showError("Failed to export products. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const columns = [
@@ -530,7 +634,7 @@ const ProductList = () => {
     // all sit even closer together -- addresses continued feedback that
     // the distance above/below the buttons row was still too large.
     // Purely spacing, no structural change.
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 flex-1 min-h-0">
       {/* Page header — uses the shared PageHeader component so this
           page matches every other admin screen's title styling. */}
       <PageHeader
@@ -552,7 +656,7 @@ const ProductList = () => {
         outOfStockCount={outOfStockCount}
         lowStockCount={lowStockCount}
         isLoading={
-          isLoadingTotalCount || isLoadingOutOfStock || isLoadingLowStock
+          isLoadingTotalCount || isLoadingOutOfStock || isLoadingLowStockCount
         }
       />
 
@@ -563,6 +667,7 @@ const ProductList = () => {
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
         onExport={handleExport}
+        isExporting={isExporting}
       />
 
       {/* Bulk action bar — only shown once at least one row is selected */}

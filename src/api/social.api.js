@@ -74,7 +74,9 @@ export const deleteSocialPost = (id, signal) => {
 // - scheduled_at: the date/time when this approved post should
 //   actually go live on the social platform
 export const approvePost = (id, data, signal) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/approve/`, data, { signal });
+  return axiosInstance.put(`/api/v1/social/posts/${id}/approve/`, data, {
+    signal,
+  });
 };
 
 // ----------------------------
@@ -85,7 +87,9 @@ export const approvePost = (id, data, signal) => {
 // - reason: why the post was rejected (e.g. feedback for whoever
 //   created it, or just an internal note)
 export const rejectPost = (id, data, signal) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/reject/`, data, { signal });
+  return axiosInstance.put(`/api/v1/social/posts/${id}/reject/`, data, {
+    signal,
+  });
 };
 
 // ----------------------------
@@ -95,19 +99,29 @@ export const rejectPost = (id, data, signal) => {
 // different date/time. The "data" payload is expected to include:
 // - scheduled_at: the new date/time for this post to go live
 export const schedulePost = (id, data, signal) => {
-  return axiosInstance.put(`/api/v1/social/posts/${id}/schedule/`, data, { signal });
+  return axiosInstance.put(`/api/v1/social/posts/${id}/schedule/`, data, {
+    signal,
+  });
 };
 
 // ----------------------------
-// API - Get posts for the calendar view
+// API 106 - Get posts for the calendar view
 // ----------------------------
 // Fetches posts already grouped/organized by date, specifically
 // formatted for displaying in a calendar-style UI (e.g. a monthly
 // grid showing which posts are scheduled on which days).
 // The "params" object includes:
 // - month: which month to fetch the calendar data for
+// - platform: NEW (16 Sep 2026, Filtering Fix pass) — filters to only
+//   that platform's posts, e.g. "facebook" | "instagram" | "tiktok" |
+//   "twitter". Wired up on the admin Calendar page's platform filter
+//   pills (see Calendar.jsx) so filtering happens server-side instead
+//   of fetching the whole month and filtering it in the browser.
 export const getPostsCalendar = (params, signal) => {
-  return axiosInstance.get("/api/v1/social/posts/calendar/", { signal, params });
+  return axiosInstance.get("/api/v1/social/posts/calendar/", {
+    signal,
+    params,
+  });
 };
 
 // ----------------------------
@@ -123,7 +137,9 @@ export const getPostsCalendar = (params, signal) => {
 // - token_expiry: when this access token will expire (so it can be
 //   refreshed before it stops working)
 export const connectSocialAccount = (data, signal) => {
-  return axiosInstance.post("/api/v1/social/accounts/connect/", data, { signal });
+  return axiosInstance.post("/api/v1/social/accounts/connect/", data, {
+    signal,
+  });
 };
 
 // ----------------------------

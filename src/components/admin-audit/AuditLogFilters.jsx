@@ -31,6 +31,8 @@ import {
  * - onClearFilters:    () => void — resets every field to its default.
  * - hasActiveFilters:  Whether the "Clear all" link should be shown.
  * - onExport:          Handler for the Export button.
+ * - isExporting:       Whether an export is currently in progress —
+ *                      shows a loading state on the Export button.
  */
 const AuditLogFilters = ({
   search,
@@ -44,6 +46,7 @@ const AuditLogFilters = ({
   onClearFilters,
   hasActiveFilters,
   onExport,
+  isExporting,
 }) => {
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
 
@@ -65,6 +68,7 @@ const AuditLogFilters = ({
         onToggleFilters={() => setAreFiltersOpen((prev) => !prev)}
         onExport={onExport}
         exportLabel="Export Logs"
+        isExporting={isExporting}
       />
 
       {areFiltersOpen && (

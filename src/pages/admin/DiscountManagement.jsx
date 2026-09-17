@@ -65,13 +65,12 @@ const DiscountManagement = () => {
 
   const [activeTab, setActiveTab] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [ordering, setOrdering] = useState("-created_at");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  // pageSize — how many discounts are shown per page, controlled by the
-  // "Rows per page" dropdown in the table footer. Discounts are
-  // filtered client-side above, so this only affects the slice taken
-  // below — no network request is re-fired.
+  // pageSize — how many discounts are shown per page, sent to the
+  // backend as `page_size` alongside `page` on every request.
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
   // page value, since staying on a deep page of a now-differently-sized
@@ -109,11 +108,16 @@ const DiscountManagement = () => {
     setActiveTab("");
     setSearch("");
     setTypeFilter("");
+    setOrdering("-created_at");
     setCurrentPage(1);
   };
 
   // --------------------------------------------------
-  // Discounts list query
+  // DISCOUNTS TABLE QUERY — real server-side search, type/status
+  // filtering, sorting, and pagination (API 39, 16 Sep 2026 Filtering
+  // Fix pass). The response shape change here is NOT opt-in — this
+  // request ALWAYS gets back { count, next, previous, results } now,
+  // regardless of which params are sent.
   // --------------------------------------------------
   const {
     data: discountsResponse,
@@ -121,46 +125,69 @@ const DiscountManagement = () => {
     isError,
     refetch,
   } = useQuery({
-    queryKey: QUERY_KEYS.DISCOUNTS,
-    queryFn: ({ signal }) => getDiscounts(signal),
+    queryKey: [
+      ...QUERY_KEYS.DISCOUNTS,
+      "table",
+      debouncedSearch,
+      typeFilter,
+      activeTab,
+      ordering,
+      currentPage,
+      pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getDiscounts(
+        {
+          search: debouncedSearch || undefined,
+          type: typeFilter || undefined,
+          status: activeTab || undefined,
+          ordering,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
+    keepPreviousData: true,
   });
 
-  const allDiscounts = extractListData(discountsResponse);
+  // extractListData already handles the paginated { results } shape
+  // (as well as a plain array, for any older/unrelated caller), so this
+  // line needed no change even though the response envelope did.
+  const discounts = extractListData(discountsResponse);
+  const totalCount = discountsResponse?.data?.count ?? discounts.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // --------------------------------------------------
-  // Client-side filtering
+  // Summary stat card counts — three light "count-only" requests
+  // (page_size: 1, reading just the response's `count` field), the
+  // same established pattern used for the stat cards on Product
+  // Management. `status` only supports "active" | "expired" server-
+  // side, so "Inactive" is derived here as whatever's left over:
+  // total minus active minus expired.
   // --------------------------------------------------
-  const term = debouncedSearch.trim().toLowerCase();
-  const filteredDiscounts = allDiscounts.filter((discount) => {
-    const matchesSearch = !term || discount.code?.toLowerCase().includes(term);
-    const matchesType = !typeFilter || discount.type === typeFilter;
-    const matchesStatus =
-      !activeTab || getDiscountStatus(discount) === activeTab;
-    return matchesSearch && matchesType && matchesStatus;
+  const { data: totalCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "total"],
+    queryFn: ({ signal }) => getDiscounts({ page: 1, page_size: 1 }, signal),
+    staleTime: 1000 * 30,
   });
-
-  // --------------------------------------------------
-  // Client-side pagination
-  // --------------------------------------------------
-  const totalCount = filteredDiscounts.length;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedDiscounts = filteredDiscounts.slice(
-    (safePage - 1) * pageSize,
-    safePage * pageSize,
-  );
-
-  // --------------------------------------------------
-  // Summary stat card counts, derived from the same status function
-  // used everywhere else on this page.
-  // --------------------------------------------------
-  const statusCounts = allDiscounts.reduce(
-    (counts, discount) => {
-      const status = getDiscountStatus(discount);
-      counts[status] += 1;
-      return counts;
-    },
-    { active: 0, expired: 0, inactive: 0 },
+  const { data: activeCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "active"],
+    queryFn: ({ signal }) =>
+      getDiscounts({ status: "active", page: 1, page_size: 1 }, signal),
+    staleTime: 1000 * 30,
+  });
+  const { data: expiredCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "expired"],
+    queryFn: ({ signal }) =>
+      getDiscounts({ status: "expired", page: 1, page_size: 1 }, signal),
+    staleTime: 1000 * 30,
+  });
+  const grandTotalCount = totalCountResponse?.data?.count ?? 0;
+  const activeCount = activeCountResponse?.data?.count ?? 0;
+  const expiredCount = expiredCountResponse?.data?.count ?? 0;
+  const inactiveCount = Math.max(
+    0,
+    grandTotalCount - activeCount - expiredCount,
   );
 
   // --------------------------------------------------
@@ -188,7 +215,7 @@ const DiscountManagement = () => {
   // --------------------------------------------------
   // There is no dedicated bulk-delete endpoint, so each selected
   // discount is deleted with its own request, issued in parallel.
-  const selectedCodes = allDiscounts
+  const selectedCodes = discounts
     .filter((d) => selectedIds.includes(d.id))
     .map((d) => d.code);
 
@@ -365,7 +392,7 @@ const DiscountManagement = () => {
     // reduced from gap-4 sm:gap-6 to gap-2 so the page matches the tighter
     // rhythm already used on Product Management, instead of leaving large
     // empty bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       <PageHeader
         icon={<AiOutlinePercentage />}
         title="Discount Management"
@@ -382,10 +409,10 @@ const DiscountManagement = () => {
       />
 
       <DiscountStatsCards
-        totalCount={allDiscounts.length}
-        activeCount={statusCounts.active}
-        expiredCount={statusCounts.expired}
-        inactiveCount={statusCounts.inactive}
+        totalCount={grandTotalCount}
+        activeCount={activeCount}
+        expiredCount={expiredCount}
+        inactiveCount={inactiveCount}
       />
 
       {/* Toolbar — status tabs, search, Filters, Export, and (once
@@ -406,6 +433,11 @@ const DiscountManagement = () => {
         typeFilter={typeFilter}
         onTypeChange={(value) => {
           setTypeFilter(value);
+          setCurrentPage(1);
+        }}
+        ordering={ordering}
+        onOrderingChange={(value) => {
+          setOrdering(value);
           setCurrentPage(1);
         }}
         onClearFilters={handleClearFilters}
@@ -437,14 +469,14 @@ const DiscountManagement = () => {
 
       <DataTable
         columns={columns}
-        data={paginatedDiscounts}
+        data={discounts}
         keyField="id"
         selectable
         onSelectionChange={setSelectedIds}
         isLoading={isLoading}
         error={isError}
         onRetry={refetch}
-        currentPage={safePage}
+        currentPage={currentPage}
         totalPages={totalPages}
         totalResults={totalCount}
         onPageChange={setCurrentPage}

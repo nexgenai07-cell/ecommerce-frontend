@@ -48,3 +48,40 @@ export const getWhatsAppLogs = (params, signal) => {
 export const getWhatsAppSessions = (signal) => {
   return axiosInstance.get("/api/v1/admin/whatsapp/sessions/", { signal });
 };
+
+// ----------------------------
+// API 116.1 - Get every distinct WhatsApp conversation (Admin only)
+// ----------------------------
+// NEW (16 Sep 2026, Filtering Fix pass). One row per distinct phone
+// number that has EVER exchanged a message — built from the full log
+// history, not just currently-active sessions (that's what
+// getWhatsAppSessions above is still for) — sorted with the most
+// recent activity first.
+//
+// This replaces the admin "Numbers" page's old approach entirely: it
+// used to reuse getWhatsAppSessions (a small, bounded list of only
+// currently mid-flow numbers) and do search + pagination in the
+// browser, PLUS a separate frontend-only lookup against the full
+// customer list just to match a phone number to a customer's name.
+// This one endpoint now does all of that server-side in a single
+// request.
+//
+// params can include:
+// - search    -> matches the phone number itself, or the linked
+//                 customer's name (matched via last-10-digits, so
+//                 formatting differences like a leading "+" or
+//                 country code don't break the match)
+// - page / page_size -> standard pagination
+//
+// Response: { count, next, previous, results: [
+//   { phone_number, last_message_at, message_count, is_admin,
+//     customer_name }
+// ] }
+// customer_name is null when no matching customer record is found —
+// the Numbers page shows just the phone number in that case.
+export const getWhatsAppConversations = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/whatsapp/conversations/", {
+    signal,
+    params,
+  });
+};

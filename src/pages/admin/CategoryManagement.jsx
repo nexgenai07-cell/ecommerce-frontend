@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AiOutlinePlus,
@@ -13,6 +13,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
 import downloadCsv from "../../utils/downloadCsv";
+import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
@@ -22,22 +23,6 @@ import PageHeader from "../../components/shared/PageHeader";
 import CategoryStatsCards from "../../components/admin-categories/CategoryStatsCards";
 import CategoryFilters from "../../components/admin-categories/CategoryFilters";
 import CategoryFormPanel from "../../components/admin-categories/CategoryFormPanel";
-
-/**
- * Sort comparator functions, keyed by the "ordering" value produced by
- * CategoryFilters' Sort By dropdown. Each function receives two category
- * objects and follows the standard Array.prototype.sort contract.
- */
-const SORTERS = {
-  "-created_at": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-  name: (a, b) => (a.name || "").localeCompare(b.name || ""),
-  "-name": (a, b) => (b.name || "").localeCompare(a.name || ""),
-  "-product_count": (a, b) =>
-    (Number(b.product_count) || 0) - (Number(a.product_count) || 0),
-  product_count: (a, b) =>
-    (Number(a.product_count) || 0) - (Number(b.product_count) || 0),
-};
 
 // Selectable "rows per page" values shown in the pagination dropdown.
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -98,12 +83,15 @@ const CategoryManagement = () => {
     ordering: "-created_at",
   });
 
+  // Waits 400ms after the admin stops typing before actually filtering —
+  // avoids firing a new network request on every single keystroke, same
+  // pattern used on Product/Discount/Audit Log Management.
+  const debouncedSearch = useDebounce(filters.search, 400);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  // pageSize — how many categories are shown per page, controlled by the
-  // "Rows per page" dropdown in the table footer. Categories are
-  // filtered/sorted client-side above, so this only affects the slice
-  // taken below — no network request is re-fired.
+  // pageSize — how many categories are shown per page, sent to the
+  // backend as `page_size` alongside `page` on every request.
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
   // page value, since staying on a deep page of a now-differently-sized
@@ -126,20 +114,72 @@ const CategoryManagement = () => {
   const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState(false);
 
   // --------------------------------------------------
-  // Categories list query
+  // FULL, UNPAGINATED category list — used only for the stat cards
+  // (Total Categories / Total Categorized Products). Categories are a
+  // small, bounded, store-owned dataset (unlike the product catalog),
+  // so pulling the complete list for an accurate total is safe here.
+  // No `page` param is sent, so per API 23's opt-in pagination rule the
+  // response stays the same plain array as before — and this reuses
+  // the EXACT SAME cache key/query as the navbar/footer/shop filter
+  // checkboxes (see categories.api.js), so it costs no extra request
+  // in practice; it's simply shared from React Query's cache.
   // --------------------------------------------------
-  const { data: categoriesResponse, isLoading } = useQuery({
-    queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(signal),
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const allCategories = extractListData(categoriesResponse);
+  const { data: allCategoriesResponse, isLoading: isLoadingAllCategories } =
+    useQuery({
+      queryKey: QUERY_KEYS.CATEGORIES,
+      queryFn: ({ signal }) => getCategories(undefined, signal),
+      staleTime: 1000 * 60 * 5,
+    });
+  const allCategories = extractListData(allCategoriesResponse);
 
   const totalCategorizedProducts = allCategories.reduce(
     (sum, category) => sum + (Number(category.product_count) || 0),
     0,
   );
+
+  // --------------------------------------------------
+  // ADMIN TABLE query — real server-side search, date-range filtering,
+  // sorting, and pagination (API 23, Sep 2026 filtering fix pass).
+  // `page` is explicitly sent, so the backend switches into its
+  // paginated { count, next, previous, results } shape for this
+  // request only — every other caller of getCategories() above keeps
+  // getting the plain array, since they never send `page`.
+  // --------------------------------------------------
+  const {
+    data: categoriesResponse,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.CATEGORIES,
+      "admin-table",
+      debouncedSearch,
+      filters.startDate,
+      filters.endDate,
+      filters.ordering,
+      currentPage,
+      pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getCategories(
+        {
+          search: debouncedSearch || undefined,
+          start_date: filters.startDate || undefined,
+          end_date: filters.endDate || undefined,
+          ordering: filters.ordering,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        signal,
+      ),
+    staleTime: 1000 * 30,
+    keepPreviousData: true,
+  });
+
+  const tableCategories = extractListData(categoriesResponse);
+  const totalCount = categoriesResponse?.data?.count ?? tableCategories.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // --------------------------------------------------
   // Filter helpers
@@ -162,67 +202,57 @@ const CategoryManagement = () => {
     setCurrentPage(1);
   };
 
-  // --------------------------------------------------
-  // Client-side filtering and sorting
-  // --------------------------------------------------
-  // The category list is a small, complete dataset (the API returns
-  // every category in one response, unpaginated), so search, date-range
-  // filtering, and sorting are all applied here in the browser.
-  const filteredCategories = useMemo(() => {
-    const term = filters.search.trim().toLowerCase();
+  // Backend's page_size cap on /api/v1/categories/ (API 23) — same cap
+  // already used for the on-screen pagination, now also used here to
+  // pull a filtered export in as few requests as possible.
+  const EXPORT_PAGE_SIZE = 100;
 
-    const filtered = allCategories.filter((category) => {
-      const matchesSearch =
-        !term || category.name?.toLowerCase().includes(term);
+  // Exports EVERY category matching the currently applied filters (not
+  // just whatever page happens to be on screen right now), looping
+  // pages if needed, then builds the CSV from that full set.
+  const handleExport = async () => {
+    try {
+      const baseParams = {
+        search: debouncedSearch || undefined,
+        start_date: filters.startDate || undefined,
+        end_date: filters.endDate || undefined,
+        ordering: filters.ordering,
+        page_size: EXPORT_PAGE_SIZE,
+      };
 
-      const createdAt = category.created_at
-        ? new Date(category.created_at)
-        : null;
+      const allMatching = [];
+      let page = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await getCategories({ ...baseParams, page });
+        allMatching.push(...extractListData(response));
+        const matchingTotal = response?.data?.count ?? allMatching.length;
+        if (allMatching.length >= matchingTotal || !response?.data?.next) {
+          break;
+        }
+        page += 1;
+      }
 
-      const matchesStartDate =
-        !filters.startDate ||
-        (createdAt && createdAt >= new Date(filters.startDate));
-
-      const matchesEndDate =
-        !filters.endDate ||
-        (createdAt && createdAt <= new Date(`${filters.endDate}T23:59:59`));
-
-      return matchesSearch && matchesStartDate && matchesEndDate;
-    });
-
-    const sortFn = SORTERS[filters.ordering] || SORTERS["-created_at"];
-    return [...filtered].sort(sortFn);
-  }, [allCategories, filters]);
-
-  // Exports whichever categories currently match the active filters —
-  // built client-side from data already loaded in the browser, since
-  // there is no confirmed backend export type for categories yet (see
-  // the CONFIRMED list documented in exportReport, src/api/analytics.api.js).
-  const handleExport = () => {
-    downloadCsv(
-      filteredCategories.map((category) => ({
-        name: category.name,
-        product_count: category.product_count ?? 0,
-        created_at: category.created_at ? formatDate(category.created_at) : "",
-      })),
-      [
-        { key: "name", label: "Name" },
-        { key: "product_count", label: "Products" },
-        { key: "created_at", label: "Created Date" },
-      ],
-      "categories",
-    );
-    showSuccess("Categories exported.");
+      downloadCsv(
+        allMatching.map((category) => ({
+          name: category.name,
+          product_count: category.product_count ?? 0,
+          created_at: category.created_at
+            ? formatDate(category.created_at)
+            : "",
+        })),
+        [
+          { key: "name", label: "Name" },
+          { key: "product_count", label: "Products" },
+          { key: "created_at", label: "Created Date" },
+        ],
+        "categories",
+      );
+      showSuccess("Categories exported.");
+    } catch (error) {
+      showError("Failed to export categories. Please try again.");
+    }
   };
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredCategories.length / pageSize),
-  );
-  const paginatedCategories = filteredCategories.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
 
   // --------------------------------------------------
   // Table column configuration
@@ -365,7 +395,7 @@ const CategoryManagement = () => {
     // reduced from gap-4 sm:gap-6 to gap-2 so the page matches the tighter
     // rhythm already used on Product Management, instead of leaving large
     // empty bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       <PageHeader
         icon={<AiOutlineTag />}
         title="Category Management"
@@ -384,7 +414,7 @@ const CategoryManagement = () => {
       <CategoryStatsCards
         totalCategories={allCategories.length}
         totalCategorizedProducts={totalCategorizedProducts}
-        isLoadingCounts={isLoading}
+        isLoadingCounts={isLoadingAllCategories}
       />
 
       <CategoryFilters
@@ -429,11 +459,13 @@ const CategoryManagement = () => {
           call are no longer needed. */}
       <DataTable
         columns={columns}
-        data={paginatedCategories}
+        data={tableCategories}
         keyField="id"
         selectable
         onSelectionChange={setSelectedIds}
         isLoading={isLoading}
+        error={isError}
+        onRetry={refetch}
         emptyTitle="No Categories Found"
         emptyDescription={
           hasActiveFilters
@@ -442,7 +474,7 @@ const CategoryManagement = () => {
         }
         currentPage={currentPage}
         totalPages={totalPages}
-        totalResults={filteredCategories.length}
+        totalResults={totalCount}
         onPageChange={setCurrentPage}
         pageSize={pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}

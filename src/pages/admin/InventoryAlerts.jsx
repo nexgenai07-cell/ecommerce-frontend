@@ -19,8 +19,16 @@ import {
 import { searchProducts } from "../../api/products.api";
 // searchProducts — the backend now correctly filters `in_stock`
 // server-side and matches `q` against both name and sku, so the
-// default ("All") view and the "Out of Stock" tab both use this with
+// default ("All") view and every status tab combination use this with
 // real pagination — no more downloading the entire catalog.
+//
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 29): `status` now
+// accepts MULTIPLE values in one request — comma-separated
+// ("out_of_stock,low_stock") or repeated — so every selected status
+// tab is sent together as ONE server-paginated request. This replaces
+// the earlier per-status fetch-and-merge workaround entirely (see the
+// git history for that approach), which is no longer needed now that
+// multi-status filtering is confirmed to work server-side.
 
 import { getInventoryAlerts } from "../../api/analytics.api";
 // getInventoryAlerts — the dedicated "products needing attention"
@@ -160,7 +168,7 @@ const InventoryAlerts = () => {
   // --------------------------------------------------
   const { data: categoriesResponse } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(signal),
+    queryFn: ({ signal }) => getCategories(undefined, signal),
     staleTime: 1000 * 60 * 10,
   });
   const categoryOptions = [
@@ -172,42 +180,31 @@ const InventoryAlerts = () => {
   ];
 
   // --------------------------------------------------
-  // WHICH VIEW IS ACTIVE
+  // MAIN PRODUCT QUERY — one real, server-paginated request no matter
+  // how many status tabs are selected.
   // --------------------------------------------------
-  // BACKEND FIX CONFIRMED: searchProducts now accepts a `status`
-  // filter ("out_of_stock" | "low_stock" | "healthy"), combined
-  // correctly with every other filter. This replaces the old approach
-  // entirely — including the previous "Healthy" client-side
-  // cross-reference workaround, which is no longer needed.
-  //
-  // Only SINGLE status values were confirmed — sending multiple
-  // statuses in one request was not part of the confirmed contract.
-  // So:
-  //   - 0 or 1 status tab selected -> ONE real, server-paginated
-  //     request. Fully scalable no matter how large the catalog grows.
-  //   - 2+ status tabs selected -> fetch each selected status's
-  //     complete matching set separately, in parallel (each fetch is
-  //     itself already server-filtered to just that status — a
-  //     naturally small, bounded subset, not the entire catalog), then
-  //     combine and paginate client-side.
+  // UPDATED (16 Sep 2026, Filtering Fix pass, API 29): `status` is now
+  // confirmed to accept multiple values in a single request — sent
+  // here as a comma-separated list built from every checked tab — so
+  // selecting BOTH "Out of Stock" and "Low Stock" (for example) is one
+  // request that returns products matching EITHER status, already
+  // combined and correctly counted server-side. An empty `activeTabs`
+  // array (the "All" view) simply omits `status` entirely.
   // --------------------------------------------------
-  const singleStatus = activeTabs.length === 1 ? activeTabs[0] : undefined;
-  const isSingleOrAllView = activeTabs.length <= 1;
-  const needsMultiStatusMerge = activeTabs.length > 1;
+  const statusParam = activeTabs.length > 0 ? activeTabs.join(",") : undefined;
 
-  // Single status (or "All") view — one real server-paginated request
   const {
-    data: serverResponse,
-    isLoading: isLoadingServer,
-    isError: isErrorServer,
-    refetch: refetchServer,
+    data: activeResponse,
+    isLoading: activeIsLoading,
+    isError: activeIsError,
+    refetch,
   } = useQuery({
     queryKey: [
       "inventoryAlerts",
       "server",
       debouncedSearch,
       categoryId,
-      singleStatus,
+      statusParam,
       currentPage,
       pageSize,
     ],
@@ -216,117 +213,19 @@ const InventoryAlerts = () => {
         {
           q: debouncedSearch || undefined,
           category_id: categoryId || undefined,
-          status: singleStatus,
+          status: statusParam,
           page: currentPage,
           page_size: pageSize,
         },
         signal,
       ),
-    enabled: isSingleOrAllView,
     staleTime: 1000 * 30,
     keepPreviousData: true,
   });
-  const serverResults = extractListData(serverResponse);
-  const serverTotalCount = serverResponse?.data?.count ?? 0;
 
-  // Multi-status view — fetches each selected status's COMPLETE
-  // matching set (already server-filtered to that one status) in
-  // parallel, then combines them for client-side pagination. Each
-  // individual fetch here follows the same safe "page 1 first, then
-  // remaining pages in parallel" pattern used elsewhere in this
-  // project for bounded, exception-style lists.
-  const { data: mergedResponse, isLoading: isLoadingMerged } = useQuery({
-    queryKey: [
-      "inventoryAlerts",
-      "multiStatus",
-      debouncedSearch,
-      categoryId,
-      activeTabs,
-    ],
-    queryFn: async ({ signal }) => {
-      const fetchAllForStatus = async (status) => {
-        const first = await searchProducts(
-          {
-            q: debouncedSearch || undefined,
-            category_id: categoryId || undefined,
-            status,
-            page: 1,
-            page_size: 100,
-          },
-          signal,
-        );
-        const firstResults = extractListData(first);
-        const totalCount = first?.data?.count ?? firstResults.length;
-        // Local chunk size for this exhaustive-fetch loop only — always
-        // pulls in fixed batches of up to 100 (the backend's page_size
-        // cap) regardless of the admin's chosen "Rows per page" value,
-        // since this loop must collect every matching product before
-        // the outer `pageSize` state slices it for display.
-        const resultChunkSize = firstResults.length || 1;
-        const totalPages = Math.max(Math.ceil(totalCount / resultChunkSize), 1);
-
-        const remainingPages = Array.from(
-          { length: Math.max(totalPages - 1, 0) },
-          (_, index) => index + 2,
-        );
-        const remaining = await Promise.all(
-          remainingPages.map((page) =>
-            searchProducts(
-              {
-                q: debouncedSearch || undefined,
-                category_id: categoryId || undefined,
-                status,
-                page,
-                page_size: 100,
-              },
-              signal,
-            ),
-          ),
-        );
-        return [
-          ...firstResults,
-          ...remaining.flatMap((r) => extractListData(r)),
-        ];
-      };
-
-      const perStatusResults = await Promise.all(
-        activeTabs.map(fetchAllForStatus),
-      );
-      return perStatusResults.flat();
-    },
-    enabled: needsMultiStatusMerge,
-    staleTime: 1000 * 30,
-  });
-  const mergedProducts = mergedResponse || [];
-
-  // --------------------------------------------------
-  // FINAL DATA + PAGINATION for the current view
-  // --------------------------------------------------
-  let activeProducts = [];
-  let activeTotalCount = 0;
-  let activeIsLoading = false;
-  let activeIsError = false;
-
-  if (needsMultiStatusMerge) {
-    activeTotalCount = mergedProducts.length;
-    activeProducts = mergedProducts.slice(
-      (currentPage - 1) * pageSize,
-      currentPage * pageSize,
-    );
-    activeIsLoading = isLoadingMerged;
-    activeIsError = false;
-  } else {
-    activeProducts = serverResults;
-    activeTotalCount = serverTotalCount;
-    activeIsLoading = isLoadingServer;
-    activeIsError = isErrorServer;
-  }
-
+  const activeProducts = extractListData(activeResponse);
+  const activeTotalCount = activeResponse?.data?.count ?? 0;
   const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
-
-  const refetch = () => {
-    refetchServer();
-  };
 
   // Whenever the search term, category, status tabs, or rows-per-page
   // selection change, jump back to page 1
@@ -451,7 +350,7 @@ const InventoryAlerts = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* Shared gradient PageHeader — matches every other admin screen.
           Export Report button lives inside the header's `actions` slot. */}
       <PageHeader icon={<AiOutlineWarning />} title="Inventory Alerts" />

@@ -7,12 +7,16 @@ import {
   AiOutlineDelete,
 } from "react-icons/ai";
 
-import { getAuditLogs } from "../../api/admin.api";
+import {
+  getAuditLogs,
+  getAuditLogEntities,
+  getAuditLogUsers,
+} from "../../api/admin.api";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
 import useDebounce from "../../hooks/useDebounce";
 import downloadCsv from "../../utils/downloadCsv";
-import { showSuccess } from "../../components/ui/Toast";
+import { showSuccess, showError } from "../../components/ui/Toast";
 import StatsCard from "../../components/ui/StatsCard";
 import Badge from "../../components/ui/Badge";
 import DataTable from "../../components/ui/DataTable";
@@ -104,26 +108,42 @@ const AuditLogs = () => {
   const totalCount = logsResponse?.data?.count ?? logs.length;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
-  // Real, derived from what's already loaded — no separate
-  // "list all admins" endpoint exists to build this dropdown from
-  const uniqueEntities = [
-    ...new Set(logs.map((l) => l.entity).filter(Boolean)),
-  ];
-  const uniqueUsers = [
-    ...new Set(
-      logs
-        .map((l) => (typeof l.user === "object" ? l.user?.name : l.user))
-        .filter(Boolean),
-    ),
-  ];
+  // --------------------------------------------------
+  // ENTITY / USER DROPDOWN OPTIONS — API 82.1 / API 82.2 (NEW, 16 Sep
+  // 2026 Filtering Fix pass). These two dedicated endpoints replace
+  // the old approach of deriving the dropdown options from whatever
+  // rows happened to already be on the current page — which never
+  // showed every real option, only whatever had scrolled past.
+  // --------------------------------------------------
+  const { data: entitiesResponse } = useQuery({
+    queryKey: ["auditLogs", "entities"],
+    queryFn: ({ signal }) => getAuditLogEntities(signal),
+    staleTime: 1000 * 60 * 5,
+  });
+  const { data: usersResponse } = useQuery({
+    queryKey: ["auditLogs", "users"],
+    queryFn: ({ signal }) => getAuditLogUsers(signal),
+    staleTime: 1000 * 60 * 5,
+  });
 
+  // API 82.1 returns a plain array of entity name strings directly.
   const entityOptions = [
     { value: "", label: "All Entities" },
-    ...uniqueEntities.map((e) => ({ value: e, label: e })),
+    ...extractListData(entitiesResponse).map((entity) => ({
+      value: entity,
+      label: entity,
+    })),
   ];
+  // API 82.2 returns [{ id, name, email }, ...]. The `user` query
+  // param on getAuditLogs matches by name (same as before this fix —
+  // only where the options now come from has changed), so `value`
+  // here stays each user's `name`, not their numeric `id`.
   const userOptions = [
     { value: "", label: "All Users" },
-    ...uniqueUsers.map((u) => ({ value: u, label: u })),
+    ...extractListData(usersResponse).map((user) => ({
+      value: user.name,
+      label: user.name,
+    })),
   ];
 
   // --------------------------------------------------
@@ -147,27 +167,71 @@ const AuditLogs = () => {
   const getCount = (response) =>
     response?.data?.count ?? extractListData(response).length;
 
-  const handleExport = () => {
-    downloadCsv(
-      logs.map((log) => ({
-        timestamp: formatDate(log.created_at),
-        user: typeof log.user === "object" ? log.user?.name : log.user,
-        action: log.action,
-        entity: log.entity,
-        entity_id: log.entity_id,
-        ip_address: log.ip_address,
-      })),
-      [
-        { key: "timestamp", label: "Timestamp" },
-        { key: "user", label: "User" },
-        { key: "action", label: "Action" },
-        { key: "entity", label: "Entity" },
-        { key: "entity_id", label: "Entity ID" },
-        { key: "ip_address", label: "IP Address" },
-      ],
-      "audit-logs",
-    );
-    showSuccess("Export downloaded.");
+  // Shared row shape for the CSV.
+  const buildExportRow = (log) => ({
+    timestamp: formatDate(log.created_at),
+    user: typeof log.user === "object" ? log.user?.name : log.user,
+    action: log.action,
+    entity: log.entity,
+    entity_id: log.entity_id,
+    ip_address: log.ip_address,
+  });
+
+  // Backend's page_size cap on /api/v1/admin/audit-logs/ (API 82) — now
+  // confirmed/supported by the backend, same as the on-screen pagination.
+  const EXPORT_PAGE_SIZE = 100;
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Pulls EVERY log matching the currently applied filters (not just
+  // the page on screen right now), looping pages if needed, then
+  // builds the CSV from the full set.
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const baseParams = {
+        entity: entityFilter || undefined,
+        user: userFilter || undefined,
+        search: debouncedSearch || undefined,
+        page_size: EXPORT_PAGE_SIZE,
+      };
+
+      const allLogs = [];
+      let page = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await getAuditLogs({ ...baseParams, page });
+        allLogs.push(...extractListData(response));
+        const totalCount = response?.data?.count ?? allLogs.length;
+        if (allLogs.length >= totalCount || !response?.data?.next) {
+          break;
+        }
+        page += 1;
+      }
+
+      if (allLogs.length === 0) {
+        showError("No logs match the current filters to export.");
+        return;
+      }
+
+      downloadCsv(
+        allLogs.map(buildExportRow),
+        [
+          { key: "timestamp", label: "Timestamp" },
+          { key: "user", label: "User" },
+          { key: "action", label: "Action" },
+          { key: "entity", label: "Entity" },
+          { key: "entity_id", label: "Entity ID" },
+          { key: "ip_address", label: "IP Address" },
+        ],
+        "audit-logs",
+      );
+      showSuccess("Export downloaded.");
+    } catch (error) {
+      showError("Failed to export logs. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const columns = [
@@ -254,7 +318,7 @@ const AuditLogs = () => {
     // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
     // already used on Product Management, instead of leaving large empty
     // bands between each section.
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
       <PageHeader icon={<AiOutlineFileText />} title="Audit Logs" />
 
       {/* Layout: a flex-wrap row rather than a three-column grid.
@@ -314,6 +378,7 @@ const AuditLogs = () => {
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
         onExport={handleExport}
+        isExporting={isExporting}
       />
 
       <DataTable

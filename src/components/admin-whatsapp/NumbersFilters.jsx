@@ -16,13 +16,18 @@ import { ListToolbarBar } from "../shared/list-toolbar";
  * - search:         Search box value (name / phone number).
  * - onSearchChange: (value) => void.
  * - onExport:       Handler for the Export button.
+ * - isExporting:    Whether an export is currently in progress — shows
+ *                   a loading state on the Export button (fetching
+ *                   chat counts for every filtered number can take a
+ *                   few requests, not just one).
  */
-const NumbersFilters = ({ search, onSearchChange, onExport }) => (
+const NumbersFilters = ({ search, onSearchChange, onExport, isExporting }) => (
   <ListToolbarBar
     searchValue={search}
     onSearchChange={onSearchChange}
     searchPlaceholder="Filter by name or number..."
     onExport={onExport}
+    isExporting={isExporting}
   />
 );
 

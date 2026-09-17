@@ -12,9 +12,17 @@ import { AiOutlineTrophy } from "react-icons/ai";
 // getBestSellers -> the single API call this whole page is built on;
 // returns products ranked by sales for the chosen date range
 import { getBestSellers } from "../../api/analytics.api";
+// getCategories -> NEW (16 Sep 2026, Filtering Fix pass, API 95)
+// powers the "Category" filter dropdown below, and its value is now
+// forwarded to getBestSellers as category_id
+import { getCategories } from "../../api/categories.api";
+import { QUERY_KEYS } from "../../constants/queryKeys";
+import extractListData from "../../utils/extractListData";
 
 // Input -> shared input component, used here twice for the two date pickers
 import Input from "../../components/ui/Input";
+// Select -> shared dropdown component, used for the new Category filter
+import Select from "../../components/ui/Select";
 
 import cn from "../../utils/cn";
 // cn — merges Tailwind class strings, used to style the active/inactive
@@ -91,6 +99,24 @@ const ProductsPerformance = () => {
   const defaultRange = getDefaultRange();
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
+  const [categoryId, setCategoryId] = useState("");
+
+  // Category filter options — reuses the exact same cache key/query as
+  // every other category dropdown in this project (navbar, footer,
+  // Product Management, etc. — see categories.api.js), so this costs
+  // no extra request in practice.
+  const { data: categoriesResponse } = useQuery({
+    queryKey: QUERY_KEYS.CATEGORIES,
+    queryFn: ({ signal }) => getCategories(undefined, signal),
+    staleTime: 1000 * 60 * 5,
+  });
+  const categoryOptions = [
+    { value: "", label: "All Categories" },
+    ...extractListData(categoriesResponse).map((category) => ({
+      value: String(category.id),
+      label: category.name,
+    })),
+  ];
 
   // Recomputed on every render so "Today" always means today, not the
   // day the component first mounted
@@ -107,11 +133,23 @@ const ProductsPerformance = () => {
   // the full table below — fetched once here (limit: 50, a deliberate
   // middle ground — see the flag notes in ProductPerformanceStatsCards
   // for why this isn't pretending to cover the entire 254-product catalog)
+  //
+  // UPDATED (16 Sep 2026, Filtering Fix pass, API 95): category_id is
+  // now a confirmed, working filter, combinable with the existing
+  // start_date/end_date/limit params. Sending it here does not change
+  // the response shape — `limit` is still respected as before, since
+  // `page` is never sent (this page never turns on API 95's opt-in
+  // real pagination).
   const { data: response, isLoading } = useQuery({
-    queryKey: ["productsPerformance", "list", startDate, endDate],
+    queryKey: ["productsPerformance", "list", startDate, endDate, categoryId],
     queryFn: ({ signal }) =>
       getBestSellers(
-        { start_date: startDate, end_date: endDate, limit: 50 },
+        {
+          start_date: startDate,
+          end_date: endDate,
+          limit: 50,
+          category_id: categoryId || undefined,
+        },
         signal,
       ),
   });
@@ -195,12 +233,23 @@ const ProductsPerformance = () => {
                 );
               })}
             </div>
+            {/* ==========================================================
+                CATEGORY FILTER — NEW (16 Sep 2026, Filtering Fix pass,
+                API 95). Sits directly under the quick-range chips,
+                same column as the rest of this header's filter
+                controls.
+                ========================================================== */}
+            <div className="w-full sm:w-45">
+              <Select
+                aria-label="Category filter"
+                options={categoryOptions}
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+              />
+            </div>
           </div>
         }
       />
-      {/* Note: "Category: All" filter from the original design is NOT
-          included — neither Best Sellers nor Low Performing Products
-          document a category filter param in the API. */}
 
       <ProductPerformanceStatsCards startDate={startDate} endDate={endDate} />
       {/* Note: "Most Viewed Product" and "Avg Product Rating" cards

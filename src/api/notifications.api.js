@@ -39,6 +39,14 @@ import axiosInstance from "../lib/axiosInstance";
 //                         badge and the page subtitle, since neither
 //                         can be correctly computed on the frontend
 //                         once only one page is ever loaded at a time.
+//     unread_by_type: { order, promotion, system },
+//                     <- NEW (16 Sep 2026, Filtering Fix pass, API 75):
+//                         same idea as unread_count above, but broken
+//                         down per type across the ENTIRE history. Used
+//                         so the Orders/Promotions/System tabs can each
+//                         show their own real unread badge (see
+//                         NotificationFilters.jsx) instead of showing
+//                         no count at all, as before this field existed.
 //     results: [
 //       { id, title, message, type, is_read, created_at,
 //         reference_type, reference_id }

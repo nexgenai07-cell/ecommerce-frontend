@@ -143,6 +143,13 @@ const NotificationHistory = () => {
   // the "Unread" tab's badge.
   const unreadCount = notificationsResponse?.data?.unread_count ?? 0;
 
+  // unreadByType — NEW (16 Sep 2026, Filtering Fix pass, API 75): a
+  // real per-type unread breakdown provided directly by the backend,
+  // e.g. { order: 2, promotion: 0, system: 1 }. Passed straight down
+  // to NotificationFilters so the Orders/Promotions/System tabs can
+  // show their own accurate unread badge instead of no badge at all.
+  const unreadByType = notificationsResponse?.data?.unread_by_type;
+
   // totalCount / totalPages — real numbers straight from the backend's
   // `count` field, matching exactly what's been server-filtered by the
   // current tab (type/is_read)
@@ -165,7 +172,11 @@ const NotificationHistory = () => {
     // relative + overflow-hidden hosts the decorative ambient gradient glow
     // behind the header without it bleeding into the navbar/footer or causing
     // horizontal scrollbars on any screen size — same treatment as the Wishlist page
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-hidden flex-1 flex flex-col min-h-0">
+      {/* flex-1 flex flex-col min-h-0: lets this page stretch to fill the
+          height CustomerAccountLayout's <main> hands down, so the
+          pagination footer further below is pinned at the bottom of the
+          screen instead of hugging right under one or two notifications. */}
       {/* Ambient background glow — soft emerald blur behind the page header,
           purely decorative (pointer-events-none), gives the page the same
           premium "lit" feel as the rest of the account section
@@ -173,9 +184,9 @@ const NotificationHistory = () => {
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-xl h-144 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
       {/* Container component constrains content width and adds vertical padding, larger on "sm" screens and up */}
-      <Container className="py-6 sm:py-8">
+      <Container className="py-6 sm:py-8 flex-1 flex flex-col min-h-0">
         {/* Outer vertical flex layout stacking all page sections with consistent gap spacing between them */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 flex-1 min-h-0">
           {/* ── Page header ────────────────────────────────────────────────────────
               Same icon-box pattern used across the app's other page headers:
               a rounded gradient icon square + bold dark heading + gray subtitle.
@@ -210,6 +221,7 @@ const NotificationHistory = () => {
             activeTab={activeTab}
             onTabChange={handleTabChange}
             unreadCount={unreadCount}
+            unreadByType={unreadByType}
           />
 
           {/* Loading skeleton */}
@@ -304,12 +316,20 @@ const NotificationHistory = () => {
               doesn't accept or render that prop (confirmed in Pagination.jsx),
               so passing it would be dead code with zero effect on the UI.    */}
           {!isLoading && !isError && totalCount > 0 && (
-            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white">
+            <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white flex-1 flex flex-col min-h-0">
+              {/* flex-1 flex flex-col min-h-0: this card now stretches to
+                  fill the remaining page height, so the Pagination footer
+                  below is pinned at the bottom of the screen even when
+                  there's only one or two notifications on the page. */}
               {groupedNotifications.length > 0 && (
                 // AnimatePresence with "popLayout" mode allows items to animate smoothly as the list changes, removing items from layout flow immediately rather than waiting for their exit animation
                 <AnimatePresence mode="popLayout">
-                  {/* Outer vertical flex container stacking each date group section with gap spacing */}
-                  <div className="flex flex-col gap-6 p-4 sm:p-5">
+                  {/* Outer vertical flex container stacking each date group section with gap spacing.
+                      flex-1 min-h-0 overflow-y-auto: absorbs the extra
+                      space inside the card so it's the list (not the
+                      footer) that grows, and keeps a scroll safety net if
+                      the list is ever taller than the available space. */}
+                  <div className="flex flex-col gap-6 p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto">
                     {/* Map over each date group (e.g., TODAY, YESTERDAY, OLDER) to render its label and notification items */}
                     {groupedNotifications.map((group) => (
                       // Animated wrapper for this date group: fades in and slides up slightly from below on mount

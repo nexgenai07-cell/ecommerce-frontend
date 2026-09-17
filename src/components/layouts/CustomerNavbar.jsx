@@ -73,7 +73,7 @@ const CustomerNavbar = () => {
   // ===== CATEGORIES — real API, used in search suggestions + mobile drawer =====
   const { data: categoriesData } = useQuery({
     queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(signal),
+    queryFn: ({ signal }) => getCategories(undefined, signal),
     staleTime: 1000 * 60 * 10,
   });
   // API_Documentation_Final.pdf (API 11) documents this endpoint as a

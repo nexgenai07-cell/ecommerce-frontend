@@ -33,11 +33,14 @@ export const getProducts = (params, signal) => {
 //   - in_stock     -> true/false, genuinely filters by real stock status
 //   - status       -> "out_of_stock" | "low_stock" | "healthy" —
 //                      combines correctly with every other filter
-//                      above. NOTE: only single values are confirmed;
-//                      sending multiple statuses in one request was
-//                      not part of the confirmed contract, so the
-//                      Inventory Alerts page fetches each selected
-//                      status separately when more than one is active
+//                      above. UPDATED (16 Sep 2026, Filtering Fix
+//                      pass, API 29): now also accepts MULTIPLE
+//                      values in a single request — comma-separated
+//                      ("out_of_stock,low_stock") or repeated
+//                      (?status=out_of_stock&status=low_stock) — so
+//                      the Inventory Alerts page sends every selected
+//                      status tab together as one request instead of
+//                      looping per-status and merging in the browser
 //                      (see InventoryAlerts.jsx).
 //   - ordering     -> e.g. "-created_at", "price", "-price", "name"
 //   - min_price / max_price -> filters by product price range.
@@ -171,10 +174,25 @@ export const setPrimaryImage = (productId, imageId, signal) => {
 };
 
 // ----------------------------
-// API - Get a list of low-stock products (Admin only)
+// API 38 - Get a list of low-stock products (Admin only)
 // ----------------------------
-export const getLowStockProducts = (signal) => {
-  return axiosInstance.get("/api/v1/products/low-stock/", { signal });
+// UPDATED (16 Sep 2026, Filtering Fix pass, API 38): this endpoint now
+// also accepts optional query params — q (matches name/description/
+// sku/category name), category_id (single or comma-separated), and
+// OPT-IN real pagination (page, page_size). Pagination only activates
+// when `page` is explicitly sent:
+//   - params omitted (or page left out) -> response is UNCHANGED, the
+//     same complete plain array as always. The admin dashboard's small
+//     red-alert widget relies on exactly this behavior and needs no
+//     changes.
+//   - page sent -> response becomes the standard paginated shape
+//     { count, next, previous, results }. Used by the fuller "Low
+//     Stock" view on the admin Product Management table (see
+//     ProductList.jsx) so it can offer real server-side search,
+//     category filtering, and pagination instead of fetching the
+//     complete low-stock list and filtering it in the browser.
+export const getLowStockProducts = (params, signal) => {
+  return axiosInstance.get("/api/v1/products/low-stock/", { signal, params });
 };
 
 // ----------------------------

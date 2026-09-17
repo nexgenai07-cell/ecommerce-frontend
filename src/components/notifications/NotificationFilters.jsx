@@ -24,11 +24,14 @@ export const NOTIFICATION_TABS = [
 ];
 
 // Define the NotificationFilters functional component, receiving the
-// currently active tab, a callback to change tabs, and the confirmed
-// total unread count (a single real number from the backend, NOT a
-// full notifications array — see the note below on why per-tab counts
-// were removed).
-const NotificationFilters = ({ activeTab, onTabChange, unreadCount }) => {
+// currently active tab, a callback to change tabs, the confirmed
+// total unread count, and (NEW, API 75) a per-type unread breakdown.
+const NotificationFilters = ({
+  activeTab,
+  onTabChange,
+  unreadCount,
+  unreadByType,
+}) => {
   // Get access to the React Query client instance so we can manually invalidate/refresh cached queries later
   const queryClient = useQueryClient();
 
@@ -69,16 +72,17 @@ const NotificationFilters = ({ activeTab, onTabChange, unreadCount }) => {
           // Determine whether this specific tab is the currently active one
           const isActive = activeTab === tab.id;
 
-          // NOTE: per-tab counts for "Orders"/"Promotions"/"System"/"All"
-          // used to be computed by counting the FULL notifications array
-          // in the browser. Now that only one page is ever loaded at a
-          // time, that full list no longer exists on the frontend, and
-          // the backend's confirmed contract only provides a single
-          // TOTAL unread_count — not a breakdown by type. So only the
-          // "Unread" tab shows a count (using the real, confirmed
-          // number passed in as a prop); the other tabs show no count
-          // rather than a fake or stale one.
-          const count = tab.id === "unread" ? unreadCount : null;
+          // UPDATED (16 Sep 2026, Filtering Fix pass, API 75): the
+          // backend now also provides `unread_by_type` — a real
+          // { order, promotion, system } breakdown — alongside the
+          // single total `unread_count`. So the "Unread" tab still
+          // uses the confirmed total, while Orders/Promotions/System
+          // each show their own real count from that breakdown. "All"
+          // intentionally shows no count, same as before.
+          const count =
+            tab.id === "unread"
+              ? unreadCount
+              : (unreadByType?.[tab.id] ?? null);
 
           // Return the JSX for this individual tab pill button
           return (

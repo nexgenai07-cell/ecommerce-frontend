@@ -2,11 +2,12 @@
 // ConversationsList — BOT LOGS SUB-COMPONENT
 // ============================================================
 // Built from API 94 (WhatsApp Sessions) — "everyone currently
-// mid-conversation with the bot". This is the only REAL, bounded
-// data source for a conversation list; there's no paginated,
-// conversation-grouped view of the full historical message log
-// anywhere in the API, so this deliberately does NOT claim to show
-// "all 12,482 conversations" the way the original design implied.
+// mid-conversation with the bot". This is intentionally NOT the same
+// data source as the admin "Numbers" page (see NumbersManagement.jsx),
+// which switched to API 116.1 (16 Sep 2026 Filtering Fix pass) — that
+// endpoint covers every phone number that has EVER messaged, which is
+// the wrong concept for a "who is live with the bot right now" panel.
+// API 94 remains the correct, purpose-built source here.
 //
 // Customer names are resolved via a REAL cross-reference against the
 // Customers list (API 87) matching on phone number — WhatsApp Sessions
@@ -43,7 +44,8 @@ const ConversationsList = ({ selectedPhone, onSelect }) => {
   const customerLookupQueries = useQueries({
     queries: sessions.map((session) => ({
       queryKey: ["whatsappBotLogs", "customerLookup", session.phone_number],
-      queryFn: ({ signal }) => getCustomers({ search: session.phone_number, page_size: 1 }, signal),
+      queryFn: ({ signal }) =>
+        getCustomers({ search: session.phone_number, page_size: 1 }, signal),
       staleTime: 1000 * 60 * 5,
     })),
   });

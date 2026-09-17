@@ -34,7 +34,8 @@ export const getMyStore = (signal) => {
 // plain text), this request needs to use "multipart/form-data"
 // instead of the default JSON content type.
 export const updateMyStore = (data, signal) => {
-  return axiosInstance.put("/api/v1/stores/me/", data, { signal,
+  return axiosInstance.put("/api/v1/stores/me/", data, {
+    signal,
     headers: { "Content-Type": "multipart/form-data" },
     // Overriding the default "application/json" content type
     // (set globally in axiosInstance) specifically for THIS request,
@@ -56,4 +57,32 @@ export const updateMyStore = (data, signal) => {
 // ({ count, next, previous, results }).
 export const getAuditLogs = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/audit-logs/", { signal, params });
+};
+
+// ----------------------------
+// API 82.1 - Get every distinct audit log entity value (Admin only)
+// ----------------------------
+// NEW (16 Sep 2026, Filtering Fix pass). The Audit Logs page's Entity
+// filter dropdown used to be populated from whatever entity values
+// happened to already be on the current page of results — so it never
+// showed every real option, only whatever had scrolled past. This
+// returns every distinct entity value that has EVER actually been
+// logged, system-wide.
+// Response: a plain array of strings, alphabetically sorted, e.g.
+//   ["category", "discount", "inventory", "order", "product", ...]
+export const getAuditLogEntities = (signal) => {
+  return axiosInstance.get("/api/v1/admin/audit-logs/entities/", { signal });
+};
+
+// ----------------------------
+// API 82.2 - Get every distinct audit log user (Admin only)
+// ----------------------------
+// NEW (16 Sep 2026, Filtering Fix pass). Same reasoning as API 82.1
+// above, but for the User/Admin filter dropdown. Returns every
+// admin/staff user who has actually performed at least one logged
+// action — NOT every admin account in the system — so the dropdown
+// only ever offers options that are guaranteed to return results.
+// Response: [ { id, name, email }, ... ]
+export const getAuditLogUsers = (signal) => {
+  return axiosInstance.get("/api/v1/admin/audit-logs/users/", { signal });
 };
