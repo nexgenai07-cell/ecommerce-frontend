@@ -74,6 +74,26 @@ export const getComplaints = (params, signal) => {
 };
 
 // ----------------------------
+// API 72.2 - Get the logged-in customer's open complaints count ★ NEW
+// ----------------------------
+// Returns how many of the caller's OWN complaints are not yet
+// resolved/closed (status "open" or "in_progress"). An admin calling
+// this instead gets the count across every customer, not just their
+// own — same endpoint, role-based response, same pattern getComplaints()
+// above already uses.
+//
+// Replaces the previously hardcoded, non-functional "Active Status
+// Notice" block on the customer Support/Complaints page (static
+// "1 open complaint" text, static "Order #N/A", non-functional View
+// Status button) with a single real number — see
+// ActiveComplaintBanner.jsx.
+//
+// Response (200 OK): { open_count: number }
+export const getOpenComplaintsCount = (signal) => {
+  return axiosInstance.get("/api/v1/complaints/open-count/", { signal });
+};
+
+// ----------------------------
 // API - Get full details of a specific complaint
 // ----------------------------
 // Fetches everything about one specific complaint, identified by

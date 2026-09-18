@@ -8,9 +8,6 @@ import { BsChatSquareText } from "react-icons/bs";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that fetches the list of complaints from the backend
 import { getComplaints } from "../../api/complaints.api";
-import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the complaints endpoint)
-// Import the COMPLAINT_STATUS constant object containing the fixed status values used by the API
-import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 // Import the Container layout component used to constrain and center page content with consistent padding/max-width
 import Container from "../../components/layouts/Container";
 // Import the banner component that displays a warning when the user has an active/open complaint
@@ -25,11 +22,18 @@ import PreviousComplaints from "../../components/complaint/PreviousComplaints";
 // Define the ComplaintSubmit page component (no props required) — this is the main page that assembles all the smaller complaint-related components
 const ComplaintSubmit = () => {
   // =============================================
-  // COMPLAINTS API — active complaint check
+  // COMPLAINTS API — cache warm-up for PreviousComplaints below
   // API 55 — GET /api/v1/complaints/
   // =============================================
-  // Fetch the list of complaints using React Query, so we can check if there's currently an open/active one
-  const { data: complaintsData } = useQuery({
+  // UPDATED (API Changes Addendum, Sep 2026): the "is there an active
+  // complaint" check that used to live here has moved into
+  // ActiveComplaintBanner itself, which now fetches the real open
+  // count directly from API 72.2 instead of this page guessing it from
+  // the first "OPEN" row in this list (and always displaying "1"
+  // regardless of the true count). This query is kept as-is purely to
+  // warm the shared QUERY_KEYS.COMPLAINTS cache entry ahead of
+  // PreviousComplaints below, which reads the exact same key.
+  useQuery({
     // Unique cache key under which this query's data is stored/retrieved (shared with PreviousComplaints, so both stay in sync)
     queryKey: QUERY_KEYS.COMPLAINTS,
     // The actual async function that performs the API call to fetch complaints
@@ -37,16 +41,6 @@ const ComplaintSubmit = () => {
     // Keep this data "fresh" (won't auto-refetch) for 2 minutes (2 * 60 * 1000 ms) to avoid unnecessary network calls
     staleTime: 1000 * 60 * 2,
   });
-
-  // Safely extract the complaints array from the API response, defaulting to an empty array if data isn't available yet
-  // API_Documentation_Final.pdf (API 55) documents a flat array — routed
-  // through the normalizer defensively in case of backend/docs drift.
-  const complaints = extractListData(complaintsData);
-  // Active/open complaint check karo — banner ke liye
-  // Find the first complaint in the list whose status is "OPEN" — this will be shown in the active complaint banner, if any exists
-  const activeComplaint = complaints.find(
-    (c) => c.status === COMPLAINT_STATUS.OPEN,
-  );
 
   // Begin the JSX returned by this page component
   return (
@@ -86,8 +80,10 @@ const ComplaintSubmit = () => {
           </div>
 
           {/* Active complaint banner */}
-          {/* Render the active complaint warning banner, passing the found active complaint (or undefined if none exists, in which case the banner renders nothing) */}
-          <ActiveComplaintBanner complaint={activeComplaint} />
+          {/* Renders unconditionally now — it fetches the real open
+              count itself (API 72.2) and shows nothing when that
+              count is zero, so there's no prop to pass down anymore. */}
+          <ActiveComplaintBanner />
 
           {/* ── SINGLE UNIFIED FORM CARD ──────────────────────────────────────────
               The complaint form and the resolution protocol sidebar used to be TWO

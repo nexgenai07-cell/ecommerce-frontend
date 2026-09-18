@@ -9,7 +9,7 @@ import {
   AiOutlineCheck,
   AiOutlineShoppingCart,
 } from "react-icons/ai";
-import { BsTag } from "react-icons/bs";
+import { BsTag, BsLightningCharge, BsBoxSeam } from "react-icons/bs";
 
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -25,6 +25,7 @@ import useFlyToIcon from "../../hooks/useFlyToIcon";
 import { showSuccess, showError } from "../ui/Toast";
 import PriceDisplay from "../shared/PriceDisplay";
 import QuantitySelector from "../shared/QuantitySelector";
+import RatingStars from "../shared/RatingStars";
 import Badge from "../ui/Badge";
 
 const ProductInfo = ({ product, imageRef }) => {
@@ -198,6 +199,36 @@ const ProductInfo = ({ product, imageRef }) => {
     addToCartMutation.mutate();
   };
 
+  // ─── BUY NOW — API 55 (Checkout, further change, Sep 2026) ───
+  // Skips the cart entirely and sends the customer straight into the
+  // normal Checkout page, carrying just this one product + the quantity
+  // currently selected on this page via router state. Checkout.jsx reads
+  // this "buyNow" state to switch into its Buy Now mode: it builds the
+  // order from buy_now_product_id/buy_now_quantity instead of the
+  // customer's cart, and — per the backend contract — never reads,
+  // clears, or otherwise touches the actual cart along the way.
+  const handleBuyNow = () => {
+    if (!isInStock || isMaxedInCart) return;
+
+    if (!isAuthenticated) {
+      // Checkout requires a logged-in customer — same gate Checkout.jsx
+      // itself enforces on mount, applied a step earlier here so the
+      // customer isn't sent to a page that immediately bounces them
+      // straight back out to Login anyway.
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
+    navigate(ROUTES.CHECKOUT, {
+      state: {
+        buyNow: {
+          product,
+          quantity,
+        },
+      },
+    });
+  };
+
   const handleWishlistToggle = () => {
     if (!isAuthenticated) {
       navigate(ROUTES.LOGIN);
@@ -276,6 +307,33 @@ const ProductInfo = ({ product, imageRef }) => {
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">
           {product.name}
         </h1>
+
+        {/* ─── Rating + Sold Count — API 30 (further change, Sep 2026) ───
+            average_rating/review_count/total_sold all come back as
+            0/0.0 for a brand-new product with no reviews or sales yet —
+            the rating row is hidden entirely in that case ("No reviews
+            yet" already lives inside the Reviews tab below, so this row
+            doesn't need to repeat it), and the "N sold" badge is its own
+            independent check since a product can have sales with zero
+            reviews (or vice versa). */}
+        {(Number(product.review_count) > 0 ||
+          Number(product.total_sold) > 0) && (
+          <div className="flex flex-wrap items-center gap-3">
+            {Number(product.review_count) > 0 && (
+              <RatingStars
+                rating={Number(product.average_rating) || 0}
+                count={Number(product.review_count) || 0}
+                size="md"
+              />
+            )}
+            {Number(product.total_sold) > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                <BsBoxSeam className="w-3.5 h-3.5" />
+                {Number(product.total_sold).toLocaleString()} sold
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <PriceDisplay
@@ -357,6 +415,26 @@ const ProductInfo = ({ product, imageRef }) => {
                 {isMaxedInCart ? "Max in Cart" : "Add to Cart"}
               </>
             )}
+          </motion.button>
+
+          {/* Buy Now — API 55, skips the cart and jumps straight into
+              Checkout's Buy Now mode with just this product + quantity. */}
+          <motion.button
+            onClick={handleBuyNow}
+            disabled={!isInStock || isMaxedInCart}
+            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: isInStock && !isMaxedInCart ? 1.01 : 1 }}
+            className="
+              w-full flex items-center justify-center gap-2
+              py-3.5 px-6 rounded-xl text-sm font-semibold
+              bg-gray-900 text-white shadow-md shadow-gray-900/20
+              hover:bg-black
+              disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+              transition-all duration-200
+            "
+          >
+            <BsLightningCharge className="w-4 h-4" />
+            Buy Now
           </motion.button>
 
           <button

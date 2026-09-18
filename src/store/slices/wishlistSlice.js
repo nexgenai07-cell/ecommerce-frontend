@@ -1,4 +1,3 @@
-// ============================================================
 // WISHLIST SLICE (Redux Toolkit)
 // ============================================================
 // This slice manages the user's wishlist state:
@@ -100,6 +99,26 @@ const wishlistSlice = createSlice({
     },
 
     // --------------------------------------------------
+    // REDUCER: removeManyFromWishlist
+    // --------------------------------------------------
+    // API 54.1 — companion to removeFromWishlist above, for the bulk
+    // "select all and delete" / partial multi-select flow. Removes every
+    // matching wishlist item in ONE state update instead of the caller
+    // dispatching removeFromWishlist in a loop, which is exactly what
+    // made the customer see items disappear one-by-one on screen instead
+    // of together. action.payload here is an ARRAY of wishlist ITEM ids
+    // (not product ids) — the same ids removeFromWishlist expects.
+    removeManyFromWishlist: (state, action) => {
+      const idsToRemove = new Set(action.payload);
+
+      // Keep every item whose id is NOT in the set being removed
+      state.items = state.items.filter((item) => !idsToRemove.has(item.id));
+
+      // Recalculate count based on the new (shorter) items array
+      state.count = state.items.length;
+    },
+
+    // --------------------------------------------------
     // REDUCER: clearWishlist
     // --------------------------------------------------
     // Called when the user logs out, to reset the wishlist state
@@ -143,9 +162,15 @@ export const isInWishlist = (items, productId) =>
 // dispatch(setWishlist(backendWishlistData))
 // dispatch(addToWishlist(newWishlistItem))
 // dispatch(removeFromWishlist(wishlistItemId))
+// dispatch(removeManyFromWishlist([itemId1, itemId2, ...]))
 // dispatch(clearWishlist())
-export const { setWishlist, addToWishlist, removeFromWishlist, clearWishlist } =
-  wishlistSlice.actions;
+export const {
+  setWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  removeManyFromWishlist,
+  clearWishlist,
+} = wishlistSlice.actions;
 
 // ----------------------------
 // EXPORTING THE REDUCER

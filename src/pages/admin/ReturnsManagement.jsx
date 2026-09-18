@@ -515,17 +515,20 @@ const ReturnDetailModal = ({
           )}
 
           {/* ================================================================
-              5. STATUS ACTIONS — API 63 (PUT /api/v1/admin/returns/{id}/
+              5. STATUS ACTIONS — API 67 (PUT /api/v1/admin/returns/{id}/
               status/) only ever accepts status: "approved" | "rejected" in
               its request body — "pending" is NOT a value this endpoint
               accepts, so a decided return can never be reverted back to
-              Pending through this API. What it CAN do, since both real
-              values are always valid, is switch a return from Approved to
-              Rejected (or back) at any time — useful for correcting an
-              admin's mis-click. Both cases are handled below; the two
-              render branches are mutually exclusive on returnItem.status.
-              Wrapped in a tinted footer card so it reads as the modal's
-              final "decision" step rather than blending into the rest.
+              Pending through this API.
+              CONFIRMED (v5.5, 18 Sep 2026): a status-lock is now enforced
+              on the Return model itself — once a return is approved or
+              rejected, it can NEVER be changed to a different status
+              through this API, in either direction. The "switch the
+              decision" button that used to be offered here has been
+              removed; an already-decided return is now shown as a
+              read-only, locked state instead. Wrapped in a tinted footer
+              card so it reads as the modal's final "decision" step rather
+              than blending into the rest.
               ================================================================ */}
           {returnItem.status === RETURN_STATUS.REQUESTED ? (
             // ---- Case 1: still Pending — the normal first decision ----
@@ -549,41 +552,19 @@ const ReturnDetailModal = ({
               </div>
             </div>
           ) : (
-            // ---- Case 2: already decided — offer to switch the decision,
-            // never a "back to Pending" option since API 63 doesn't accept
-            // that value at all. ----
-            <div className="rounded-2xl bg-gray-50 p-4 flex flex-col items-end gap-2">
-              <p className="text-xs text-gray-400">
+            // ---- Case 2: already decided — status is permanently locked,
+            // in either direction, so no action is offered here anymore. ----
+            <div className="rounded-2xl bg-gray-50 p-4 flex items-center justify-end gap-2">
+              <p className="text-xs text-gray-400 text-right">
                 This return has already been{" "}
-                {returnItem.status === RETURN_STATUS.APPROVED
-                  ? "approved"
-                  : "rejected"}
-                . It can be switched to{" "}
-                {returnItem.status === RETURN_STATUS.APPROVED
-                  ? "Rejected"
-                  : "Approved"}{" "}
-                if that was a mistake — reverting to Pending isn't supported by
-                the API.
+                <span className="font-medium text-gray-600">
+                  {returnItem.status === RETURN_STATUS.APPROVED
+                    ? "approved"
+                    : "rejected"}
+                </span>
+                . This decision is final and can't be changed to a different
+                status.
               </p>
-              <Button
-                variant={
-                  returnItem.status === RETURN_STATUS.APPROVED
-                    ? "danger"
-                    : "primary"
-                }
-                onClick={() =>
-                  onDecide(
-                    returnItem,
-                    returnItem.status === RETURN_STATUS.APPROVED
-                      ? RETURN_STATUS.REJECTED
-                      : RETURN_STATUS.APPROVED,
-                  )
-                }
-              >
-                {returnItem.status === RETURN_STATUS.APPROVED
-                  ? "Change to Rejected"
-                  : "Change to Approved"}
-              </Button>
             </div>
           )}
         </div>

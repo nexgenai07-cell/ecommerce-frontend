@@ -54,3 +54,31 @@ export const addToWishlist = (data, signal) => {
 export const removeFromWishlist = (itemId, signal) => {
   return axiosInstance.delete(`/api/v1/wishlist/remove/${itemId}/`, { signal });
 };
+
+// ----------------------------
+// API 54.1 - Remove multiple products from the wishlist in one request ★ NEW
+// ----------------------------
+// Used by the "select all and delete" / partial multi-select flow on
+// the Wishlist page instead of calling removeFromWishlist() above once
+// per selected item in a loop — that loop was the exact cause of
+// selected items disappearing one-by-one instead of together whenever
+// more than one was deleted at once (see Wishlist.jsx's
+// handleRemoveSelected). This is a single database query on the
+// backend for the whole batch.
+//
+// data shape: { item_ids: number[] } — these are wishlist ITEM ids
+// (item.id), the same id removeFromWishlist() above expects, not
+// product ids.
+//
+// Response (200 OK): { message, removed_count, wishlist: { id, items,
+// created_at } } — item_ids that don't exist, or belong to another
+// customer's wishlist, are silently excluded from removed_count
+// rather than causing an error, so removed_count can legitimately be
+// smaller than the number of ids sent.
+export const bulkRemoveFromWishlist = (itemIds, signal) => {
+  return axiosInstance.post(
+    "/api/v1/wishlist/bulk-remove/",
+    { item_ids: itemIds },
+    { signal },
+  );
+};

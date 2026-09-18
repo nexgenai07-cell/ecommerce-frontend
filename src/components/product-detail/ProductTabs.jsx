@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsTag, BsBoxSeam, BsGrid, BsCheckCircle } from "react-icons/bs";
+import ProductReviews from "./ProductReviews";
+// New tab content added for API 30.1/30.2 (API Changes Addendum, Sep
+// 2026) — rating breakdown, review list, and the write/edit/delete
+// own-review flow all live inside this one component.
 
 const TABS = [
   { id: "description", label: "Description" },
   { id: "specifications", label: "Specifications" },
+  { id: "reviews", label: "Reviews" },
 ];
 
 const ProductTabs = ({ product }) => {
@@ -111,6 +116,13 @@ const ProductTabs = ({ product }) => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ══════ REVIEWS — API 30.1 / API 30.2 ══════ */}
+          {activeTab === "reviews" && (
+            <div className="max-w-3xl mx-auto">
+              <ProductReviews productId={product?.id} />
             </div>
           )}
         </motion.div>

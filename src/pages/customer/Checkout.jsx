@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 // React Router hooks — useNavigate to redirect programmatically, useSearchParams
 // to read the "resume" query param used by the failed-payment retry flow
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 // React Query hooks — useQuery to fetch data, useMutation to perform write operations, useQueryClient to manually manage cache
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 // React Hook Form's main hook for managing form state, validation, and submission
@@ -306,6 +306,13 @@ const CheckoutSkeleton = () => (
 const Checkout = () => {
   // Hook to programmatically redirect the user to other routes
   const navigate = useNavigate();
+  // Reading router state — specifically "buyNow", which ProductInfo.jsx
+  // sets (via navigate(ROUTES.CHECKOUT, { state: { buyNow: {...} } }))
+  // when the customer clicks Buy Now on a Product Detail page instead
+  // of going through the cart. API 55 (further change, Sep 2026).
+  const location = useLocation();
+  const buyNowItem = location.state?.buyNow || null;
+  const isBuyNow = !!buyNowItem;
   // Reading query params — specifically "resume", which the payment result
   // page sets when sending a customer back here after a failed payment
   // attempt on an order that already exists (see RESUME PAYMENT FLOW below)
@@ -428,16 +435,49 @@ const Checkout = () => {
   // CART API
   // Checkout mein cart data chahiye — items, totals
   // =============================================
-  // Fetching the user's current cart data using React Query
+  // Skipped entirely in Buy Now mode (isBuyNow) — API 55's contract is
+  // explicit that a Buy Now checkout "is left completely untouched — not
+  // read, not cleared", so this page has no reason to even fetch it.
   const { data: cartData, isLoading: cartLoading } = useQuery({
     queryKey: QUERY_KEYS.CART, // Cache key used to identify and later invalidate this specific query
     queryFn: ({ signal }) => getCart(signal), // Function that performs the actual API call to fetch cart data
-    enabled: isAuthenticated, // Only run this query if the user is authenticated (prevents unnecessary calls for logged-out users)
+    enabled: isAuthenticated && !isBuyNow, // Only run this query for a real cart checkout, not Buy Now
     staleTime: 1000 * 60 * 2, // Data is considered "fresh" for 2 minutes before React Query refetches it again
   });
 
+  // =============================================
+  // BUY NOW — API 55 (further change, Sep 2026)
+  // =============================================
+  // Builds a cart-SHAPED object out of just the one product + quantity
+  // carried in router state, so every piece of this page below (the
+  // order summary sidebar, the subtotal/total math, orderSnapshot) can
+  // keep working against a single "cart" value without needing an
+  // isBuyNow branch scattered through each of them individually.
+  // discount_amount is always 0 here — a coupon applied to the real
+  // cart is never used on a Buy Now order, per the backend contract.
+  const buyNowCart = isBuyNow
+    ? {
+        items: [
+          {
+            id: `buy-now-${buyNowItem.product.id}`,
+            product: buyNowItem.product,
+            quantity: buyNowItem.quantity,
+            total_price: (
+              parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
+            ).toFixed(2),
+          },
+        ],
+        subtotal: (
+          parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
+        ).toFixed(2),
+        discount_amount: 0,
+        coupon: null,
+      }
+    : null;
+
   // Extracting the actual cart object from the API response, falling back to null if not yet loaded
-  const cart = cartData?.data || null;
+  // In Buy Now mode this is the synthetic single-item cart built above instead.
+  const cart = isBuyNow ? buyNowCart : cartData?.data || null;
   // Extracting the array of cart items, defaulting to an empty array if cart or items is missing
   const cartItems = cart?.items || [];
 
@@ -659,6 +699,19 @@ const Checkout = () => {
     mutationFn: () => sendCheckoutOtp(),
 
     onSuccess: (response) => {
+      // UPDATED (v5.4, Sep 2026): verification is now permanent per
+      // customer account instead of single-use/30-minute — once a
+      // customer has verified once, ever, this endpoint stops sending a
+      // code at all and just replies with already_verified: true. A
+      // returning, already-verified customer should never see the OTP
+      // screen again — skip straight to placing the order with the
+      // details already captured on the previous step, exactly like a
+      // successful verify-otp call would.
+      if (response.data?.already_verified) {
+        checkoutMutation.mutate(pendingCheckoutData);
+        return;
+      }
+
       setOtpConfirmationMessage(response.data?.message || "");
       setOtpError("");
       setOtp("");
@@ -724,6 +777,11 @@ const Checkout = () => {
     // coupon_code isn't part of this endpoint's accepted fields at all
     // — the coupon is already applied to the cart earlier (API 50), so
     // it doesn't need to be resent here.
+    // BUY NOW — API 55 (further change, Sep 2026): when isBuyNow, two
+    // extra optional fields are sent — buy_now_product_id and
+    // buy_now_quantity — which tell the backend to build the order from
+    // this single product/quantity instead of the customer's persisted
+    // cart. Every other field below is identical either way.
     mutationFn: (data) =>
       checkout({
         address_id: selectedAddressId,
@@ -735,6 +793,10 @@ const Checkout = () => {
         shipping_method: data.shippingMethod,
         phone: data.phone,
         notes: "", // Empty notes field sent by default — no order notes feature implemented yet
+        ...(isBuyNow && {
+          buy_now_product_id: buyNowItem.product.id,
+          buy_now_quantity: buyNowItem.quantity,
+        }),
       }),
 
     // Runs when the checkout API call succeeds — order now exists with status "pending_payment"
@@ -751,12 +813,19 @@ const Checkout = () => {
         coupon: cart?.coupon,
       });
 
-      // Redux cart clear
-      // Order create hote hi backend cart already clear kar chuka hai — Redux
-      // side bhi turant clear kar dete hain taake UI turant sync ho jaye
-      handleClearCart();
-      // Cart query invalidate
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      // BUY NOW — the backend contract is explicit that the customer's
+      // actual cart is "left completely untouched — not read, not
+      // cleared" by a Buy Now order, so this page mirrors that exactly:
+      // no Redux cart clear and no CART query invalidation, since
+      // nothing about the real cart changed as a result of this order.
+      if (!isBuyNow) {
+        // Redux cart clear
+        // Order create hote hi backend cart already clear kar chuka hai — Redux
+        // side bhi turant clear kar dete hain taake UI turant sync ho jaye
+        handleClearCart();
+        // Cart query invalidate
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      }
 
       if (paymentMethod === PAYMENT_METHOD.QR) {
         // QR orders never touch Stripe at all — qr_image_url and
@@ -810,6 +879,17 @@ const Checkout = () => {
         cancelReason === "other" ? cancelReasonOther.trim() : cancelReason;
       await cancelOrder(orderNumber, reason ? { reason } : undefined);
 
+      // BUY NOW — API 55 (further change, Sep 2026): a Buy Now order was
+      // never built from the customer's cart in the first place (the
+      // backend never read or cleared it), so there's nothing to restore
+      // here — re-adding this product to the cart on cancel would insert
+      // an item the customer never actually put there themselves. The
+      // normal "rebuild the cart from orderSnapshot" flow below is
+      // entirely skipped in this case.
+      if (isBuyNow) {
+        return { fullyRestored: true, freshCart: null };
+      }
+
       // Re-add whichever items we still have a real product id for.
       const restorableItems = (orderSnapshot?.items || []).filter(
         (item) => item?.product?.id,
@@ -846,11 +926,24 @@ const Checkout = () => {
 
     onSuccess: ({ fullyRestored, freshCart }) => {
       showSuccess(
-        fullyRestored
-          ? "Order cancelled. Your cart is waiting for you."
-          : "Order cancelled. Some items couldn't be restored to your cart automatically — you may need to re-add them.",
+        isBuyNow
+          ? "Order cancelled."
+          : fullyRestored
+            ? "Order cancelled. Your cart is waiting for you."
+            : "Order cancelled. Some items couldn't be restored to your cart automatically — you may need to re-add them.",
       );
       setShowCancelModal(false);
+
+      // BUY NOW — no cart was ever touched, so there's no cache write and
+      // nothing worth sending the customer back to a Cart page for;
+      // sending them to their order history instead reads better than
+      // dropping them on a Cart that has nothing to do with this order.
+      if (isBuyNow) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
+        navigate(ROUTES.ACCOUNT_ORDERS);
+        return;
+      }
 
       // Write the already-fetched, up-to-date cart straight into the
       // query cache instead of just invalidating it — this guarantees
@@ -1222,6 +1315,7 @@ const Checkout = () => {
               isPlacingOrder={isPlacingOrder}
               showPlaceOrderButton={step === "details"}
               placeOrderLabel="Continue to Payment"
+              hideCoupon={isBuyNow}
             />
           </div>
         </div>

@@ -75,6 +75,15 @@ const getNotifConfig = (type) => {
 // This mirrors the TODAY / YESTERDAY / OLDER grouping already used on the
 // notifications page, so the label on each card always agrees with the
 // date-group heading it appears under.
+// FIX (Sep 2026): same calendar-day bug as NotificationHistory.jsx's
+// getDateGroup — this used to divide the raw millisecond gap by 24h
+// (Math.floor((now - date) / 86400000)), which measures elapsed HOURS,
+// not elapsed CALENDAR DAYS. A notification created at 11:30 PM
+// yesterday was still labeled "Today, 11:30 PM" the next morning as
+// long as fewer than 24 real hours had passed — even though the page's
+// own date-group heading right above it already said "YESTERDAY",
+// contradicting itself. Now compares calendar dates (midnight-anchored)
+// instead, so this label always agrees with the day it's grouped under.
 const getRelativeTime = (timestamp) => {
   // Without a timestamp there is nothing meaningful to display.
   if (!timestamp) return "";
@@ -82,12 +91,22 @@ const getRelativeTime = (timestamp) => {
   const now = new Date();
   const date = new Date(timestamp);
 
-  // Whole days elapsed since the notification was created. Using the
-  // same day-based calculation as the page's date-grouping logic keeps
-  // the two in sync, rather than deriving the label from elapsed hours
-  // (which could label an item "hours ago" even though its group
-  // heading already says TODAY).
-  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+  // Midnight-anchored copies of both dates so the subtraction below
+  // measures whole calendar days apart, not a fraction of a day.
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfNotifDay = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+
+  const diffDays = Math.round(
+    (startOfToday - startOfNotifDay) / (1000 * 60 * 60 * 24),
+  );
 
   // Shared time-of-day portion, e.g. "3:45 PM"
   const timeOfDay = date.toLocaleTimeString("en-US", {

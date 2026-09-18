@@ -31,21 +31,46 @@ const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // Date group label nikalna
 // Helper function that determines which date group a notification belongs to ("TODAY", "YESTERDAY", or "OLDER") based on its timestamp
+//
+// FIX (Sep 2026): this used to compute the difference as a raw
+// millisecond duration divided by 24h — Math.floor((now - date) / 86400000)
+// — which measures elapsed HOURS, not elapsed CALENDAR DAYS. That made a
+// notification from 11:30 PM yesterday show up under "TODAY" as long as
+// less than 24 real hours had passed (e.g. viewing at 9:00 AM the next
+// morning, only ~9.5 hours later), even though it clearly happened on a
+// previous calendar day. It now compares calendar dates directly (by
+// zeroing out the time-of-day on both sides) so the group always matches
+// the actual day the notification was created on, in the browser's local
+// timezone — independent of what time it currently is.
 const getDateGroup = (timestamp) => {
   // If no timestamp is provided, default to grouping it under "OLDER"
   if (!timestamp) return "OLDER";
-  // Get the current date/time for comparison
-  const now = new Date();
-  // Convert the provided timestamp string into a Date object
-  const date = new Date(timestamp);
-  // Calculate how many whole days have passed since the notification was created
-  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
 
-  // If it happened today (0 days difference), group it as "TODAY"
+  const now = new Date();
+  const date = new Date(timestamp);
+
+  // Midnight-anchored copies of both dates, so the subtraction below only
+  // ever measures whole calendar days apart — never a fraction of a day.
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfNotifDay = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+
+  const diffDays = Math.round(
+    (startOfToday - startOfNotifDay) / (1000 * 60 * 60 * 24),
+  );
+
+  // If it happened today (0 calendar days difference), group it as "TODAY"
   if (diffDays === 0) return "TODAY";
-  // If it happened exactly 1 day ago, group it as "YESTERDAY"
+  // If it happened exactly 1 calendar day ago, group it as "YESTERDAY"
   if (diffDays === 1) return "YESTERDAY";
-  // Otherwise (2+ days ago), group it as "OLDER"
+  // Otherwise (2+ days ago, or a future-dated notification), group it as "OLDER"
   return "OLDER";
 };
 

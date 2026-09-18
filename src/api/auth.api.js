@@ -26,8 +26,15 @@ export const loginUser = (data, signal) => {
 };
 
 // ----------------------------
-// API - Log out the current user
+// API 3 - Log out the current user
 // ----------------------------
+// UPDATED (API Changes Addendum, Sep 2026): logging out now ALSO
+// deletes this device's matching UserSession row (matched server-side
+// by the refresh token's own jti), on top of blacklisting the token
+// as before. Previously the token was blacklisted but the stale
+// session row stayed in getMySessions() above until revokeAllSessions()
+// was used — a normal logout now removes this device from that list
+// immediately. The request/response shape sent here is unchanged.
 export const logoutUser = (data, signal) => {
   return axiosInstance.post("/api/v1/auth/logout/", data, { signal });
 };
@@ -212,6 +219,26 @@ export const revokeAllSessions = (signal) => {
   return axiosInstance.post("/api/v1/auth/sessions/revoke-all/", undefined, {
     signal,
   });
+};
+
+// ----------------------------
+// API 15.1 - Sign Out a Single Session ★ NEW (API Changes Addendum, Sep 2026)
+// ----------------------------
+// Signs out ONE specific session/device by its id (the "id" field from
+// getMySessions() above), leaving every other active session
+// untouched — unlike revokeAllSessions() above, which is all-or-nothing.
+// Works for devices other than the one the customer is currently on,
+// as well as for the current device itself (which behaves the same as
+// a normal logout when revoked this way).
+// Ownership is enforced server-side: a sessionId belonging to another
+// user, or one that doesn't exist, returns a 404 without revealing
+// which — surfaced here as a generic "Session not found." error.
+export const revokeSession = (sessionId, signal) => {
+  return axiosInstance.post(
+    `/api/v1/auth/sessions/${sessionId}/revoke/`,
+    undefined,
+    { signal },
+  );
 };
 
 // ----------------------------

@@ -17,6 +17,11 @@ export const QUERY_KEYS = {
   PRODUCTS: ["products"],
   PRODUCT_DETAIL: (id) => ["product", id],
   LOW_STOCK_PRODUCTS: ["low-stock-products"],
+  // API 30.1 — paginated review list + rating summary for one product.
+  // Kept separate from PRODUCT_DETAIL(id) above since it's a completely
+  // different endpoint/response shape (a review page, not the product
+  // itself), and needs its own cache entry per page number.
+  PRODUCT_REVIEWS: (productId) => ["product-reviews", productId],
 
   // ----------------------------
   // CATEGORIES
@@ -73,6 +78,9 @@ export const QUERY_KEYS = {
   COMPLAINTS: ["complaints"],
   COMPLAINT_DETAIL: (id) => ["complaint", id],
   COMPLAINT_MESSAGES: (id) => ["complaint-messages", id],
+  // API 72.2 — the logged-in user's own open/in_progress complaints
+  // count, used by the Support page's Active Status Notice banner.
+  OPEN_COMPLAINTS_COUNT: ["open-complaints-count"],
 
   // ----------------------------
   // NOTIFICATIONS

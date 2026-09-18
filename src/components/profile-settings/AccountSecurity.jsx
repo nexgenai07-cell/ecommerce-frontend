@@ -2,10 +2,15 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BsLaptop, BsPhone, BsDeviceHdd, BsShieldLock } from "react-icons/bs";
 import { HiOutlineShieldCheck } from "react-icons/hi2";
-import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
+import {
+  AiOutlineEye,
+  AiOutlineEyeInvisible,
+  AiOutlineClose,
+} from "react-icons/ai";
 import {
   getMySessions,
   revokeAllSessions,
+  revokeSession,
   enable2FA,
   verify2FAEnable,
   disable2FA,
@@ -106,6 +111,47 @@ const AccountSecurity = ({ user }) => {
       showError("Signed out (some devices may still be active)");
     },
   });
+
+  // =============================================
+  // SIGN OUT A SINGLE SESSION — API 15.1 (API Changes Addendum, Sep 2026)
+  // =============================================
+  // Tracks exactly which session id currently has a revoke request in
+  // flight, so only THAT row's own button shows a loading state —
+  // mirrors the same "Set of in-flight ids" pattern used elsewhere in
+  // the app (e.g. Wishlist.jsx's loadingProductIds) instead of a single
+  // shared isPending flag that would light up every row at once.
+  const [revokingSessionId, setRevokingSessionId] = useState(null);
+
+  const revokeSessionMutation = useMutation({
+    mutationFn: (sessionId) => revokeSession(sessionId),
+    onSuccess: (_response, sessionId) => {
+      // If the customer just revoked the session they're CURRENTLY using
+      // (is_current: true), the backend has effectively logged this
+      // browser out — same as a normal logout — so redirect to Login
+      // instead of leaving them on a page for a session that no longer
+      // exists server-side.
+      const revokedSession = sessions.find((s) => s.id === sessionId);
+      if (revokedSession?.is_current) {
+        logoutRedux();
+        showSuccess("Signed out of this device");
+        navigate(ROUTES.LOGIN);
+        return;
+      }
+      showSuccess("Device signed out");
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_SESSIONS });
+    },
+    onError: (error) => {
+      showError(
+        error?.response?.data?.error || "Failed to sign out that device.",
+      );
+    },
+    onSettled: () => setRevokingSessionId(null),
+  });
+
+  const handleRevokeSession = (sessionId) => {
+    setRevokingSessionId(sessionId);
+    revokeSessionMutation.mutate(sessionId);
+  };
 
   // =============================================
   // ENABLE 2FA — STEP 1 — API 14
@@ -290,6 +336,31 @@ const AccountSecurity = ({ user }) => {
                       : `Last active ${session.last_active || "recently"}`}
                   </p>
                 </div>
+
+                {/* Per-device "Sign out" button — API 15.1. Rendered for
+                    EVERY device row, including the one the customer is
+                    currently on (revoking that one just behaves like a
+                    normal logout, handled in the mutation's onSuccess
+                    above), unlike "Sign out all devices" below which is
+                    always all-or-nothing. */}
+                <button
+                  type="button"
+                  onClick={() => handleRevokeSession(session.id)}
+                  disabled={revokingSessionId === session.id}
+                  aria-label={`Sign out ${session.device || "this device"}`}
+                  className="
+                    shrink-0 w-7 h-7 flex items-center justify-center rounded-lg
+                    text-gray-300 hover:text-danger hover:bg-danger-light
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    transition-colors
+                  "
+                >
+                  {revokingSessionId === session.id ? (
+                    <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-danger rounded-full animate-spin" />
+                  ) : (
+                    <AiOutlineClose className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
             ))
           )}

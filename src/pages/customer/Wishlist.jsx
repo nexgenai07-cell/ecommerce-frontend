@@ -4,7 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; /
 import { AnimatePresence } from "framer-motion"; // AnimatePresence enables exit animations when wishlist cards are removed
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
-import { getWishlist, removeFromWishlist } from "../../api/wishlist.api"; // API functions: fetch the wishlist, delete a specific item by id
+import {
+  getWishlist,
+  removeFromWishlist,
+  bulkRemoveFromWishlist,
+} from "../../api/wishlist.api"; // API functions: fetch the wishlist, delete a specific item by id, and delete several items in one request (API 54.1)
 import { addToCart } from "../../api/cart.api"; // API function — adds a product to the cart with a given quantity
 import useAuth from "../../hooks/useAuth"; // Custom hook that exposes isAuthenticated — wishlist query is skipped for guests
 import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAddItem to sync the local cart UI state immediately
@@ -171,6 +175,63 @@ const Wishlist = () => {
   });
 
   // =============================================
+  // BULK REMOVE FROM WISHLIST
+  // API 54.1 — POST /api/v1/wishlist/bulk-remove/
+  // =============================================
+  // Replaces the old "loop removeMutation once per selected item"
+  // approach that used to power handleRemoveSelected below — that loop
+  // was exactly why selected wishlist cards used to disappear one by
+  // one instead of together whenever more than one was selected. This
+  // sends every selected item's id in a SINGLE request instead.
+  const bulkRemoveMutation = useMutation({
+    mutationFn: (itemIds) => bulkRemoveFromWishlist(itemIds), // one call, every selected id at once
+
+    // Runs INSTANTLY, before the request even finishes — pulls every
+    // selected card out of the shared wishlist cache together, in one
+    // state update, so they visually disappear as a single batch
+    // instead of one at a time as separate network calls resolve.
+    onMutate: async (itemIds) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.WISHLIST });
+
+      const previousWishlist = queryClient.getQueryData(QUERY_KEYS.WISHLIST);
+      const idsToRemove = new Set(itemIds);
+
+      queryClient.setQueryData(QUERY_KEYS.WISHLIST, (old) => {
+        if (!old?.data?.items) return old;
+        return {
+          ...old,
+          data: {
+            ...old.data,
+            items: old.data.items.filter((item) => !idsToRemove.has(item.id)),
+          },
+        };
+      });
+
+      return { previousWishlist };
+    },
+
+    onSuccess: (response, itemIds) => {
+      // removed_count can legitimately be smaller than itemIds.length —
+      // the backend silently excludes any id that no longer exists or
+      // belonged to a different customer's wishlist, rather than
+      // erroring the whole batch out.
+      const removedCount = response?.data?.removed_count ?? itemIds.length;
+      showSuccess(
+        `${removedCount} item${removedCount === 1 ? "" : "s"} removed from wishlist`,
+      );
+    },
+
+    onError: (_err, _itemIds, context) => {
+      // Undoes the optimistic cache write above, since the removal
+      // never actually happened server-side.
+      if (context?.previousWishlist) {
+        queryClient.setQueryData(QUERY_KEYS.WISHLIST, context.previousWishlist);
+      }
+      showError("Failed to remove selected items.");
+    },
+  });
+
+  // =============================================
   // ADD TO CART
   // API 33 — POST /api/v1/cart/add/
   // =============================================
@@ -331,16 +392,16 @@ const Wishlist = () => {
 
   const selectedItems = wishlistItems.filter((i) => selectedIds.has(i.id));
 
-  // handleRemoveSelected — removes every selected wishlist entry, one
-  // after another, reusing the same optimistic-cache removeMutation
-  // used by each card's own remove button, so the shared wishlist
-  // cache (navbar badge, product cards) stays correct throughout.
+  // handleRemoveSelected — removes every selected wishlist entry in a
+  // SINGLE request via bulkRemoveMutation (API 54.1) instead of the
+  // previous one-request-per-item loop, so the selected cards leave
+  // the grid together as one batch rather than disappearing one by one.
   const handleRemoveSelected = async () => {
     setIsBulkRemoving(true);
     try {
-      for (const item of selectedItems) {
-        await removeMutation.mutateAsync(item.id);
-      }
+      await bulkRemoveMutation.mutateAsync(
+        selectedItems.map((item) => item.id),
+      );
       setSelectedIds(new Set());
     } finally {
       setIsBulkRemoving(false);
