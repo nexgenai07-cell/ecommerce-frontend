@@ -17,29 +17,31 @@ import axiosInstance from "../lib/axiosInstance";
 // is_delete flag is true, which the backend filters out of this
 // response automatically.
 //
-// UPDATED (16 Sep 2026, Filtering Fix pass, API 39): the response
-// SHAPE HAS CHANGED, and this is NOT opt-in — it was previously a
-// plain array of every coupon; it is now ALWAYS the standard
-// paginated shape { count, next, previous, results }, even if no
-// params are sent at all. The row data itself is unchanged (same
-// fields per coupon), only the outer envelope is different.
+// The response is ALWAYS the standard paginated shape
+// { count, next, previous, results }, even if no params are sent at
+// all. The row data itself is unchanged (same fields per coupon), only
+// the outer envelope differs from a plain array.
 //
-// This endpoint now also accepts real query params:
+// This endpoint accepts real query params:
 //   - search    -> matches the coupon code (case-insensitive)
 //   - type      -> filters by discount type (matches the "type" field
 //                   used when creating/editing a coupon above)
-//   - status    -> "active" | "expired" — derived server-side from
-//                   is_active + end_date, NOT a stored column. There
-//                   is no "inactive" status value; a coupon that is
-//                   is_active: false but not yet expired simply isn't
-//                   returned by either "active" or "expired" — it's
-//                   only excluded when a status filter is applied at
-//                   all, and included as normal when no status filter
-//                   is sent.
+//   - status    -> "active" | "inactive" | "expired" (API 39, Sep 2026
+//                   addendum) — three mutually exclusive values derived
+//                   server-side from is_active + end_date, NOT a stored
+//                   column:
+//                     • active   -> is_active: true AND end_date still
+//                                   in the future (or no end_date)
+//                     • inactive -> is_active: false, regardless of
+//                                   end_date (manually turned off)
+//                     • expired  -> is_active: true AND end_date has
+//                                   already passed
+//                   Omitting the param returns every coupon regardless
+//                   of status, same as before.
 //   - ordering  -> created_at, -created_at, code, -code, value,
 //                   -value, end_date, -end_date
 //   - page / page_size -> standard pagination
-// DiscountManagement now sends these directly and reads `.results` /
+// DiscountManagement sends these directly and reads `.results` /
 // `.count` from the response instead of fetching everything and
 // filtering/sorting/paginating it in the browser (see
 // DiscountManagement.jsx and DiscountFilters.jsx).
@@ -62,6 +64,25 @@ export const getDiscounts = (params, signal) => {
 //   switch the admin controls directly) — it is NOT related to
 //   deletion. A coupon can be is_active: false (paused, still exists,
 //   still shows up here) without ever having been deleted.
+//
+// UPDATED (API 40, Sep 2026 addendum) — two date rules enforced here:
+//   1. start_date cannot be a date before today (compared by date
+//      only — today itself is always allowed, so a same-day coupon is
+//      never blocked by time-of-day). Violating this returns
+//      (400) { "start_date": ["Start date cannot be in the past."] }.
+//   2. A date-only end_date (no explicit time) is treated as valid
+//      through 23:59:59.999999 of that day rather than its start — a
+//      same-day coupon's end_date is therefore never "before" its
+//      start_date purely because both were sent without a time
+//      component. An end_date that is genuinely before start_date
+//      still returns
+//      (400) { "non_field_errors": ["End date must be after start date."] }.
+//
+// For an hours-only flash-sale coupon, the Create/Edit Coupon form's
+// "specific time" toggle (DiscountFormModal.jsx) stitches an explicit
+// time onto both dates before sending them here — e.g.
+// "2026-09-19T10:00:00" / "2026-09-19T18:00:00" — and the backend
+// respects that exact end time instead of stretching it to end-of-day.
 export const createDiscount = (data, signal) => {
   return axiosInstance.post("/api/v1/discounts/", data, { signal });
 };
@@ -104,6 +125,14 @@ export const getDiscountById = (id, signal) => {
 // createDiscount's payload above). This is also how an admin flips
 // is_active back to true on a coupon they had previously paused —
 // there is no separate "un-pause" endpoint, it's just a normal edit.
+//
+// UPDATED (API 42, Sep 2026 addendum): the same two date rules
+// documented above on createDiscount now apply here as well. The
+// past-date check on start_date is only meaningful when start_date is
+// actually being changed to a new value — a coupon that already had an
+// old start_date before this rule existed is not retroactively broken
+// just because one of its other fields (e.g. is_active) is being
+// edited.
 export const updateDiscount = (id, data, signal) => {
   return axiosInstance.put(`/api/v1/discounts/${id}/`, data, { signal });
 };

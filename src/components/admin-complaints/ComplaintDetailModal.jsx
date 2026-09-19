@@ -23,6 +23,10 @@ import { getCustomerDetail } from "../../api/customers.api";
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { COMPLAINT_STATUS } from "../../constants/statusTypes";
+import {
+  getAllowedComplaintStatuses,
+  canTransitionComplaintStatus,
+} from "../../utils/complaintStatusWorkflow";
 import getComplaintTypeLabel from "../../utils/getComplaintTypeLabel";
 import formatDate from "../../utils/formatDate";
 import formatPrice from "../../utils/formatPrice";
@@ -35,22 +39,50 @@ import Avatar from "../ui/Avatar";
 import Spinner from "../ui/Spinner";
 import ComplaintThread from "../complaint/ComplaintThread";
 
-const STATUS_OPTIONS = [
-  { value: COMPLAINT_STATUS.OPEN, label: "Open" },
-  { value: COMPLAINT_STATUS.IN_PROGRESS, label: "In Review" },
-  { value: COMPLAINT_STATUS.RESOLVED, label: "Resolved" },
-  { value: COMPLAINT_STATUS.CLOSED, label: "Closed" },
-];
+// Display labels for every complaint status listed in the status dropdown.
+const STATUS_LABELS = {
+  [COMPLAINT_STATUS.OPEN]: "Open",
+  [COMPLAINT_STATUS.IN_PROGRESS]: "In Review",
+  [COMPLAINT_STATUS.RESOLVED]: "Resolved",
+  [COMPLAINT_STATUS.CLOSED]: "Closed",
+};
 
 const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
   const queryClient = useQueryClient();
+
+  // status — the value currently chosen in the dropdown.
   const [status, setStatus] = useState("");
+
+  // updatedStatus — the status confirmed by the server after a
+  // successful update made from this modal. The complaint object
+  // passed in as a prop is a snapshot taken when the modal was opened,
+  // so this value takes precedence over it until a different
+  // complaint is opened.
+  const [updatedStatus, setUpdatedStatus] = useState(null);
 
   useEffect(() => {
     if (complaint) {
       setStatus(complaint.status);
+      setUpdatedStatus(null);
     }
   }, [complaint]);
+
+  // currentStatus — the complaint's real status right now.
+  const currentStatus = updatedStatus ?? complaint?.status;
+
+  // allowedStatuses — the only statuses the workflow permits from the
+  // current one. Empty when the complaint is closed (final state).
+  const allowedStatuses = getAllowedComplaintStatuses(currentStatus);
+
+  // Dropdown options: every status is always listed. Only the current
+  // status (so the select always has a valid selected value) and the
+  // statuses reachable from it can be picked; every other option is shown
+  // disabled, so the admin can see it exists but cannot select it.
+  const statusOptions = Object.values(COMPLAINT_STATUS).map((value) => ({
+    value,
+    label: STATUS_LABELS[value] ?? value,
+    disabled: value !== currentStatus && !allowedStatuses.includes(value),
+  }));
 
   // Fetches the real customer profile the moment a complaint is
   // opened — only runs when the modal is actually open and the
@@ -72,19 +104,28 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
   // --------------------------------------------------
   // UPDATE STATUS — PUT /api/v1/admin/complaints/{id}/status/
   // --------------------------------------------------
-  // Deliberately its OWN mutation, entirely separate from the message
-  // thread below (see ComplaintThread.jsx). The old /respond/ endpoint
-  // used to silently flip status to "resolved" as a side effect of
-  // sending a reply — that bug is exactly what this separation fixes.
-  // Status now changes ONLY when the admin explicitly clicks "Update"
-  // here, never as a side effect of posting a message.
+  // Kept separate from the message thread below (see
+  // ComplaintThread.jsx): the status only changes when the admin
+  // explicitly clicks "Update" here, never as a side effect of posting
+  // a message.
+  //
+  // The backend enforces the status workflow (open -> in_progress ->
+  // resolved -> closed, with in_progress also allowed back to open) and
+  // answers an invalid transition with a 400 and an `error` message,
+  // which is surfaced to the admin as-is.
   const statusMutation = useMutation({
-    mutationFn: () => updateComplaintStatus(complaint.id, { status }),
-    onSuccess: () => {
+    mutationFn: (nextStatus) =>
+      updateComplaintStatus(complaint.id, { status: nextStatus }),
+    onSuccess: (_response, nextStatus) => {
+      // Adopt the new status locally so the badge, the dropdown options
+      // and the Update button all reflect the change immediately.
+      setUpdatedStatus(nextStatus);
+      setStatus(nextStatus);
       showSuccess("Status updated.");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPLAINTS });
     },
-    onError: () => showError("Failed to update status."),
+    onError: (error) =>
+      showError(error?.response?.data?.error || "Failed to update status."),
   });
 
   if (!complaint) return null;
@@ -211,8 +252,8 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
               Complaint #CMP-{complaint.id}
             </h3>
             <Badge
-              label={complaint.status}
-              status={complaint.status}
+              label={currentStatus}
+              status={currentStatus}
               size="md"
               rounded
             />
@@ -283,26 +324,37 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
         </div>
 
         {/* ================================================================
-            4. STATUS — its own explicit control, entirely separate
-            from the message thread below. Changing status here is the
-            ONLY way this complaint's status ever changes — sending a
-            message in the thread never touches it, in either direction.
+            4. STATUS — its own explicit control, separate from the
+            message thread below. Changing the status here is the only
+            way a complaint's status changes; sending a message in the
+            thread never affects it. Options the workflow does not
+            allow are shown disabled.
             ================================================================ */}
         <div className={cardClass}>
           <div className="flex items-end gap-2">
             <div className="flex-1">
+              {/* The select is disabled once the complaint is closed,
+                  since a closed complaint can no longer be updated. */}
               <Select
                 label="Status"
-                options={STATUS_OPTIONS}
+                options={statusOptions}
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
+                disabled={allowedStatuses.length === 0}
+                hint={
+                  allowedStatuses.length === 0
+                    ? "This complaint is closed and can no longer be updated."
+                    : ""
+                }
               />
             </div>
+            {/* Enabled only when the chosen status is a valid next step
+                from the complaint's current status. */}
             <Button
               variant="secondary"
-              onClick={() => statusMutation.mutate()}
+              onClick={() => statusMutation.mutate(status)}
               isLoading={statusMutation.isPending}
-              disabled={status === complaint.status}
+              disabled={!canTransitionComplaintStatus(currentStatus, status)}
             >
               Update
             </Button>

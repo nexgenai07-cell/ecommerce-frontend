@@ -5,7 +5,7 @@ const Select = ({
   label = "", // Text label rendered above the select field
   error = "", // Error message string — renders in red below select when present
   hint = "", // Helper text in gray below select — hidden when error is shown
-  options = [], // Array of option objects — each must have { value, label }
+  options = [], // Array of option objects — each must have { value, label } and may include disabled: true
   placeholder = "Select an option", // Default first option shown before user makes a selection
   fullWidth = true, // When true (default), wrapper stretches to full container width
   className = "", // Extra Tailwind classes for one-off customizations from outside
@@ -98,9 +98,15 @@ const Select = ({
             {/* Renders the placeholder text as a normal, selectable first option */}
           </option>
 
-          {/* Renders one <option> per item in the options array passed from outside */}
+          {/* Renders one <option> per item in the options array passed from outside.
+              An option object may include `disabled: true` to show it greyed out
+              and unselectable (e.g. a status the workflow does not allow) */}
           {options.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option
+              key={option.value}
+              value={option.value}
+              disabled={option.disabled}
+            >
               {/* key uses option.value for stable React reconciliation */}
               {/* value is what gets submitted or stored in state on selection */}
               {option.label}

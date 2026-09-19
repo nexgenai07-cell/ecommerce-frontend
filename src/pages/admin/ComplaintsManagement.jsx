@@ -25,6 +25,7 @@ import { exportReport } from "../../api/analytics.api";
 import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
+import { canTransitionComplaintStatus } from "../../utils/complaintStatusWorkflow";
 import getComplaintTypeLabel from "../../utils/getComplaintTypeLabel";
 import formatDate from "../../utils/formatDate";
 import useDebounce from "../../hooks/useDebounce";
@@ -99,9 +100,20 @@ const ComplaintsManagement = () => {
 
   // Bulk selection — array of complaint ids currently checked in the
   // table, driven by DataTable's built-in selection support. This is
-  // independent of selectedComplaint above, which still drives the
-  // single-row "Review" detail modal unchanged.
+  // independent of selectedComplaint above, which drives the
+  // single-row "Review" detail modal.
   const [selectedComplaintIds, setSelectedComplaintIds] = useState([]);
+
+  // selectedStatusById — snapshot of each selected complaint's status,
+  // keyed by id. DataTable only reports ids, and a selection can span
+  // several pages, so the status is captured when a row is selected.
+  // It is used to work out which selected complaints are eligible for
+  // a given bulk action under the status workflow.
+  const [selectedStatusById, setSelectedStatusById] = useState({});
+
+  // tableResetKey — changing this key remounts the table, which clears
+  // DataTable's internal checkbox selection once a bulk action is done.
+  const [tableResetKey, setTableResetKey] = useState(0);
   // "resolved" | "closed" — which bulk action the confirm modal below
   // is currently open for.
   const [bulkStatusAction, setBulkStatusAction] = useState(null);
@@ -266,34 +278,103 @@ const ComplaintsManagement = () => {
   };
 
   // --------------------------------------------------
-  // BULK STATUS UPDATE — API 62, called once per selected complaint
-  // (there is no bulk endpoint on the backend). Used for the two most
-  // common bulk actions on a support queue: marking a batch of tickets
-  // Resolved once handled, or Closed once fully wrapped up.
+  // BULK SELECTION — keeps the selected ids together with a snapshot of
+  // each selected complaint's status. Rows on the current page are read
+  // from the freshly loaded list; rows selected on another page keep
+  // the status captured earlier.
   // --------------------------------------------------
+  const handleSelectionChange = (ids) => {
+    setSelectedComplaintIds(ids);
+    setSelectedStatusById((previous) => {
+      const next = {};
+      ids.forEach((id) => {
+        const row = visibleComplaints.find((complaint) => complaint.id === id);
+        next[id] = row ? row.status : previous[id];
+      });
+      return next;
+    });
+  };
+
+  // --------------------------------------------------
+  // BULK STATUS UPDATE — API 71, called once per selected complaint
+  // (there is no bulk endpoint on the backend). Supports the two bulk
+  // actions used on a support queue: marking handled tickets Resolved
+  // and closing resolved tickets.
+  //
+  // The backend enforces a status workflow (open -> in_progress ->
+  // resolved -> closed), so a bulk action only applies to the selected
+  // complaints that can legally make that move: "Resolved" applies to
+  // In Review complaints and "Close" applies to Resolved complaints.
+  // Any other selected complaint is skipped instead of being sent to
+  // the server to be rejected.
+  // --------------------------------------------------
+  const getEligibleIdsForBulkAction = (targetStatus) =>
+    selectedComplaintIds.filter((id) =>
+      canTransitionComplaintStatus(selectedStatusById[id], targetStatus),
+    );
+
+  const resolveEligibleCount = getEligibleIdsForBulkAction(
+    COMPLAINT_STATUS.RESOLVED,
+  ).length;
+  const closeEligibleCount = getEligibleIdsForBulkAction(
+    COMPLAINT_STATUS.CLOSED,
+  ).length;
+
+  // Ids the pending bulk action will actually be applied to, and how
+  // many of the selected complaints will be skipped.
+  const bulkEligibleIds = bulkStatusAction
+    ? getEligibleIdsForBulkAction(bulkStatusAction)
+    : [];
+  const bulkSkippedCount = selectedComplaintIds.length - bulkEligibleIds.length;
+
   const handleRequestBulkStatusUpdate = (status) => {
     setBulkStatusAction(status);
   };
 
   const handleConfirmBulkStatusUpdate = async () => {
+    if (bulkEligibleIds.length === 0) {
+      setBulkStatusAction(null);
+      return;
+    }
+
     setIsBulkUpdating(true);
     try {
-      await Promise.all(
-        selectedComplaintIds.map((id) =>
+      // allSettled — every request is attempted and reported on its own,
+      // so one rejected complaint does not hide the ones that succeeded.
+      const results = await Promise.allSettled(
+        bulkEligibleIds.map((id) =>
           updateComplaintStatus(id, { status: bulkStatusAction }),
         ),
       );
-      showSuccess(
-        `${selectedComplaintIds.length} complaint${selectedComplaintIds.length === 1 ? "" : "s"} marked ${bulkStatusAction}.`,
+
+      const updatedCount = results.filter(
+        (result) => result.status === "fulfilled",
+      ).length;
+      const failedResults = results.filter(
+        (result) => result.status === "rejected",
       );
+
+      if (updatedCount > 0) {
+        showSuccess(
+          `${updatedCount} complaint${updatedCount === 1 ? "" : "s"} marked ${bulkStatusAction}.` +
+            (bulkSkippedCount > 0
+              ? ` ${bulkSkippedCount} skipped (status change not allowed).`
+              : ""),
+        );
+      }
+
+      if (failedResults.length > 0) {
+        showError(
+          failedResults[0].reason?.response?.data?.error ||
+            `${failedResults.length} complaint${failedResults.length === 1 ? "" : "s"} could not be updated.`,
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPLAINTS });
       setSelectedComplaintIds([]);
+      setSelectedStatusById({});
+      setTableResetKey((key) => key + 1);
       setBulkStatusAction(null);
-    } catch (error) {
-      showError(
-        error?.response?.data?.message ||
-          "Failed to update the selected complaints.",
-      );
     } finally {
       setIsBulkUpdating(false);
     }
@@ -435,7 +516,7 @@ const ComplaintsManagement = () => {
       {/* ================================================================
           BULK ACTION BAR — appears only while one or more rows are
           checked. Lets the admin mark every selected complaint
-          Resolved or Closed in one action.
+          Resolved or Closed in one action, where the status workflow allows it.
           ================================================================ */}
       {selectedComplaintIds.length > 0 && (
         <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -444,15 +525,21 @@ const ComplaintsManagement = () => {
             {selectedComplaintIds.length === 1 ? "" : "s"} selected
           </span>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full sm:w-auto">
+            {/* Each button is enabled only when at least one selected
+                complaint can make that move (In Review -> Resolved,
+                Resolved -> Closed); the count shows how many will be
+                updated. */}
             <Button
               variant="primary"
               size="sm"
               onClick={() =>
                 handleRequestBulkStatusUpdate(COMPLAINT_STATUS.RESOLVED)
               }
+              disabled={resolveEligibleCount === 0}
+              title="Applies to selected complaints that are In Review"
               className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
-              Mark Resolved
+              Mark Resolved ({resolveEligibleCount})
             </Button>
             <Button
               variant="secondary"
@@ -460,9 +547,11 @@ const ComplaintsManagement = () => {
               onClick={() =>
                 handleRequestBulkStatusUpdate(COMPLAINT_STATUS.CLOSED)
               }
+              disabled={closeEligibleCount === 0}
+              title="Applies to selected complaints that are Resolved"
               className="w-full sm:w-auto px-2.5 py-1 text-xs whitespace-nowrap"
             >
-              Close
+              Close ({closeEligibleCount})
             </Button>
           </div>
         </div>
@@ -470,6 +559,7 @@ const ComplaintsManagement = () => {
 
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)] flex flex-col flex-1 min-h-0">
         <DataTable
+          key={tableResetKey}
           columns={columns}
           data={visibleComplaints}
           keyField="id"
@@ -477,7 +567,7 @@ const ComplaintsManagement = () => {
           // Opens the same Review modal as the "Review" button when any
           // part of the row is clicked
           selectable
-          onSelectionChange={setSelectedComplaintIds}
+          onSelectionChange={handleSelectionChange}
           isLoading={isLoading}
           error={isError}
           onRetry={refetch}
@@ -509,7 +599,12 @@ const ComplaintsManagement = () => {
             ? "Mark Complaints as Resolved?"
             : "Close Complaints?"
         }
-        message={`This will mark ${selectedComplaintIds.length} complaint${selectedComplaintIds.length === 1 ? "" : "s"} as ${bulkStatusAction}.`}
+        message={
+          `This will mark ${bulkEligibleIds.length} complaint${bulkEligibleIds.length === 1 ? "" : "s"} as ${bulkStatusAction}.` +
+          (bulkSkippedCount > 0
+            ? ` ${bulkSkippedCount} selected complaint${bulkSkippedCount === 1 ? "" : "s"} will be skipped because the current status does not allow this change.`
+            : "")
+        }
         confirmLabel={
           bulkStatusAction === COMPLAINT_STATUS.RESOLVED
             ? "Mark Resolved"

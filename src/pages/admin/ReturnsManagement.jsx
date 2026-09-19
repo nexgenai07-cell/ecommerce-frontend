@@ -785,8 +785,8 @@ const ReturnsManagement = () => {
     }
   };
 
-  // Opens the confirm modal — called both from the table's row actions and
-  // from the buttons inside ReturnDetailModal.
+  // Opens the confirm modal — called from the Approve/Reject buttons inside
+  // ReturnDetailModal.
   const handleRequestDecision = (returnItem, action) => {
     setDecisionTarget({ returnItem, action });
   };
@@ -913,10 +913,11 @@ const ReturnsManagement = () => {
       label: "Actions",
       render: (row) => (
         <div className="flex items-center gap-2">
-          {/* Eye icon — always present on every row, opens the read-only
-              detail modal regardless of status. Replaces the old plain
-              "Decided" text that used to sit here for already-decided
-              rows. */}
+          {/* Eye icon — present on every row, opens the detail modal
+              regardless of status. Approve/Reject are deliberately not
+              shown in the table: the decision is made inside the detail
+              modal (see the decision footer in ReturnDetailModal), which
+              opens from this icon or by clicking anywhere on the row. */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -930,40 +931,6 @@ const ReturnsManagement = () => {
           >
             <AiOutlineEye className="w-4 h-4" />
           </button>
-
-          {/* Approve/Reject — only for returns still awaiting a decision.
-              Already-decided rows show just the eye icon above; switching
-              between Approved/Rejected after the fact is handled inside the
-              detail modal (see STATUS ACTIONS there). */}
-          {row.status === RETURN_STATUS.REQUESTED && (
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Critical here — without this, clicking Approve would
-                  // also trigger the row's onClick and pop open the detail
-                  // modal right on top of the decision being made
-                  handleRequestDecision(row, RETURN_STATUS.APPROVED);
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Same reasoning as Approve above — keeps Reject from
-                  // also opening the detail modal
-                  handleRequestDecision(row, RETURN_STATUS.REJECTED);
-                }}
-              >
-                Reject
-              </Button>
-            </>
-          )}
         </div>
       ),
     },

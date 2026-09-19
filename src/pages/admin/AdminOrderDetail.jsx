@@ -31,9 +31,9 @@ import {
 // qr_rejection_count.
 // trackOrder        — API 46: GET /api/v1/orders/{order_number}/track/
 // updateOrderStatus — API 49/63: PUT /api/v1/admin/orders/{order_number}/status/
-//   UPDATED (Sep 2026): forward-only sequence, paid-before-confirmed
-//   gate, and a hard lock once payment is refunded/rejected — see
-//   getSelectableStatusOptions() below.
+//   Enforces a forward-only sequence, a paid-before-confirmed gate, and
+//   a hard lock once payment is refunded/rejected — see
+//   getStatusOptions() below.
 // reinstateOrder    — API 63.1: PUT /api/v1/admin/orders/{order_number}/reinstate/
 //   The only way to reopen an order once its payment is refunded/rejected.
 
@@ -75,25 +75,41 @@ const FORWARD_STATUS_SEQUENCE = [
   { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
 ];
 
-// getSelectableStatusOptions — builds the exact list of statuses the
-// admin is allowed to pick FROM THE CURRENT ORDER, given the backend's
-// new rules (Sep 2026, API 63 backend fix):
-// 1) The sequence is strictly forward-only — any status at or before
-//    the order's current position in FORWARD_STATUS_SEQUENCE is
-//    excluded, since moving backward is now rejected outright.
+// getStatusOptions — builds the full list of statuses shown in the
+// "New Status" dropdown. Every status is always listed; the ones the
+// admin cannot pick from the order's current state are flagged
+// `disabled: true`, so they appear greyed out and cannot be selected.
+// The rules mirror the backend's checks for API 63:
+// 1) The sequence is strictly forward-only — any status before the
+//    order's current position in FORWARD_STATUS_SEQUENCE is disabled,
+//    since moving backward is rejected outright.
 // 2) "confirmed" (and everything after it) requires payment.status to
-//    already be "paid" — an admin can no longer jump the order ahead
-//    of its own payment.
-// 3) "pending_payment" is removed entirely once payment.status is
-//    "paid" — the backend blocks reverting a paid order back to
-//    pending, regardless of the order's current status.
-// 4) "cancelled" stays available regardless of position, exactly as
-//    before — cancelling isn't part of the forward sequence.
+//    already be "paid" — the order cannot move ahead of its own
+//    payment, so those options stay disabled until it is paid.
+// 3) "pending_payment" is disabled once payment.status is "paid" — the
+//    backend blocks reverting a paid order back to pending, regardless
+//    of the order's current status.
+// 4) "cancelled" is always enabled, since cancelling isn't part of the
+//    forward sequence.
+// 5) A delivered or cancelled order is final — no status can be
+//    selected for it, so an empty list is returned. (The backend also
+//    rejects every status change on a delivered order, including
+//    "cancelled".)
 // This function is skipped entirely once payment is "refunded" or
 // "rejected" — see isPermanentlyLocked below, which disables status
 // changes altogether in that case.
-const getSelectableStatusOptions = (order) => {
+const getStatusOptions = (order) => {
   const currentStatus = order?.status;
+
+  // Delivered and cancelled orders are final — no status option may be
+  // offered.
+  if (
+    currentStatus === ORDER_STATUS.DELIVERED ||
+    currentStatus === ORDER_STATUS.CANCELLED
+  ) {
+    return [];
+  }
+
   const isPaid = order?.payment?.status === PAYMENT_STATUS.PAID;
 
   // ON_HOLD behaves like PENDING for sequence purposes — both are
@@ -107,28 +123,28 @@ const getSelectableStatusOptions = (order) => {
     (opt) => opt.value === effectiveStatus,
   );
 
-  // Keeps the order's own current position selectable (so the modal's
-  // pre-filled value — set from order.status when it opens — is always
-  // a valid choice, i.e. "no real change"), then adds every position
-  // strictly ahead of it that the payment gate actually allows.
-  const sequenceOptions = FORWARD_STATUS_SEQUENCE.filter((opt, index) => {
-    if (currentIndex < 0) return true; // Unknown/cancelled current status — offer the full sequence
+  // isSequenceOptionAllowed — true when the admin may pick this position
+  // of the forward sequence. The order's own current position stays
+  // allowed (so the modal's pre-filled value, set from order.status when
+  // it opens, is a valid choice, i.e. "no real change"), and so does
+  // every position strictly ahead of it that the payment gate permits.
+  const isSequenceOptionAllowed = (opt, index) => {
+    // "pending_payment" can never be selected once the order is paid.
+    if (opt.value === ORDER_STATUS.PENDING && isPaid) return false;
+    if (currentIndex < 0) return true; // Unknown current status — the full sequence is allowed
     if (index === currentIndex) return true; // The order's own current position
-    if (index < currentIndex) return false; // Backward — blocked by the backend now
+    if (index < currentIndex) return false; // Backward — rejected by the backend
     // Forward move — "confirmed" and anything after it requires
     // payment.status "paid" first
     return isPaid;
-  }).filter((opt) => {
-    // "pending_payment" itself can never be reselected once the order
-    // is paid — the backend blocks reverting a paid order back to
-    // pending, regardless of current status.
-    if (opt.value === ORDER_STATUS.PENDING && isPaid) return false;
-    return true;
-  });
+  };
 
   return [
-    ...sequenceOptions,
-    { value: ORDER_STATUS.CANCELLED, label: "Cancelled" },
+    ...FORWARD_STATUS_SEQUENCE.map((opt, index) => ({
+      ...opt,
+      disabled: !isSequenceOptionAllowed(opt, index),
+    })),
+    { value: ORDER_STATUS.CANCELLED, label: "Cancelled", disabled: false },
   ];
 };
 
@@ -211,6 +227,18 @@ const AdminOrderDetail = () => {
   const order = orderResponse?.data;
   // The actual order object — everything below reads from this
 
+  // A delivered order is final: the backend rejects every status
+  // change for it (including "cancelled"), and there is no reinstate
+  // action for it either.
+  const isDelivered = order?.status === ORDER_STATUS.DELIVERED;
+
+  // A cancelled order has reached the end of its lifecycle and can no
+  // longer be moved to another status from this page.
+  const isCancelled = order?.status === ORDER_STATUS.CANCELLED;
+
+  // True when the Update Status controls must not be available.
+  const isStatusFinal = isDelivered || isCancelled;
+
   // NEW (Sep 2026, API 63 backend fix): once payment.status is
   // "refunded" or "rejected", the backend refuses ANY further status
   // change on this order via updateOrderStatus() — the only way to
@@ -222,12 +250,11 @@ const AdminOrderDetail = () => {
     order?.payment?.status === PAYMENT_STATUS.REFUNDED ||
     order?.payment?.status === PAYMENT_STATUS.REJECTED;
 
-  // The exact set of statuses the admin may currently move this order
-  // into — recomputed from the order's live status/payment state on
-  // every render (see getSelectableStatusOptions above).
-  const selectableStatusOptions = order
-    ? getSelectableStatusOptions(order)
-    : [];
+  // The options of the "New Status" dropdown — every status is listed,
+  // and the ones the admin cannot currently move this order into are
+  // flagged as disabled. Recomputed from the order's live status/payment
+  // state on every render (see getStatusOptions above).
+  const statusOptions = order ? getStatusOptions(order) : [];
 
   // --------------------------------------------------
   // TRACKING HISTORY — API 46 — feeds the reused OrderStatusStepper
@@ -351,6 +378,9 @@ const AdminOrderDetail = () => {
   };
 
   const openStatusModal = () => {
+    // Safety guard — the button is hidden for delivered and cancelled
+    // orders, but the modal must never open for one.
+    if (isStatusFinal) return;
     setNewStatus(order?.status || "");
     // Pre-fills the dropdown with the order's CURRENT status, so the
     // admin sees where it already stands instead of a blank field
@@ -405,11 +435,14 @@ const AdminOrderDetail = () => {
         icon={<AiOutlineFileText />}
         title="Order Details"
         actions={
-          // NEW (Sep 2026, API 63/63.1 backend fix): once payment is
-          // "refunded" or "rejected" the status dropdown is a dead end
-          // on the backend now — swap it for the Reinstate action,
-          // the only way to bring this order back to life.
-          isPermanentlyLocked ? (
+          // The header action depends on the order's state:
+          // - delivered: the status is final, so no action is shown
+          // - payment refunded/rejected: status changes are refused by
+          //   the backend, so the Reinstate action (API 63.1) is shown
+          // - cancelled (any other payment state): the order is at the
+          //   end of its lifecycle, so no action is shown
+          // - otherwise: the regular Update Status button
+          isDelivered ? null : isPermanentlyLocked ? (
             <Button
               variant="primary"
               onClick={() => reinstateMutation.mutate()}
@@ -417,7 +450,7 @@ const AdminOrderDetail = () => {
             >
               Reinstate Order
             </Button>
-          ) : (
+          ) : isCancelled ? null : (
             <Button variant="primary" onClick={openStatusModal}>
               Update Status
             </Button>
@@ -755,7 +788,7 @@ const AdminOrderDetail = () => {
         <div className="flex flex-col gap-4">
           <Select
             label="New Status"
-            options={selectableStatusOptions}
+            options={statusOptions}
             value={newStatus}
             onChange={(e) => {
               setNewStatus(e.target.value);

@@ -33,6 +33,7 @@ import DiscountFilters from "../../components/admin-discounts/DiscountFilters";
 const STATUS_TABS = [
   { key: "", label: "All" },
   { key: "active", label: "Active" },
+  { key: "inactive", label: "Inactive" },
   { key: "expired", label: "Expired" },
 ];
 
@@ -49,15 +50,21 @@ const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
  * of truth used by the status tabs, the table's Status column, and the
  * summary stat cards, so their numbers always agree with one another.
  *
- * An expired end date always takes priority over the stored is_active
- * flag — a coupon that lapsed but was never manually deactivated
- * should still read as "expired", not "active".
+ * Mirrors the backend's own mutually-exclusive rule exactly (API 39,
+ * Sep 2026 addendum):
+ *   - inactive — is_active is false, regardless of end_date. A coupon
+ *                an admin manually turned off reads as "inactive" even
+ *                if its end date has also already passed — it was
+ *                switched off on purpose, it didn't just run out of time.
+ *   - expired  — is_active is true AND end_date has already passed.
+ *   - active   — is_active is true AND end_date is still in the future
+ *                (or there is no end_date at all).
  */
 const getDiscountStatus = (discount) => {
+  if (discount.is_active === false) return "inactive";
   const isExpired =
     discount.end_date && new Date(discount.end_date) < new Date();
-  if (isExpired) return "expired";
-  return discount.is_active === false ? "inactive" : "active";
+  return isExpired ? "expired" : "active";
 };
 
 const DiscountManagement = () => {
@@ -114,10 +121,11 @@ const DiscountManagement = () => {
 
   // --------------------------------------------------
   // DISCOUNTS TABLE QUERY — real server-side search, type/status
-  // filtering, sorting, and pagination (API 39, 16 Sep 2026 Filtering
-  // Fix pass). The response shape change here is NOT opt-in — this
-  // request ALWAYS gets back { count, next, previous, results } now,
-  // regardless of which params are sent.
+  // filtering, sorting, and pagination (API 39). The response shape
+  // change here is NOT opt-in — this request ALWAYS gets back
+  // { count, next, previous, results }, regardless of which params are
+  // sent. `status` accepts "active" | "inactive" | "expired" as three
+  // mutually exclusive values (Sep 2026 addendum).
   // --------------------------------------------------
   const {
     data: discountsResponse,
@@ -158,12 +166,13 @@ const DiscountManagement = () => {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // --------------------------------------------------
-  // Summary stat card counts — three light "count-only" requests
+  // Summary stat card counts — four light "count-only" requests
   // (page_size: 1, reading just the response's `count` field), the
   // same established pattern used for the stat cards on Product
-  // Management. `status` only supports "active" | "expired" server-
-  // side, so "Inactive" is derived here as whatever's left over:
-  // total minus active minus expired.
+  // Management. `status` now supports "active" | "inactive" | "expired"
+  // as three mutually exclusive values (API 39, Sep 2026 addendum), so
+  // "Inactive" is fetched directly from the backend instead of being
+  // derived by subtraction.
   // --------------------------------------------------
   const { data: totalCountResponse } = useQuery({
     queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "total"],
@@ -176,6 +185,12 @@ const DiscountManagement = () => {
       getDiscounts({ status: "active", page: 1, page_size: 1 }, signal),
     staleTime: 1000 * 30,
   });
+  const { data: inactiveCountResponse } = useQuery({
+    queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "inactive"],
+    queryFn: ({ signal }) =>
+      getDiscounts({ status: "inactive", page: 1, page_size: 1 }, signal),
+    staleTime: 1000 * 30,
+  });
   const { data: expiredCountResponse } = useQuery({
     queryKey: [...QUERY_KEYS.DISCOUNTS, "count", "expired"],
     queryFn: ({ signal }) =>
@@ -184,11 +199,8 @@ const DiscountManagement = () => {
   });
   const grandTotalCount = totalCountResponse?.data?.count ?? 0;
   const activeCount = activeCountResponse?.data?.count ?? 0;
+  const inactiveCount = inactiveCountResponse?.data?.count ?? 0;
   const expiredCount = expiredCountResponse?.data?.count ?? 0;
-  const inactiveCount = Math.max(
-    0,
-    grandTotalCount - activeCount - expiredCount,
-  );
 
   // --------------------------------------------------
   // Single discount deletion

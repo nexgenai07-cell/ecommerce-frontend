@@ -1,6 +1,4 @@
 import { Link, useNavigate } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload; useNavigate drives the whole-row click
-import { BsTruck } from "react-icons/bs"; // Truck icon for the Shipped "Track" button
-import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared status constants used to decide which action button to show
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
 import formatPrice from "../../utils/formatPrice"; // Formats a raw number into a display currency string e.g. "$49.99"
 import formatDate from "../../utils/formatDate"; // Converts an ISO date string into a readable format e.g. "Jun 29, 2026"
@@ -9,8 +7,8 @@ import DataTable from "../ui/DataTable"; // Shared table component used across t
 
 const RecentOrdersTable = ({ orders }) => {
   const navigate = useNavigate();
-  // navigate — drives the whole-row click; mirrors exactly what each row's own
-  // Track link/button already does below, per order status
+  // navigate — drives the whole-row click; sends the customer to the same
+  // order detail page that each row's own "View Details" link opens
 
   // NOTE ON MOBILE LAYOUT: this component used to render two entirely
   // separate layouts — a <table> for sm+ screens and a hand-built card
@@ -65,71 +63,28 @@ const RecentOrdersTable = ({ orders }) => {
     {
       key: "actions",
       label: "Actions",
-      // Actions column — button shown depends on the order's current status
-      render: (row) => {
-        if (row.status === ORDER_STATUS.DELIVERED) {
-          // Delivered orders — outlined "Track" link to the order detail page
-          return (
-            <Link
-              to={ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number)}
-              onClick={(e) => e.stopPropagation()}
-              // Stops this click from also bubbling up to the row's own
-              // onClick, which navigates to the same page — avoids a
-              // redundant double navigation when the link itself is clicked
-              className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:border-primary/40 hover:bg-primary-50 hover:text-primary-dark transition-all"
-            >
-              Track
-            </Link>
-          );
-        }
-
-        if (row.status === ORDER_STATUS.SHIPPED) {
-          // Shipped orders — brand gradient "Track" pill to the live tracking page
-          return (
-            <Link
-              to={ROUTES.ACCOUNT_ORDER_TRACKING.replace(
-                ":id",
-                row.order_number,
-              )}
-              onClick={(e) => e.stopPropagation()}
-              // Stops this click from also bubbling up to the row's own
-              // onClick, which navigates to the same page — avoids a
-              // redundant double navigation when the link itself is clicked
-              className="
-                flex items-center gap-1.5 w-fit px-3 py-1.5 text-xs font-semibold rounded-lg
-                bg-linear-to-r from-primary to-primary-dark text-white
-                shadow-sm shadow-primary/20 hover:shadow-md hover:shadow-primary/30 hover:brightness-105
-                transition-all
-              "
-            >
-              <BsTruck className="w-3 h-3" /> {/* Truck icon */}
-              Track
-            </Link>
-          );
-        }
-
-        // All other statuses (Pending, Confirmed, Cancelled) — disabled "Wait" label
-        // Rendered as a span (not a button) since there is no action to take yet
-        return (
-          <span className="px-3 py-1.5 text-xs font-medium text-gray-400 border border-gray-100 rounded-lg">
-            Wait
-          </span>
-        );
-      },
+      // Actions column — every order, whatever its status, has the same
+      // "View Details" link to its order detail page, where the status-specific
+      // actions (track, cancel, return) are available
+      render: (row) => (
+        <Link
+          to={ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number)}
+          onClick={(e) => e.stopPropagation()}
+          // Stops this click from also bubbling up to the row's own
+          // onClick, which navigates to the same page — avoids a
+          // redundant double navigation when the link itself is clicked
+          className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:border-primary/40 hover:bg-primary-50 hover:text-primary-dark transition-all"
+        >
+          View Details
+        </Link>
+      ),
     },
   ];
 
-  // Mirrors the per-row Track action above so clicking anywhere on a row does
-  // exactly what its own button would do — no action for statuses that don't
-  // have a destination page yet (Pending, Confirmed, Cancelled)
+  // Clicking anywhere on a row does exactly what its own "View Details" link
+  // does: it opens that order's detail page, for every order status
   const handleRowClick = (row) => {
-    if (row.status === ORDER_STATUS.DELIVERED) {
-      navigate(ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number));
-    } else if (row.status === ORDER_STATUS.SHIPPED) {
-      navigate(ROUTES.ACCOUNT_ORDER_TRACKING.replace(":id", row.order_number));
-    }
-    // Pending / Confirmed / Cancelled — intentionally does nothing, matching
-    // the disabled "Wait" label shown in that same cell
+    navigate(ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", row.order_number));
   };
 
   return (
@@ -159,8 +114,8 @@ const RecentOrdersTable = ({ orders }) => {
           data={orders}
           keyField="order_number"
           onRowClick={handleRowClick}
-          // Opens the same Track/detail page as the row's own action
-          // button when any part of the row is clicked
+          // Opens the same order detail page as the row's own "View Details"
+          // link when any part of the row is clicked
         />
       </div>
     </div>

@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload; useNavigate lets the AI button navigate programmatically
 import { BsTruck, BsArrowReturnLeft, BsRobot } from "react-icons/bs"; // Truck for tracking, return arrow for returns, robot for AI chat
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
-import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used to control button visibility
+import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used to control button visibility and enabled state
+import cn from "../../utils/cn"; // Merges Tailwind class strings and handles conditional classes cleanly
 
 const NeedHelp = ({
   orderNumber, // string — the order's unique identifier, injected into route paths
@@ -11,20 +12,32 @@ const NeedHelp = ({
 }) => {
   const navigate = useNavigate(); // used by the "Chat with AI" button to navigate programmatically
 
-  // canCancel — true only while the order can still be stopped before it ships
-  // UPDATED (Sep 2026, API 58 backend fix): the backend now blocks
-  // cancellation once an order is "shipped", "out_for_delivery", OR
-  // "delivered" — previously only "delivered" was blocked, which meant
-  // a shipped/out-for-delivery order could still be cancelled by the
-  // customer even though it was already physically moving. ON_HOLD is
-  // included alongside PENDING/CONFIRMED since it's still a
-  // pre-confirmation state (a QR retry awaiting review), so the
-  // customer can still back out of it the same way.
+  // isCancelled — true once the order has been cancelled. A cancelled order
+  // has reached the end of its lifecycle, so both tracking and
+  // cancelling are unavailable for it
+  const isCancelled = status === ORDER_STATUS.CANCELLED;
+
+  // canTrack — tracking is available for every order except a cancelled one
+  const canTrack = !isCancelled;
+
+  // canCancel — true only while the order can still be stopped before it ships.
+  // The backend refuses cancellation once an order is "shipped",
+  // "out_for_delivery" or "delivered". ON_HOLD is included alongside
+  // PENDING/CONFIRMED because it is still a pre-confirmation state (a QR retry
+  // awaiting review), so the customer can back out of it the same way
   const canCancel = [
     ORDER_STATUS.PENDING,
     ORDER_STATUS.ON_HOLD,
     ORDER_STATUS.CONFIRMED,
   ].includes(status);
+
+  // cancelDisabledReason — tooltip text explaining why the Cancel Order
+  // button is disabled for the order's current status
+  const cancelDisabledReason = isCancelled
+    ? "This order has already been cancelled."
+    : status === ORDER_STATUS.DELIVERED
+      ? "A delivered order cannot be cancelled."
+      : "This order has already shipped and can no longer be cancelled.";
 
   // canReturn — true only when the order has been delivered AND no return has been filed
   // Prevents a second return request from being created for the same order
@@ -38,25 +51,40 @@ const NeedHelp = ({
       <h2 className="text-base font-bold text-gray-900">Need Help?</h2>
 
       {/* ── Track Order ───────────────────────────────────────────────────────
-          Always visible — brand gradient pill, navigates to the tracking page
-          Upgraded from a flat bg-primary fill to the same gradient CTA
-          language used on Wishlist/Orders/Notifications
-          active:scale-[0.98] gives a subtle press-down feel on click           */}
-      <Link
-        to={ROUTES.ACCOUNT_ORDER_TRACKING.replace(":id", orderNumber)} // inject this order's id into the tracking route
-        className="
-          flex items-center gap-3 w-full px-4 py-3 rounded-xl
-          bg-linear-to-r from-primary to-primary-dark text-white text-sm font-semibold
-          shadow-md shadow-primary/20
-          hover:shadow-lg hover:shadow-primary/30 hover:brightness-105
-          active:scale-[0.98]
-          transition-all
-        "
-      >
-        <BsTruck className="w-4 h-4 shrink-0" />{" "}
-        {/* Truck icon — visually communicates shipment tracking */}
-        Track Order
-      </Link>
+          Brand gradient pill that navigates to the tracking page.
+          active:scale-[0.98] gives a subtle press-down feel on click.
+          For a cancelled order it is replaced by a disabled, non-clickable
+          element (a span, since a Link cannot be disabled) so the customer
+          cannot open the tracking page from here                              */}
+      {canTrack ? (
+        <Link
+          to={ROUTES.ACCOUNT_ORDER_TRACKING.replace(":id", orderNumber)} // inject this order's id into the tracking route
+          className="
+            flex items-center gap-3 w-full px-4 py-3 rounded-xl
+            bg-linear-to-r from-primary to-primary-dark text-white text-sm font-semibold
+            shadow-md shadow-primary/20
+            hover:shadow-lg hover:shadow-primary/30 hover:brightness-105
+            active:scale-[0.98]
+            transition-all
+          "
+        >
+          <BsTruck className="w-4 h-4 shrink-0" />{" "}
+          {/* Truck icon — visually communicates shipment tracking */}
+          Track Order
+        </Link>
+      ) : (
+        <span
+          aria-disabled="true" // announces the disabled state to assistive technology
+          title="Tracking is not available for a cancelled order."
+          className="
+            flex items-center gap-3 w-full px-4 py-3 rounded-xl
+            bg-gray-100 text-gray-400 text-sm font-semibold
+            cursor-not-allowed select-none
+          "
+        >
+          <BsTruck className="w-4 h-4 shrink-0" /> Track Order
+        </span>
+      )}
 
       {/* ── Return Items ──────────────────────────────────────────────────────
           Only rendered when canReturn is true (Delivered + no existing return)
@@ -78,27 +106,30 @@ const NeedHelp = ({
       )}
 
       {/* ── Cancel Order ──────────────────────────────────────────────────────
-          Only rendered when canCancel is true (Pending or Confirmed status)
+          Always rendered. Enabled only while canCancel is true (Pending,
+          On Hold or Confirmed); for every other status (Shipped, Out for
+          Delivery, Delivered, Cancelled) it is disabled and its tooltip
+          explains why.
           Danger-tinted border and text signals this is a destructive action
           Uses a button (not Link) because cancellation triggers an API call via onCancel */}
-      {canCancel && (
-        <button
-          onClick={onCancel} // fires the parent-provided callback to open a confirmation modal or call the cancel API
-          className="
-            flex items-center gap-3 w-full px-4 py-3 rounded-xl
-            border border-danger/30 text-danger text-sm font-medium
-            hover:bg-danger-light
-            transition-all
-          "
-        >
-          Cancel Order{" "}
-          {/* No icon — the red color alone is sufficient warning signal */}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={canCancel ? onCancel : undefined} // fires the parent-provided callback to open a confirmation modal; never fires while disabled
+        disabled={!canCancel} // native disabled state blocks clicks and keyboard activation
+        title={canCancel ? undefined : cancelDisabledReason}
+        className={cn(
+          "flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium transition-all",
+          canCancel
+            ? "border border-danger/30 text-danger hover:bg-danger-light"
+            : "border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed",
+        )}
+      >
+        Cancel Order{" "}
+        {/* No icon — the red color alone is sufficient warning signal while enabled */}
+      </button>
 
       {/* ── Chat with AI ──────────────────────────────────────────────────────
-          FIXED: previously had no onClick at all — a completely dead button.
-          Now navigates to the homepage, the real entry point for Zyron AI chat.
+          Navigates to the homepage, the entry point for Zyron AI chat.
           Always visible regardless of order status
           Two-line content: bold label + smaller description below
           text-left keeps the text left-aligned inside the full-width button    */}

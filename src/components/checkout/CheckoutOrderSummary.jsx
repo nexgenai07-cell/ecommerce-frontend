@@ -10,6 +10,10 @@ import { BsShieldCheck } from "react-icons/bs";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // API functions to apply or remove a coupon code, imported from the cart API module
 import { applyCoupon, removeCoupon } from "../../api/cart.api";
+// API 44 — validates a coupon code against a given order amount without
+// writing anything to the cart. Used for the Buy Now coupon input below,
+// since a Buy Now order has no cart to apply a coupon to.
+import { validateCoupon } from "../../api/discounts.api";
 // Custom toast notification helpers to show success or error messages to the user
 import { showSuccess, showError } from "../ui/Toast";
 // Utility function to format raw numeric price values into a readable currency string
@@ -26,12 +30,21 @@ import formatPrice from "../../utils/formatPrice";
 //                         payment step (that step has its own "Pay Now" button)
 // placeOrderLabel -> lets the parent change the button text ("Place Order" vs
 //                    "Continue to Payment") depending on which step we're on
-// hideCoupon -> API 55 (Buy Now, Sep 2026): the backend explicitly does
-//               NOT apply a cart coupon to a Buy Now order, so the parent
-//               passes this as true for a Buy Now checkout to hide the
-//               apply/remove coupon controls entirely — showing them would
-//               let a customer "apply" a coupon here that silently has no
-//               effect on what they're actually charged.
+// isBuyNow -> API 55 (Buy Now, Sep 2026): true when this sidebar is showing
+//             a Buy Now order instead of a normal cart checkout. The coupon
+//             input still renders in this mode, but it works differently
+//             underneath — see applyCouponMutation/removeCouponMutation
+//             below — since a Buy Now order has no cart to apply a coupon
+//             to on the backend.
+// buyNowOrderAmount -> the Buy Now product's price × quantity, sent as
+//             order_amount when validating a coupon in Buy Now mode.
+// onBuyNowCouponApplied / onBuyNowCouponRemoved -> in Buy Now mode there is
+//             no cart query for this component to update in its own React
+//             Query cache (like it does for a normal cart checkout below),
+//             so it reports the result back up to the Checkout page
+//             instead, which owns the synthetic Buy Now "cart" this
+//             sidebar reads its coupon/discount_amount from via the
+//             `cart` prop.
 const CheckoutOrderSummary = ({
   cart,
   total,
@@ -40,7 +53,10 @@ const CheckoutOrderSummary = ({
   isPlacingOrder,
   showPlaceOrderButton = true,
   placeOrderLabel = "Place Order",
-  hideCoupon = false,
+  isBuyNow = false,
+  buyNowOrderAmount = 0,
+  onBuyNowCouponApplied,
+  onBuyNowCouponRemoved,
 }) => {
   // Getting access to the React Query client instance so we can manually invalidate/refetch queries after mutations
   const queryClient = useQueryClient();
@@ -59,21 +75,50 @@ const CheckoutOrderSummary = ({
 
   // =============================================
   // APPLY COUPON
-  // API 37 — POST /api/v1/cart/apply-coupon/
+  // Cart checkout: API 50 — POST /api/v1/cart/apply-coupon/
+  // Buy Now checkout: API 44 — POST /api/v1/discounts/validate/
   // =============================================
-  // The response already carries the fully recalculated cart (items,
-  // subtotal, discount_amount, total, coupon) — same shape as GET
-  // /api/v1/cart/. Writing it directly into the QUERY_KEYS.CART cache in
-  // onSuccess means the parent Checkout page's cart query updates (and this
-  // sidebar re-renders with the new discount) at the same moment the success
-  // toast shows, instead of waiting on a separate refetch to land afterwards.
+  // For a normal cart checkout, the response already carries the fully
+  // recalculated cart (items, subtotal, discount_amount, total, coupon) —
+  // same shape as GET /api/v1/cart/. Writing it directly into the
+  // QUERY_KEYS.CART cache in onSuccess means the parent Checkout page's
+  // cart query updates (and this sidebar re-renders with the new discount)
+  // at the same moment the success toast shows, instead of waiting on a
+  // separate refetch to land afterwards.
+  //
+  // A Buy Now order has no cart on the backend, so there is nothing to
+  // "apply" a coupon to yet — Validate Coupon (API 44) only checks the
+  // code against the order amount and returns the discount math, without
+  // persisting anything. The applied coupon then travels as coupon_code
+  // on the actual checkout request (API 55) once the order is placed.
   const applyCouponMutation = useMutation({
-    // The actual API call function — sends the trimmed coupon code to the backend
-    mutationFn: () => applyCoupon({ code: couponCode.trim() }),
+    mutationFn: () =>
+      isBuyNow
+        ? validateCoupon({
+            code: couponCode.trim(),
+            order_amount: buyNowOrderAmount.toFixed(2),
+          })
+        : applyCoupon({ code: couponCode.trim() }),
     // Runs when the coupon is successfully applied
     onSuccess: (response) => {
       showSuccess("Coupon applied!"); // Show a success toast notification to the user
+      const appliedCode = couponCode.trim().toUpperCase();
       setCouponCode(""); // Clear the input field after successful application
+
+      if (isBuyNow) {
+        // Report the validated coupon back up to the Checkout page — see
+        // the onBuyNowCouponApplied prop comment above for why this
+        // can't just update a React Query cache the way the cart path
+        // below does.
+        onBuyNowCouponApplied?.({
+          code: appliedCode,
+          discount_type: response.data?.discount_type,
+          discount_value: response.data?.discount_value,
+          discount_amount: response.data?.discount_amount,
+        });
+        return;
+      }
+
       queryClient.setQueryData(QUERY_KEYS.CART, (old) =>
         old?.data ? { ...old, data: { ...old.data, ...response.data } } : old,
       );
@@ -81,30 +126,44 @@ const CheckoutOrderSummary = ({
     // Runs if the coupon application API call fails
     onError: (error) => {
       showError(
-        error?.response?.data?.message || "Invalid coupon code.",
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "Invalid coupon code.",
         // Show the specific error message from the server if available, otherwise show a generic fallback message
       );
     },
     // Refetches in the background afterwards purely to reconcile with the
-    // server; the cache is already correct by the time this runs.
+    // server; the cache is already correct by the time this runs. Not
+    // relevant in Buy Now mode — nothing was written to the cart, so
+    // there's no cart query to reconcile.
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      if (!isBuyNow) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      }
     },
   });
 
   // =============================================
   // REMOVE COUPON
-  // API 38
+  // Cart checkout: API 51 — DELETE /api/v1/cart/remove-coupon/
+  // Buy Now checkout: nothing to call — see below
   // =============================================
   // Updates the cache optimistically in onMutate, so the coupon badge and
   // the total recalculate the instant the "X" is clicked, before the DELETE
   // request resolves. onError restores the snapshot taken here if the
   // request actually fails.
+  //
+  // A Buy Now coupon was never written to the cart (or anywhere else on
+  // the backend) when it was applied above, so there is nothing to
+  // delete here — removing it is purely a local state change, reported
+  // back to the Checkout page via onBuyNowCouponRemoved.
   const removeCouponMutation = useMutation({
-    mutationFn: () => removeCoupon(), // Directly using the removeCoupon API function as the mutation function
+    mutationFn: () => (isBuyNow ? Promise.resolve() : removeCoupon()),
 
     // Fires immediately, before the network request is even sent.
     onMutate: async () => {
+      if (isBuyNow) return undefined;
+
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.CART });
 
       const previousCart = queryClient.getQueryData(QUERY_KEYS.CART);
@@ -128,9 +187,13 @@ const CheckoutOrderSummary = ({
     // Runs when coupon removal succeeds
     onSuccess: () => {
       showSuccess("Coupon removed"); // Notify user that coupon was successfully removed
+      if (isBuyNow) {
+        onBuyNowCouponRemoved?.();
+      }
     },
 
-    // Runs if coupon removal fails — restores the pre-removal cache snapshot
+    // Runs if coupon removal fails — restores the pre-removal cache snapshot.
+    // Not reachable in Buy Now mode, since mutationFn never rejects there.
     onError: (error, variables, context) => {
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
@@ -141,7 +204,9 @@ const CheckoutOrderSummary = ({
     // Refetches in the background afterwards so the cache matches the
     // server exactly, regardless of whether the request succeeded or failed.
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      if (!isBuyNow) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      }
     },
   });
 
@@ -192,87 +257,87 @@ const CheckoutOrderSummary = ({
       <div className="h-px bg-gray-100" />
 
       {/* Coupon code */}
-      {/* BUGFIX: the apply/remove coupon controls used to render unconditionally,
-          which meant a customer could still add or remove a coupon on the
-          Stripe "payment" step — AFTER the order (and its PaymentIntent
-          amount) had already been created server-side. Doing so silently
-          changed the on-screen total without touching what Stripe would
-          actually charge. Coupons should only be editable while we're still
+      {/* The apply/remove controls below are only shown while we're still
           on the "details" step, before the order exists — same gating the
-          "Place Order" button already uses (showPlaceOrderButton). Once the
-          order is placed, we just show the coupon that was used (read-only,
-          no remove button) so the customer can still see it was applied. */}
-      {!hideCoupon &&
-        (showPlaceOrderButton ? (
-          appliedCoupon ? (
-            <div className="flex items-center justify-between bg-success-light border border-success/20 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2">
-                {/* Tag icon representing a coupon/discount code */}
-                <AiOutlineTag className="w-3.5 h-3.5 text-success" />
-                {/* Displaying the actual applied coupon code text */}
-                <p className="text-xs font-semibold text-success">
-                  {appliedCoupon.code}
-                </p>
-              </div>
-              {/* Button to remove the currently applied coupon */}
-              <button
-                onClick={() => removeCouponMutation.mutate()}
-                // Triggers the removeCouponMutation when clicked, which calls the remove coupon API
-                className="text-success hover:text-green-700"
-              >
-                {/* Close/X icon indicating this button removes the coupon */}
-                <AiOutlineClose className="w-3.5 h-3.5" />
-              </button>
+          "Place Order" button already uses (showPlaceOrderButton). Editing
+          a coupon after the order (and its PaymentIntent amount) has
+          already been created server-side would silently change the
+          on-screen total without touching what Stripe would actually
+          charge. Once the order is placed, we just show the coupon that
+          was used (read-only, no remove button) so the customer can still
+          see it was applied. This applies the same way to a Buy Now
+          coupon — see isBuyNow above for how applying/removing it differs
+          underneath. */}
+      {showPlaceOrderButton ? (
+        appliedCoupon ? (
+          <div className="flex items-center justify-between bg-success-light border border-success/20 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              {/* Tag icon representing a coupon/discount code */}
+              <AiOutlineTag className="w-3.5 h-3.5 text-success" />
+              {/* Displaying the actual applied coupon code text */}
+              <p className="text-xs font-semibold text-success">
+                {appliedCoupon.code}
+              </p>
             </div>
-          ) : (
-            // If no coupon is applied yet, show a form with an input field and "Apply" button
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                applyCouponMutation.mutate();
-              }}
-              // Prevents default form submission (page reload) and instead triggers the apply coupon mutation
-              className="flex gap-2"
+            {/* Button to remove the currently applied coupon */}
+            <button
+              onClick={() => removeCouponMutation.mutate()}
+              // Triggers the removeCouponMutation when clicked, which calls the remove coupon API
+              className="text-success hover:text-green-700"
             >
-              <input
-                type="text"
-                value={couponCode} // Controlled input — value tied to local couponCode state
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                // Updates state on every keystroke, automatically converting input to uppercase (common for coupon codes)
-                placeholder="Coupon Code" // Placeholder text shown when input is empty
-                className="
+              {/* Close/X icon indicating this button removes the coupon */}
+              <AiOutlineClose className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          // If no coupon is applied yet, show a form with an input field and "Apply" button
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyCouponMutation.mutate();
+            }}
+            // Prevents default form submission (page reload) and instead triggers the apply coupon mutation
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={couponCode} // Controlled input — value tied to local couponCode state
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              // Updates state on every keystroke, automatically converting input to uppercase (common for coupon codes)
+              placeholder="Coupon Code" // Placeholder text shown when input is empty
+              className="
                 flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl
                 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary
                 placeholder:text-gray-300 transition-all
               "
-                // Input takes remaining space in the flex row, styled with border, padding, and emerald focus ring
-              />
-              <button
-                type="submit" // Submitting this form triggers the onSubmit handler above
-                disabled={!couponCode.trim() || applyCouponMutation.isPending}
-                // Button is disabled if input is empty/whitespace-only, OR if a coupon application request is already in progress
-                className="
+              // Input takes remaining space in the flex row, styled with border, padding, and emerald focus ring
+            />
+            <button
+              type="submit" // Submitting this form triggers the onSubmit handler above
+              disabled={!couponCode.trim() || applyCouponMutation.isPending}
+              // Button is disabled if input is empty/whitespace-only, OR if a coupon application request is already in progress
+              className="
                 px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700
                 hover:border-gray-300 hover:bg-gray-50
                 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0
               "
-              >
-                Apply
-              </button>
-            </form>
-          )
-        ) : (
-          appliedCoupon && (
-            // Payment step, order already created — show the coupon as an
-            // inert badge (no remove button) purely for the customer's info.
-            <div className="flex items-center gap-2 bg-success-light border border-success/20 rounded-lg px-3 py-2">
-              <AiOutlineTag className="w-3.5 h-3.5 text-success" />
-              <p className="text-xs font-semibold text-success">
-                {appliedCoupon.code} applied
-              </p>
-            </div>
-          )
-        ))}
+            >
+              Apply
+            </button>
+          </form>
+        )
+      ) : (
+        appliedCoupon && (
+          // Payment step, order already created — show the coupon as an
+          // inert badge (no remove button) purely for the customer's info.
+          <div className="flex items-center gap-2 bg-success-light border border-success/20 rounded-lg px-3 py-2">
+            <AiOutlineTag className="w-3.5 h-3.5 text-success" />
+            <p className="text-xs font-semibold text-success">
+              {appliedCoupon.code} applied
+            </p>
+          </div>
+        )
+      )}
 
       {/* Price breakdown */}
       {/* Container listing all individual cost components that make up the final total */}

@@ -215,7 +215,27 @@ const ProductInfo = ({ product, imageRef }) => {
       // itself enforces on mount, applied a step earlier here so the
       // customer isn't sent to a page that immediately bounces them
       // straight back out to Login anyway.
-      navigate(ROUTES.LOGIN);
+      //
+      // BUGFIX: this used to call navigate(ROUTES.LOGIN) with no state
+      // at all — since we're redirecting from HERE instead of letting
+      // Checkout.jsx mount and do it, Checkout.jsx's own login-redirect
+      // effect (which carries the Buy Now product/quantity through as
+      // from.state) never got a chance to run, and Login.jsx's "from"
+      // fell back to its ROUTES.HOME default. The customer ended up on
+      // Home after signing in, with the product/quantity they picked
+      // gone entirely. Passing the exact same { from: { pathname,
+      // state } } shape here that Checkout.jsx's effect uses fixes
+      // this — Login.jsx already knows how to read it back and hand it
+      // straight to Checkout on success, for the password, 2FA, and
+      // Google sign-in paths alike.
+      navigate(ROUTES.LOGIN, {
+        state: {
+          from: {
+            pathname: ROUTES.CHECKOUT,
+            state: { buyNow: { product, quantity } },
+          },
+        },
+      });
       return;
     }
 

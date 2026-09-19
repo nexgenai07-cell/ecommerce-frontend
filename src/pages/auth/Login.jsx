@@ -51,6 +51,14 @@ const Login = () => {
 
   const from = location.state?.from?.pathname || ROUTES.HOME;
   const registeredEmail = location.state?.registeredEmail;
+  // BUY NOW: when Checkout redirects an unauthenticated customer here, it
+  // attaches the Buy Now product/quantity as from.state (see the
+  // login-redirect effect in Checkout.jsx) so it can be handed straight
+  // back to Checkout once sign-in succeeds, instead of being lost the
+  // moment the customer left the checkout page. Undefined for every other
+  // "please sign in first" redirect, which is exactly what we want —
+  // nothing extra gets replayed for those.
+  const fromState = location.state?.from?.state;
 
   // ----------------------------------------------------------------
   // SAFE REDIRECT TARGET — customer accounts only
@@ -70,7 +78,12 @@ const Login = () => {
   // entire token exchange with the backend internally. See
   // src/hooks/useGoogleSignIn.js for the full implementation.
   // =============================================
-  useGoogleSignIn("google-signin-button-login");
+  // BUY NOW: same safeFrom/fromState replay as the normal and 2FA login
+  // paths above (completeLogin) — without this, a customer who chooses
+  // "Sign in with Google" from a Buy Now redirect would land on Home
+  // instead of back on their Buy Now checkout, same bug as before but
+  // for a different login method.
+  useGoogleSignIn("google-signin-button-login", { safeFrom, fromState });
 
   // Post-login destination by role: admins go to the admin dashboard,
   // customers go to safeFrom. Keeps admins off the customer portal,
@@ -182,7 +195,15 @@ const Login = () => {
     login({ user, tokens });
     showSuccess(`Welcome back, ${user.name}!`);
 
-    navigate(getPostLoginDestination(user.role), { replace: true });
+    const destination = getPostLoginDestination(user.role);
+    // BUY NOW: only replay fromState when we're actually sending the
+    // customer back to the page that redirected them here (safeFrom) —
+    // an admin account is routed to the dashboard instead and should
+    // never carry a customer-side Buy Now payload along with it.
+    navigate(destination, {
+      replace: true,
+      ...(destination === safeFrom && fromState ? { state: fromState } : {}),
+    });
   };
 
   // =============================================

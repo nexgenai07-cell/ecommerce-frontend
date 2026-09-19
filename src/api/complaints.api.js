@@ -88,7 +88,7 @@ export const getComplaints = (params, signal) => {
 // Status button) with a single real number — see
 // ActiveComplaintBanner.jsx.
 //
-// Response (200 OK): { open_count: number }
+// Response (200 OK): { count: number }
 export const getOpenComplaintsCount = (signal) => {
   return axiosInstance.get("/api/v1/complaints/open-count/", { signal });
 };

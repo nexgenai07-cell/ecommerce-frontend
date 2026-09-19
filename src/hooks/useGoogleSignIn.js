@@ -36,6 +36,14 @@
 // Each page must use its OWN unique containerId (e.g. one for Login, a
 // different one for Register) so the two pages never try to render a Google
 // button into the same DOM element.
+//
+// redirectOptions (optional, second argument) — { safeFrom, fromState }:
+// lets a caller override the default post-login destination (ROUTES.HOME)
+// and replay extra router state once signed in, exactly like the normal
+// email/password flow's own "from" handling. Login.jsx uses this to send a
+// customer back to whatever page (e.g. a Buy Now checkout) redirected them
+// here instead of always landing on Home. Register.jsx doesn't pass this,
+// so it keeps going to Home exactly as before.
 // ============================================================================
 
 import { useEffect, useRef } from "react";
@@ -67,10 +75,11 @@ const GOOGLE_SCRIPT_MAX_POLL_ATTEMPTS = 40; // 40 * 250ms = 10 seconds total
  * @param {string} containerId - id of the empty <div> the Google button
  *   should be rendered into. Must be unique per page/component instance.
  */
-const useGoogleSignIn = (containerId) => {
+const useGoogleSignIn = (containerId, redirectOptions = {}) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { login } = useAuth();
+  const { safeFrom, fromState } = redirectOptions;
 
   // Guards against rendering the Google button twice into the same
   // container — this can otherwise happen under React StrictMode, which
@@ -115,10 +124,19 @@ const useGoogleSignIn = (containerId) => {
 
         // Same role-based redirect rule used everywhere else in the auth
         // flow: admin accounts go to the admin dashboard, everyone else
-        // goes to the storefront home page.
+        // goes to safeFrom if the caller passed one (e.g. Login.jsx
+        // sending a customer back to a Buy Now checkout), or the
+        // storefront home page otherwise.
         const destination =
-          data.user.role === "admin" ? ROUTES.ADMIN_DASHBOARD : ROUTES.HOME;
-        navigate(destination, { replace: true });
+          data.user.role === "admin"
+            ? ROUTES.ADMIN_DASHBOARD
+            : safeFrom || ROUTES.HOME;
+        navigate(destination, {
+          replace: true,
+          ...(destination === safeFrom && fromState
+            ? { state: fromState }
+            : {}),
+        });
       } catch (error) {
         const backendErrorMessage =
           error?.response?.data?.error ||

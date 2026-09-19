@@ -313,6 +313,16 @@ const Checkout = () => {
   const location = useLocation();
   const buyNowItem = location.state?.buyNow || null;
   const isBuyNow = !!buyNowItem;
+  // The coupon applied on a Buy Now checkout. Unlike the cart flow
+  // (where an applied coupon is persisted server-side on the cart via
+  // Apply Coupon / API 50), a Buy Now checkout never touches the cart at
+  // all, so there is nothing on the backend to persist this against
+  // until the order is actually placed. This page is therefore the only
+  // place this coupon lives before that point — CheckoutOrderSummary
+  // reports back to it via onBuyNowCouponApplied/onBuyNowCouponRemoved,
+  // and it is read back out below to build buyNowCart.discount_amount/
+  // coupon and to send coupon_code on the actual checkout request.
+  const [buyNowCoupon, setBuyNowCoupon] = useState(null);
   // Reading query params — specifically "resume", which the payment result
   // page sets when sending a customer back here after a failed payment
   // attempt on an order that already exists (see RESUME PAYMENT FLOW below)
@@ -425,11 +435,23 @@ const Checkout = () => {
     // If the user is not logged in, redirect them to the login page
     if (!isAuthenticated) {
       navigate(ROUTES.LOGIN, {
-        state: { from: { pathname: ROUTES.CHECKOUT } },
+        state: {
+          from: {
+            pathname: ROUTES.CHECKOUT,
+            // BUY NOW: this page's Buy Now product/quantity lives only in
+            // ITS OWN router state (set by ProductInfo.jsx) — navigating
+            // to Login is a full route change, so without carrying it
+            // along here it would simply be gone. Login.jsx reads this
+            // back as from.state and hands it straight back once sign-in
+            // succeeds, so the customer returns to the same Buy Now
+            // checkout instead of a plain (and likely empty) cart one.
+            ...(isBuyNow && { state: { buyNow: buyNowItem } }),
+          },
+        },
       });
       // Passes the current checkout path in state so login page can redirect back here after successful login
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, isBuyNow, buyNowItem]);
 
   // =============================================
   // CART API
@@ -453,8 +475,18 @@ const Checkout = () => {
   // order summary sidebar, the subtotal/total math, orderSnapshot) can
   // keep working against a single "cart" value without needing an
   // isBuyNow branch scattered through each of them individually.
-  // discount_amount is always 0 here — a coupon applied to the real
-  // cart is never used on a Buy Now order, per the backend contract.
+  // The subtotal is what the Buy Now coupon is validated against (see
+  // API 44 — Validate Coupon), so it is computed once here and reused
+  // both for the synthetic cart below and for the validate call
+  // CheckoutOrderSummary makes.
+  const buyNowSubtotal = isBuyNow
+    ? parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
+    : 0;
+  // discount_amount/coupon now reflect whatever the customer has applied
+  // via the Buy Now coupon input (see buyNowCoupon state above) — the
+  // backend never applies a cart coupon to a Buy Now order, but a
+  // coupon validated and sent as coupon_code directly on THIS order is
+  // fully supported (API 55, Sep 2026 update).
   const buyNowCart = isBuyNow
     ? {
         items: [
@@ -462,16 +494,12 @@ const Checkout = () => {
             id: `buy-now-${buyNowItem.product.id}`,
             product: buyNowItem.product,
             quantity: buyNowItem.quantity,
-            total_price: (
-              parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
-            ).toFixed(2),
+            total_price: buyNowSubtotal.toFixed(2),
           },
         ],
-        subtotal: (
-          parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
-        ).toFixed(2),
-        discount_amount: 0,
-        coupon: null,
+        subtotal: buyNowSubtotal.toFixed(2),
+        discount_amount: buyNowCoupon?.discount_amount || 0,
+        coupon: buyNowCoupon ? { code: buyNowCoupon.code } : null,
       }
     : null;
 
@@ -782,6 +810,16 @@ const Checkout = () => {
     // buy_now_quantity — which tell the backend to build the order from
     // this single product/quantity instead of the customer's persisted
     // cart. Every other field below is identical either way.
+    //
+    // COUPON (API 55, Sep 2026 update): coupon_code is only sent here
+    // for a Buy Now order — a normal cart checkout doesn't need it,
+    // since a coupon applied to the cart via Apply Coupon (API 50) is
+    // already attached to the cart itself and the backend picks it up
+    // automatically. A Buy Now order has no cart to attach a coupon to,
+    // so the code validated on this page (see buyNowCoupon state) has
+    // to be sent explicitly on this request instead — the backend
+    // validates it again against this product's price × quantity and
+    // uses it for this order only, never writing it to the cart.
     mutationFn: (data) =>
       checkout({
         address_id: selectedAddressId,
@@ -797,6 +835,10 @@ const Checkout = () => {
           buy_now_product_id: buyNowItem.product.id,
           buy_now_quantity: buyNowItem.quantity,
         }),
+        ...(isBuyNow &&
+          buyNowCoupon && {
+            coupon_code: buyNowCoupon.code,
+          }),
       }),
 
     // Runs when the checkout API call succeeds — order now exists with status "pending_payment"
@@ -845,13 +887,32 @@ const Checkout = () => {
 
     // Runs if the checkout API call fails
     onError: (error) => {
-      // Extracting the most specific error message available from the API response, with fallbacks
+      // Extracting the most specific error message available from the API
+      // response, with fallbacks. The documented error shape for this
+      // endpoint (otp_required, Buy Now, and coupon_code failures alike)
+      // is { "error": "..." } — checked first — with message/detail kept
+      // as fallbacks in case a different error path on the backend still
+      // uses one of those instead.
       const message =
+        error?.response?.data?.error ||
         error?.response?.data?.message ||
         error?.response?.data?.detail ||
         "Failed to place order. Please try again.";
       // Displaying the error message to the user via toast notification
       showError(message);
+
+      // COUPON (Buy Now only): the backend re-validates coupon_code at
+      // the moment the order is actually placed, so a code that was
+      // valid when applied a few steps ago (e.g. during the OTP wait)
+      // can still be rejected here if it expired or was deactivated in
+      // the meantime. Clear it and send the customer back to the
+      // details step so they can retry without a coupon that will keep
+      // failing on every attempt, instead of leaving them stuck on the
+      // OTP screen with no way forward.
+      if (isBuyNow && buyNowCoupon && /coupon/i.test(message)) {
+        setBuyNowCoupon(null);
+        setStep("details");
+      }
     },
   });
 
@@ -1315,7 +1376,10 @@ const Checkout = () => {
               isPlacingOrder={isPlacingOrder}
               showPlaceOrderButton={step === "details"}
               placeOrderLabel="Continue to Payment"
-              hideCoupon={isBuyNow}
+              isBuyNow={isBuyNow}
+              buyNowOrderAmount={buyNowSubtotal}
+              onBuyNowCouponApplied={setBuyNowCoupon}
+              onBuyNowCouponRemoved={() => setBuyNowCoupon(null)}
             />
           </div>
         </div>
@@ -1334,8 +1398,12 @@ const Checkout = () => {
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-gray-600 leading-relaxed">
-            Are you sure you want to cancel order {orderNumber}? Your cart will
-            be waiting for you afterwards, but this action cannot be undone.
+            {isBuyNow
+              ? // BUY NOW: this order was never built from the customer's
+                // cart, so there's nothing waiting for them there — the
+                // normal cart-restore copy below would be misleading here.
+                `Are you sure you want to cancel order ${orderNumber}? This action cannot be undone.`
+              : `Are you sure you want to cancel order ${orderNumber}? Your cart will be waiting for you afterwards, but this action cannot be undone.`}
           </p>
 
           <Select
