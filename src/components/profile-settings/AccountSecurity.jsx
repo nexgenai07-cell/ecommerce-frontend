@@ -122,6 +122,12 @@ const AccountSecurity = ({ user }) => {
   // shared isPending flag that would light up every row at once.
   const [revokingSessionId, setRevokingSessionId] = useState(null);
 
+  // --- Sign-out-one-device flow (confirmation modal before revoking) ---
+  // Holds the full session object (not just its id) the customer tapped
+  // the X on, so the confirmation modal can show which device it's about
+  // to sign out. Null means the modal is closed / nothing pending.
+  const [sessionToRevoke, setSessionToRevoke] = useState(null);
+
   const revokeSessionMutation = useMutation({
     mutationFn: (sessionId) => revokeSession(sessionId),
     onSuccess: (_response, sessionId) => {
@@ -151,6 +157,20 @@ const AccountSecurity = ({ user }) => {
   const handleRevokeSession = (sessionId) => {
     setRevokingSessionId(sessionId);
     revokeSessionMutation.mutate(sessionId);
+  };
+
+  // Closes the "Are you sure?" modal without revoking anything —
+  // used for both the Cancel button and the backdrop/close click.
+  const closeRevokeModal = () => setSessionToRevoke(null);
+
+  // Runs once the customer confirms inside the modal — actually fires
+  // the revoke mutation for the session they tapped the X on, then
+  // closes the modal immediately (the button itself still shows its
+  // own loading state via revokingSessionId while the request is in flight).
+  const confirmRevokeSession = () => {
+    if (!sessionToRevoke) return;
+    handleRevokeSession(sessionToRevoke.id);
+    setSessionToRevoke(null);
   };
 
   // =============================================
@@ -345,7 +365,7 @@ const AccountSecurity = ({ user }) => {
                     always all-or-nothing. */}
                 <button
                   type="button"
-                  onClick={() => handleRevokeSession(session.id)}
+                  onClick={() => setSessionToRevoke(session)}
                   disabled={revokingSessionId === session.id}
                   aria-label={`Sign out ${session.device || "this device"}`}
                   className="
@@ -536,6 +556,48 @@ const AccountSecurity = ({ user }) => {
               isLoading={disableMutation.isPending}
             >
               Disable 2FA
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* SIGN OUT DEVICE MODAL — confirmation before revoking a single
+          session. isOpen is driven by sessionToRevoke being non-null
+          rather than a separate boolean, since the modal also needs to
+          know WHICH device to name in its body text. */}
+      <Modal
+        isOpen={Boolean(sessionToRevoke)}
+        onClose={closeRevokeModal}
+        title="Sign Out Device?"
+        size="sm"
+        closeOnBackdrop={!revokeSessionMutation.isPending}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="flex items-start gap-3 p-3 bg-warning-light rounded-xl border border-warning/20">
+            <AiOutlineClose className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-warning leading-relaxed">
+              Are you sure you want to sign out{" "}
+              <span className="font-semibold">
+                {sessionToRevoke?.device || "this device"}
+              </span>
+              ? It will need to log in again to access your account.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={closeRevokeModal}
+              disabled={revokeSessionMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={confirmRevokeSession}
+              isLoading={revokeSessionMutation.isPending}
+            >
+              Sign Out
             </Button>
           </div>
         </div>
