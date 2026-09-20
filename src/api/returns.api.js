@@ -71,3 +71,44 @@ export const updateReturnStatus = (id, data, signal) => {
     signal,
   });
 };
+
+// ----------------------------
+// API 67.1 - Approve or reject multiple return requests in one request (Admin only)
+// ----------------------------
+// Decides several return requests in a single call, all with the same
+// status. Replaces the old pattern of calling updateReturnStatus() once
+// per selected row — each return in the batch still goes through the
+// exact same rule as updateReturnStatus() (only a return that has not
+// been decided yet can be updated), independently of the others, so a
+// return that was already decided never blocks the rest of the batch.
+//
+// ids — a non-empty array of return ids, maximum 100 per call. A
+// selection larger than 100 rows must be split into batches of 100
+// and sent as separate calls (see chunkArray in utils/chunkArray.js).
+// status — the decision to apply to every selected return, either
+// "approved" or "rejected".
+//
+// The response is always 200 OK for a well-formed request, even if
+// some returns could not be decided, so the result must be read from
+// the response body rather than the HTTP status:
+//   updated_ids — return ids that were decided successfully
+//   missing_ids — return ids that no longer exist, or are stale in the
+//                 current selection; these should be dropped from the
+//                 table and the selection quietly, without an error
+//   failed      — returns that exist but could not be decided (most
+//                 commonly one that was already approved or rejected);
+//                 each entry is { id, error }
+//   message     — a ready-made summary sentence, suitable for a toast
+//   results     — one small object per decided return, e.g. its new
+//                 status
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid ids, more than 100 ids, or an invalid status) and nothing
+// was processed.
+export const bulkUpdateReturnStatus = (ids, status, signal) => {
+  return axiosInstance.post(
+    "/api/v1/admin/returns/bulk-status/",
+    { ids, status },
+    { signal },
+  );
+};

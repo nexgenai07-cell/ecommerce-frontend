@@ -190,10 +190,14 @@ export const getInventoryAlerts = (signal) => {
 // Allows admins to download analytics data as an actual CSV file
 // (instead of just viewing it in the browser). The "params" object
 // can include:
-// - start_date / end_date: the date range to include in the export
+// - start_date / end_date: the date range to include in the export.
+//   Required format is YYYY-MM-DD, and end_date cannot be earlier
+//   than start_date, or the backend responds with a 400.
 // - type: which kind of report to export. CONFIRMED accepted values:
 //   "sales", "orders", "discounts", "inventory", "returns",
-//   "complaints", "social_posts", "customers", "revenue", "products"
+//   "complaints", "social_posts", "customers", "revenue", "products",
+//   "categories", "audit_logs", "whatsapp_numbers",
+//   "whatsapp_conversation"
 // - status: optional, only applies when type is "sales" or "revenue".
 //   Same accepted values as getSalesReport()/getRevenueReport() above
 //   ("sold" | "cancelled" | "refunded" | "all" | an exact order
@@ -201,10 +205,25 @@ export const getInventoryAlerts = (signal) => {
 //   currently selected on the Sales/Revenue Report page so the
 //   downloaded file matches what's on screen.
 //
-// The "customers" export's Phone column is formatted as
-// +92XXXXXXXXXX and wrapped so Excel treats it as text instead of
-// stripping the leading 0/country code when the CSV is opened
-// directly.
+// Extra filters accepted per type, on top of start_date/end_date
+// (send only the ones the on-screen page currently has selected):
+//   products              — q, category_id, min_price, max_price,
+//                            in_stock, status, ordering (same accepted
+//                            values as searchProducts() in
+//                            products.api.js)
+//   categories             — search, ordering
+//   audit_logs             — entity, user (its id or its name),
+//                            action, search
+//   whatsapp_numbers       — search (start_date/end_date are accepted
+//                            but do not filter this type)
+//   whatsapp_conversation  — phone_number (REQUIRED — a 400 is
+//                            returned without it), start_date/end_date
+//                            filter that number's messages
+//
+// The "customers" export's Phone column, and the "whatsapp_numbers" /
+// "whatsapp_conversation" exports' name/message columns, are formatted
+// so Excel treats them as text instead of misreading a leading +, -,
+// = or @ as part of a formula when the CSV is opened directly.
 export const exportReport = (params, signal) => {
   return axiosInstance.get("/api/v1/analytics/export/", {
     signal,

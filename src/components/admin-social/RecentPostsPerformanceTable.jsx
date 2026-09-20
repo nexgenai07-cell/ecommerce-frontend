@@ -11,6 +11,7 @@ import { SOCIAL_POST_STATUS } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
 import { exportReport } from "../../api/analytics.api";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import { showSuccess, showError } from "../ui/Toast";
 import Badge from "../ui/Badge";
 import Spinner from "../ui/Spinner";
@@ -155,21 +156,19 @@ const RecentPostsPerformanceTable = () => {
   ];
 
   const handleExport = async () => {
-    try {
-      const response = await exportReport({ type: "social_posts" });
-      // "social_posts" is now a CONFIRMED accepted `type` value
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `social-posts-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
+    // "social_posts" is now a CONFIRMED accepted `type` value
+    const { success, message } = await downloadExportCsv(
+      exportReport,
+      { type: "social_posts" },
+      `social-posts-${new Date().toISOString().slice(0, 10)}`,
+    );
+
+    if (success) {
       showSuccess("Export downloaded.");
-    } catch (error) {
+    } else {
       showError(
-        "Failed to export posts. This report type may not be supported by the backend yet.",
+        message ||
+          "Failed to export posts. This report type may not be supported by the backend yet.",
       );
     }
   };

@@ -108,6 +108,95 @@ export const rejectQrPayment = (orderNumber, reason, signal) => {
 };
 
 // ----------------------------
+// API 74.5 - Approve multiple QR payments in one request (Admin only)
+// ----------------------------
+// Approves several QR payments in a single call. Replaces the old
+// pattern of calling approveQrPayment() once per selected row — each
+// order in the batch still goes through the exact same rule as
+// approveQrPayment() (only a QR order whose payment is under review
+// can be approved), independently of the others, so one order failing
+// never blocks the rest of the batch.
+//
+// orderNumbers — a non-empty array of order numbers, maximum 100 per
+// call. A selection larger than 100 rows must be split into batches
+// of 100 and sent as separate calls (see chunkArray in
+// utils/chunkArray.js).
+//
+// The response is always 200 OK for a well-formed request, even if
+// some orders could not be approved, so the result must be read from
+// the response body rather than the HTTP status:
+//   approved_ids — order numbers approved successfully
+//   missing_ids  — order numbers that no longer exist, or are stale in
+//                  the current selection; these should be dropped from
+//                  the queue and the selection quietly, without an error
+//   failed       — orders that exist but could not be approved (for
+//                  example the payment is no longer under review, or
+//                  the order isn't a QR payment order); each entry is
+//                  { id, error }
+//   message      — a ready-made summary sentence, suitable for a toast
+//   results      — one small object per approved order, e.g. its new
+//                  payment_status and order_status
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid order numbers, or more than 100 ids) and nothing was
+// processed. Refresh the verification queue (getQrPendingPayments)
+// after this call, the same as after the single-order approve.
+export const bulkApproveQrPayments = (orderNumbers, signal) => {
+  return axiosInstance.post(
+    "/api/v1/admin/payments/qr/bulk-approve/",
+    { order_numbers: orderNumbers },
+    { signal },
+  );
+};
+
+// ----------------------------
+// API 74.6 - Reject multiple QR payments in one request (Admin only)
+// ----------------------------
+// Rejects several QR payment proofs in a single call, all with the
+// same reason. Replaces the old pattern of calling rejectQrPayment()
+// once per selected row — each order in the batch still goes through
+// the exact same rule as rejectQrPayment() (payment.qr_rejection_count
+// goes up by 1; the 3rd rejection cancels the order permanently and
+// releases its reserved stock), independently of the others, so one
+// order failing never blocks the rest of the batch.
+//
+// orderNumbers — a non-empty array of order numbers, maximum 100 per
+// call. A selection larger than 100 rows must be split into batches
+// of 100 and sent as separate calls (see chunkArray in
+// utils/chunkArray.js).
+// reason — required, cannot be blank; the same reason is applied to
+// every selected order and shown to each customer.
+//
+// The response is always 200 OK for a well-formed request, even if
+// some orders could not be rejected, so the result must be read from
+// the response body rather than the HTTP status:
+//   rejected_ids — order numbers rejected successfully
+//   missing_ids  — order numbers that no longer exist, or are stale in
+//                  the current selection; these should be dropped from
+//                  the queue and the selection quietly, without an error
+//   failed       — orders that exist but could not be rejected; each
+//                  entry is { id, error }
+//   message      — a ready-made summary sentence, suitable for a toast
+//   results      — one small object per rejected order:
+//                  { id, order_number, payment_status, order_status,
+//                  rejection_count, permanently_cancelled }.
+//                  permanently_cancelled: true means that order just
+//                  reached its 3rd rejection and is now cancelled.
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid order numbers, more than 100 ids, or a missing/blank reason)
+// and nothing was processed. Refresh the verification queue
+// (getQrPendingPayments) after this call, the same as after the
+// single-order reject.
+export const bulkRejectQrPayments = (orderNumbers, reason, signal) => {
+  return axiosInstance.post(
+    "/api/v1/admin/payments/qr/bulk-reject/",
+    { order_numbers: orderNumbers, reason },
+    { signal },
+  );
+};
+
+// ----------------------------
 // Upload QR payment proof (customer)
 // ----------------------------
 // Called ONLY for payment_method: "qr" orders — once the customer has

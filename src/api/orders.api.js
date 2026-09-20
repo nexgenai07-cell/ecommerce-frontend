@@ -342,6 +342,65 @@ export const updateOrderStatus = (orderNumber, data, signal) => {
 };
 
 // ----------------------------
+// API 63.2 - Update the status of multiple orders in one request (Admin only)
+// ----------------------------
+// Moves several orders to the same target status in a single call.
+// Replaces the old pattern of calling updateOrderStatus() once per
+// selected row — each order in the batch still goes through the exact
+// same rules as updateOrderStatus() (forward-only sequence, payment
+// checks, delivered/cancelled orders are final), independently of the
+// others, so one order failing never blocks the rest of the batch.
+//
+// orderNumbers — a non-empty array of order numbers, maximum 100 per
+// call. A selection larger than 100 rows must be split into batches
+// of 100 and sent as separate calls (see chunkArray in
+// utils/chunkArray.js).
+// status — the target status to apply to every selected order.
+// cancellationReason — required only when status is "cancelled"; the
+// same reason is applied to every selected order in the batch.
+//
+// Tracking numbers are not supported here — a single tracking number
+// cannot belong to more than one order, so that field stays on the
+// per-order Update Order Status call on the Order Detail page.
+//
+// The response is always 200 OK for a well-formed request, even if
+// some orders could not be updated, so the result must be read from
+// the response body rather than the HTTP status:
+//   updated_ids — order numbers that were updated successfully
+//   missing_ids — order numbers that no longer exist, or are stale in
+//                 the current selection; these should be dropped from
+//                 the table and the selection quietly, without an error
+//   failed      — orders that exist but were not allowed to make this
+//                 move (for example already delivered, unpaid, or a
+//                 backward transition); each entry is { id, error }
+//   message     — a ready-made summary sentence, suitable for a toast
+//   results     — one small object per updated order, e.g. its new
+//                 status
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid order numbers, more than 100 ids, an invalid status, or a
+// missing cancellation reason while cancelling) and nothing was
+// processed.
+export const bulkUpdateOrderStatus = (
+  orderNumbers,
+  status,
+  cancellationReason,
+  signal,
+) => {
+  return axiosInstance.post(
+    "/api/v1/admin/orders/bulk-status/",
+    {
+      order_numbers: orderNumbers,
+      status,
+      ...(status === "cancelled"
+        ? { cancellation_reason: cancellationReason }
+        : {}),
+    },
+    { signal },
+  );
+};
+
+// ----------------------------
 // Request a return for a delivered order
 // ----------------------------
 // Allows the customer to request a return for an order that has

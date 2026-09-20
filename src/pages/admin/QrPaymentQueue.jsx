@@ -8,11 +8,14 @@ import {
   getQrPendingPayments,
   approveQrPayment,
   rejectQrPayment,
+  bulkApproveQrPayments,
+  bulkRejectQrPayments,
 } from "../../api/payments.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
+import chunkArray from "../../utils/chunkArray";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import PageHeader from "../../components/shared/PageHeader";
 import DataTable from "../../components/ui/DataTable";
@@ -292,52 +295,62 @@ const QrPaymentQueue = () => {
   };
 
   // =============================================
-  // BULK APPROVE — same approve endpoint, called once per selected
-  // order (there is no bulk endpoint on the backend). Every request is
-  // attempted and reported on its own, so one failure does not hide the
-  // payments that were approved.
+  // BULK APPROVE — API 74.5. All selected orders are sent in one
+  // request per batch of up to 100 order numbers instead of one
+  // request per order. Each order is still evaluated independently on
+  // the backend, so one that can no longer be approved (for example
+  // another admin already handled it) is reported in that batch's
+  // "failed" array without stopping the rest of the batch.
   // =============================================
   const handleConfirmBulkApprove = async () => {
     setIsBulkApproving(true);
     try {
-      const results = await Promise.allSettled(
-        selectedOrderNumbers.map((orderNumber) =>
-          approveQrPayment(orderNumber),
-        ),
-      );
-      const approvedCount = results.filter(
-        (result) => result.status === "fulfilled",
-      ).length;
-      const failedResults = results.filter(
-        (result) => result.status === "rejected",
-      );
+      const batches = chunkArray(selectedOrderNumbers, 100);
+      let approvedCount = 0;
+      const failures = [];
+
+      for (const batch of batches) {
+        const response = await bulkApproveQrPayments(batch);
+        approvedCount += response.data.approved_ids?.length ?? 0;
+        // missing_ids means the order no longer exists in this
+        // selection — not a failure, so nothing is shown for it.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
 
       if (approvedCount > 0) {
         showSuccess(
           `${approvedCount} payment${approvedCount === 1 ? "" : "s"} approved.`,
         );
       }
-      if (failedResults.length > 0) {
+      if (failures.length > 0) {
         showError(
-          failedResults[0].reason?.response?.data?.error ||
-            failedResults[0].reason?.response?.data?.message ||
-            `${failedResults.length} payment${failedResults.length === 1 ? "" : "s"} could not be approved.`,
+          failures[0].error ||
+            `${failures.length} payment${failures.length === 1 ? "" : "s"} could not be approved.`,
         );
       }
       invalidateQueue();
       setSelectedOrderNumbers([]);
       setTableResetKey((key) => key + 1);
       setConfirmBulkApproveOpen(false);
+    } catch (error) {
+      showError(
+        error?.response?.data?.detail ||
+          "Failed to approve the selected payments.",
+      );
     } finally {
       setIsBulkApproving(false);
     }
   };
 
   // =============================================
-  // BULK REJECT — same reject endpoint, called once per selected order
-  // with the one shared reason typed below. The reason is mandatory —
-  // the backend 400s without it, same as the single-row flow. Every
-  // request is attempted and reported on its own.
+  // BULK REJECT — API 74.6. One shared, required reason is applied to
+  // every selected order, sent in one request per batch of up to 100
+  // order numbers instead of one request per order. Each order is
+  // still evaluated independently on the backend, so one that can no
+  // longer be rejected is reported in that batch's "failed" array
+  // without stopping the rest of the batch.
   // =============================================
   const handleConfirmBulkReject = async () => {
     if (!bulkRejectReason.trim()) {
@@ -348,36 +361,41 @@ const QrPaymentQueue = () => {
     }
     setIsBulkRejecting(true);
     try {
-      const results = await Promise.allSettled(
-        selectedOrderNumbers.map((orderNumber) =>
-          rejectQrPayment(orderNumber, bulkRejectReason.trim()),
-        ),
-      );
-      const rejectedResults = results.filter(
-        (result) => result.status === "fulfilled",
-      );
-      const failedResults = results.filter(
-        (result) => result.status === "rejected",
-      );
-      // Orders on their third rejection are cancelled permanently; every
-      // other rejected order stays pending payment for a new proof.
-      const cancelledCount = rejectedResults.filter(
-        (result) => result.value?.data?.permanently_cancelled,
-      ).length;
+      const batches = chunkArray(selectedOrderNumbers, 100);
+      let rejectedCount = 0;
+      let cancelledCount = 0;
+      const failures = [];
 
-      if (rejectedResults.length > 0) {
+      for (const batch of batches) {
+        const response = await bulkRejectQrPayments(
+          batch,
+          bulkRejectReason.trim(),
+        );
+        rejectedCount += response.data.rejected_ids?.length ?? 0;
+        // A 3rd rejection cancels that order permanently; every other
+        // rejected order stays pending payment for a new proof.
+        cancelledCount += (response.data.results ?? []).filter(
+          (result) => result.permanently_cancelled,
+        ).length;
+        // missing_ids means the order no longer exists in this
+        // selection — not a failure, so nothing is shown for it.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
+
+      if (rejectedCount > 0) {
         showSuccess(
-          `${rejectedResults.length} payment${rejectedResults.length === 1 ? "" : "s"} rejected. Customers have been notified.` +
+          `${rejectedCount} payment${rejectedCount === 1 ? "" : "s"} rejected. Customers have been notified.` +
             (cancelledCount > 0
               ? ` ${cancelledCount} order${cancelledCount === 1 ? " was" : "s were"} cancelled after reaching the maximum attempts.`
               : ""),
         );
       }
-      if (failedResults.length > 0) {
+      if (failures.length > 0) {
         showError(
-          failedResults[0].reason?.response?.data?.error ||
-            failedResults[0].reason?.response?.data?.message ||
-            `${failedResults.length} payment${failedResults.length === 1 ? "" : "s"} could not be rejected.`,
+          failures[0].error ||
+            `${failures.length} payment${failures.length === 1 ? "" : "s"} could not be rejected.`,
         );
       }
       invalidateQueue();
@@ -385,6 +403,11 @@ const QrPaymentQueue = () => {
       setTableResetKey((key) => key + 1);
       setBulkRejectOpen(false);
       setBulkRejectReason("");
+    } catch (error) {
+      showError(
+        error?.response?.data?.detail ||
+          "Failed to reject the selected payments.",
+      );
     } finally {
       setIsBulkRejecting(false);
     }

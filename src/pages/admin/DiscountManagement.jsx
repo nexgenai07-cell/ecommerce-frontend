@@ -8,12 +8,18 @@ import {
   AiOutlinePercentage,
 } from "react-icons/ai";
 
-import { getDiscounts, deleteDiscount } from "../../api/discounts.api";
+import {
+  getDiscounts,
+  deleteDiscount,
+  bulkDeleteDiscounts,
+} from "../../api/discounts.api";
 import { exportReport } from "../../api/analytics.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
+import chunkArray from "../../utils/chunkArray";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 
 import { showSuccess, showError } from "../../components/ui/Toast";
@@ -223,10 +229,13 @@ const DiscountManagement = () => {
   };
 
   // --------------------------------------------------
-  // Bulk deletion
+  // Bulk deletion — API 43.1, one request per batch of up to 100 ids.
+  // Every id in a batch is processed independently on the backend, so
+  // one coupon failing never blocks the rest of the batch. The result
+  // is read from each batch's response body (deleted_ids / missing_ids
+  // / failed) instead of the HTTP status, since a 200 response can
+  // still contain a mix of successes and failures.
   // --------------------------------------------------
-  // There is no dedicated bulk-delete endpoint, so each selected
-  // discount is deleted with its own request, issued in parallel.
   const selectedCodes = discounts
     .filter((d) => selectedIds.includes(d.id))
     .map((d) => d.code);
@@ -234,41 +243,61 @@ const DiscountManagement = () => {
   const handleBulkDelete = async () => {
     setIsDeleting(true);
     try {
-      await Promise.all(selectedIds.map((id) => deleteDiscount(id)));
-      showSuccess(
-        `${selectedIds.length} discount${selectedIds.length === 1 ? "" : "s"} deleted.`,
-      );
+      const batches = chunkArray(selectedIds, 100);
+      let deletedCount = 0;
+      const failures = [];
+
+      for (const batch of batches) {
+        const response = await bulkDeleteDiscounts(batch);
+        deletedCount += response.data.deleted_ids?.length ?? 0;
+        // missing_ids means the coupon was already gone before this
+        // call ran — not a failure, so it needs no message of its own.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
+
+      if (failures.length > 0) {
+        showError(
+          `${deletedCount} discount${deletedCount === 1 ? "" : "s"} deleted. ${failures.length} could not be deleted: ${failures
+            .map((item) => item.error)
+            .join(" ")}`,
+        );
+      } else {
+        showSuccess(
+          `${deletedCount} discount${deletedCount === 1 ? "" : "s"} deleted.`,
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DISCOUNTS });
       setSelectedIds([]);
       setConfirmBulkDeleteOpen(false);
     } catch (error) {
-      showError(
-        error?.response?.data?.message || "Failed to delete discounts.",
-      );
+      showError(error?.response?.data?.detail || "Failed to delete discounts.");
     } finally {
       setIsDeleting(false);
     }
   };
 
   // --------------------------------------------------
-  // Export handler
+  // Export handler — API 99. downloadExportCsv() reads the JSON error
+  // back out of the blob on a validation failure, so the real reason
+  // reaches this toast instead of a generic message.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({ type: "discounts" });
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        { type: "discounts" },
+        `discounts-export-${new Date().toISOString().slice(0, 10)}`,
+      );
 
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `discounts-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Export downloaded.");
-    } catch {
-      showError("Failed to export discounts. Please try again.");
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export discounts. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }

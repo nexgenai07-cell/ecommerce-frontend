@@ -46,6 +46,7 @@ import { exportReport } from "../../api/analytics.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -236,18 +237,17 @@ const InventoryAlerts = () => {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({ type: "inventory" });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `inventory-report-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Export downloaded.");
-    } catch (error) {
-      showError("Failed to export inventory. Please try again.");
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        { type: "inventory" },
+        `inventory-report-${new Date().toISOString().slice(0, 10)}`,
+      );
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export inventory. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }

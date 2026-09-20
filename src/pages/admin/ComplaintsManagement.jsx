@@ -6,7 +6,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AiOutlineFileText } from "react-icons/ai";
 
-import { getComplaints, updateComplaintStatus } from "../../api/complaints.api";
+import {
+  getComplaints,
+  bulkUpdateComplaintStatus,
+} from "../../api/complaints.api";
 // getComplaints — GET /api/v1/complaints/. Role-based on the backend: an
 // admin calling this gets EVERY complaint from every customer, no
 // separate admin-only endpoint is needed.
@@ -27,6 +30,8 @@ import extractListData from "../../utils/extractListData";
 import { canTransitionComplaintStatus } from "../../utils/complaintStatusWorkflow";
 import getComplaintTypeLabel from "../../utils/getComplaintTypeLabel";
 import formatDate from "../../utils/formatDate";
+import chunkArray from "../../utils/chunkArray";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -254,23 +259,24 @@ const ComplaintsManagement = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — downloads the returned blob as a .csv file
+  // EXPORT — API 99. downloadExportCsv() reads the JSON error back out
+  // of the blob on a validation failure, so the real reason reaches
+  // this toast instead of a generic message.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({ type: "complaints" });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `complaints-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Export downloaded.");
-    } catch {
-      showError("Failed to export complaints. Please try again.");
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        { type: "complaints" },
+        `complaints-export-${new Date().toISOString().slice(0, 10)}`,
+      );
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export complaints. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }
@@ -338,20 +344,27 @@ const ComplaintsManagement = () => {
 
     setIsBulkUpdating(true);
     try {
-      // allSettled — every request is attempted and reported on its own,
-      // so one rejected complaint does not hide the ones that succeeded.
-      const results = await Promise.allSettled(
-        bulkEligibleIds.map((id) =>
-          updateComplaintStatus(id, { status: bulkStatusAction }),
-        ),
-      );
+      // API 71.1 — the eligible ids are sent in batches of up to 100
+      // per request instead of one request per complaint. Each
+      // complaint in a batch is still evaluated independently on the
+      // backend, so one that can't make this move is reported in that
+      // batch's own "failed" array without stopping the rest.
+      const batches = chunkArray(bulkEligibleIds, 100);
+      let updatedCount = 0;
+      const failures = [];
 
-      const updatedCount = results.filter(
-        (result) => result.status === "fulfilled",
-      ).length;
-      const failedResults = results.filter(
-        (result) => result.status === "rejected",
-      );
+      for (const batch of batches) {
+        const response = await bulkUpdateComplaintStatus(
+          batch,
+          bulkStatusAction,
+        );
+        updatedCount += response.data.updated_ids?.length ?? 0;
+        // missing_ids means the complaint no longer exists in this
+        // selection — not a failure, so nothing is shown for it.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
 
       if (updatedCount > 0) {
         showSuccess(
@@ -362,10 +375,10 @@ const ComplaintsManagement = () => {
         );
       }
 
-      if (failedResults.length > 0) {
+      if (failures.length > 0) {
         showError(
-          failedResults[0].reason?.response?.data?.error ||
-            `${failedResults.length} complaint${failedResults.length === 1 ? "" : "s"} could not be updated.`,
+          failures[0].error ||
+            `${failures.length} complaint${failures.length === 1 ? "" : "s"} could not be updated.`,
         );
       }
 
@@ -374,6 +387,11 @@ const ComplaintsManagement = () => {
       setSelectedStatusById({});
       setTableResetKey((key) => key + 1);
       setBulkStatusAction(null);
+    } catch (error) {
+      showError(
+        error?.response?.data?.detail ||
+          "Failed to update the selected complaints.",
+      );
     } finally {
       setIsBulkUpdating(false);
     }

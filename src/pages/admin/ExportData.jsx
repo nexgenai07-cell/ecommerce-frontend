@@ -9,6 +9,7 @@ import {
 } from "react-icons/ai";
 
 import { exportReport } from "../../api/analytics.api";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
@@ -108,36 +109,36 @@ const ExportData = () => {
 
   // Shared download-trigger logic — used by both the quick report
   // cards and the custom export builder below, so the actual
-  // "turn the CSV blob into a downloaded file" mechanics live in one place
-  const triggerDownload = async (type, startDate, endDate, status) => {
-    const response = await exportReport({
-      type,
-      start_date: startDate || undefined,
-      end_date: endDate || undefined,
-      // status only means anything to the backend for type "sales" or
-      // "revenue" — left undefined for every other report type so it's
-      // simply omitted from the request
-      status: type === "sales" || type === "revenue" ? status : undefined,
-    });
-    const blobUrl = URL.createObjectURL(response.data);
-    const link = document.createElement("a");
-    link.href = blobUrl;
-    link.download = `${type}-export-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(blobUrl);
+  // "turn the CSV blob into a downloaded file, or read a validation
+  // error back out of it" mechanics live in one place.
+  const triggerDownload = (type, startDate, endDate, status) => {
+    return downloadExportCsv(
+      exportReport,
+      {
+        type,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        // status only means anything to the backend for type "sales" or
+        // "revenue" — left undefined for every other report type so it's
+        // simply omitted from the request
+        status: type === "sales" || type === "revenue" ? status : undefined,
+      },
+      `${type}-export-${new Date().toISOString().slice(0, 10)}`,
+    );
   };
 
   const handleQuickExport = async (type) => {
     setExportingType(type);
     try {
-      await triggerDownload(type);
-      showSuccess("Export downloaded.");
-    } catch (error) {
-      showError(
-        `Failed to export "${type}". This report type may not be supported by the backend yet.`,
-      );
+      const { success, message } = await triggerDownload(type);
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(
+          message ||
+            `Failed to export "${type}". This report type may not be supported by the backend yet.`,
+        );
+      }
     } finally {
       setExportingType(null);
     }
@@ -146,15 +147,17 @@ const ExportData = () => {
   const handleCustomExport = async () => {
     setIsCustomExporting(true);
     try {
-      await triggerDownload(
+      const { success, message } = await triggerDownload(
         customType,
         customStartDate,
         customEndDate,
         customStatus,
       );
-      showSuccess("Export downloaded.");
-    } catch (error) {
-      showError("Failed to generate export. Please try again.");
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to generate export. Please try again.");
+      }
     } finally {
       setIsCustomExporting(false);
     }

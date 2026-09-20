@@ -11,10 +11,10 @@
 // The reply box is REAL — it calls API 92 (Send WhatsApp Message)
 // directly, so an admin can genuinely message this customer from here.
 //
-// "Export Log" is REAL too — it builds a CSV client-side from the
-// messages already loaded on screen (see utils/downloadCsv.js), not a
-// backend export call (no matching export endpoint exists for
-// WhatsApp data specifically).
+// "Export Log" is REAL — it now calls API 99 (Export Report,
+// type=whatsapp_conversation) directly, so the downloaded file is this
+// phone number's complete message history rather than only whatever
+// happened to already be loaded on screen (see utils/downloadExportCsv.js).
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,10 +25,11 @@ import {
   getWhatsAppSessions,
   sendWhatsAppMessage,
 } from "../../api/whatsapp.api";
+import { exportReport } from "../../api/analytics.api";
 import { WHATSAPP_DIRECTION } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
-import downloadCsv from "../../utils/downloadCsv";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import { showSuccess, showError } from "../ui/Toast";
 import Avatar from "../ui/Avatar";
 import Input from "../ui/Input";
@@ -41,7 +42,8 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
 
   const { data: logsResponse, isLoading } = useQuery({
     queryKey: ["whatsappBotLogs", "thread", phoneNumber],
-    queryFn: ({ signal }) => getWhatsAppLogs({ phone_number: phoneNumber }, signal),
+    queryFn: ({ signal }) =>
+      getWhatsAppLogs({ phone_number: phoneNumber }, signal),
     enabled: !!phoneNumber,
   });
   const messages = extractListData(logsResponse).sort(
@@ -71,25 +73,36 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
     onError: () => showError("Failed to send message."),
   });
 
-  const handleExport = () => {
-    if (messages.length === 0) {
-      showError("No messages to export yet.");
-      return;
+  // --------------------------------------------------
+  // EXPORT — API 99, type=whatsapp_conversation. The backend now
+  // builds and returns the CSV directly for this phone number's full
+  // message history, rather than only whatever happens to already be
+  // loaded on screen. phone_number is required by this export type —
+  // ChatPanel never renders without one (see the early return below),
+  // so it is always safe to send here.
+  // --------------------------------------------------
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "whatsapp_conversation",
+          phone_number: phoneNumber,
+        },
+        `whatsapp-log-${phoneNumber}`,
+      );
+
+      if (success) {
+        showSuccess("Log exported.");
+      } else {
+        showError(message || "Failed to export this conversation.");
+      }
+    } finally {
+      setIsExporting(false);
     }
-    downloadCsv(
-      messages.map((m) => ({
-        direction: m.direction,
-        message: m.message,
-        date: formatDate(m.created_at),
-      })),
-      [
-        { key: "direction", label: "Direction" },
-        { key: "message", label: "Message" },
-        { key: "date", label: "Date" },
-      ],
-      `whatsapp-log-${phoneNumber}`,
-    );
-    showSuccess("Log exported.");
   };
 
   if (!phoneNumber) {
@@ -117,10 +130,11 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
         </div>
         <button
           onClick={handleExport}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary"
+          disabled={isExporting}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <AiOutlineDownload className="w-4 h-4" />
-          Export Log
+          {isExporting ? "Exporting..." : "Export Log"}
         </button>
       </div>
 

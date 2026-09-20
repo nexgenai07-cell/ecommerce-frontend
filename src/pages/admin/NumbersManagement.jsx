@@ -14,10 +14,11 @@ import {
 // two stat cards below ("Active Sessions" / "Bot-Handled"), since that
 // is a genuinely different, still-small-and-bounded concept —
 // currently mid-flow bot sessions — not the full conversation history.
+import { exportReport } from "../../api/analytics.api";
 import { ROUTES } from "../../constants/routes";
 import extractListData from "../../utils/extractListData";
 import formatRelativeTime from "../../utils/formatRelativeTime";
-import downloadCsv from "../../utils/downloadCsv";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -37,12 +38,6 @@ import NumbersFilters from "../../components/admin-whatsapp/NumbersFilters";
 // Selectable "rows per page" values shown in the pagination dropdown.
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
-
-// Backend's page_size cap on /api/v1/admin/whatsapp/conversations/
-// (API 116.1) — same cap already used for the on-screen pagination,
-// now also used to pull an exported list in as few requests as
-// possible.
-const EXPORT_PAGE_SIZE = 100;
 
 const NumbersManagement = () => {
   const navigate = useNavigate();
@@ -180,56 +175,29 @@ const NumbersManagement = () => {
     },
   ];
 
-  // Exports EVERY conversation matching the current search (not just
-  // the page on screen right now), looping pages if needed — the same
-  // page-looping pattern used for every other admin table's export.
+  // --------------------------------------------------
+  // EXPORT — API 99, type=whatsapp_numbers. The backend builds and
+  // returns the CSV file directly for the current search, so this is
+  // one request instead of looping every page of results and building
+  // the file in the browser.
+  // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const baseParams = {
-        search: debouncedSearch || undefined,
-        page_size: EXPORT_PAGE_SIZE,
-      };
-
-      const allConversations = [];
-      let page = 1;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const response = await getWhatsAppConversations({
-          ...baseParams,
-          page,
-        });
-        allConversations.push(...extractListData(response));
-        const matchingTotal = response?.data?.count ?? allConversations.length;
-        if (allConversations.length >= matchingTotal || !response?.data?.next) {
-          break;
-        }
-        page += 1;
-      }
-
-      if (allConversations.length === 0) {
-        showError("No numbers match the current search to export.");
-        return;
-      }
-
-      downloadCsv(
-        allConversations.map((conversation) => ({
-          name: conversation.customer_name || "Unknown",
-          phone: conversation.phone_number,
-          total_chats: conversation.message_count,
-          last_active: conversation.last_message_at,
-        })),
-        [
-          { key: "name", label: "Customer" },
-          { key: "phone", label: "Phone Number" },
-          { key: "total_chats", label: "Total Chats" },
-          { key: "last_active", label: "Last Active" },
-        ],
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "whatsapp_numbers",
+          search: debouncedSearch || undefined,
+        },
         "whatsapp-numbers",
       );
-      showSuccess("Export downloaded.");
-    } catch (error) {
-      showError("Failed to export numbers. Please try again.");
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export numbers. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }

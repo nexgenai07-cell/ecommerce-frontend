@@ -30,6 +30,7 @@ import formatDate from "../../utils/formatDate";
 // formatDate — converts a raw ISO date string into "Jul 15, 2026" format
 
 import extractListData from "../../utils/extractListData";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 // extractListData — normalizes the response into a plain array,
 // regardless of whether it's a paginated object or a bare array
 
@@ -160,34 +161,23 @@ const CustomerManagement = () => {
     setIsExporting(true);
     // Shows the loading spinner on the Export button immediately
     try {
-      const response = await exportReport({ type: "customers" });
-      // Requests the CSV export blob from the backend
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        { type: "customers" },
+        `customers-export-${new Date().toISOString().slice(0, 10)}`,
+      );
+      // downloadExportCsv() requests the CSV blob, saves it as a real
+      // file, and — on a validation failure — reads the JSON error
+      // back out of the blob instead of it being lost
 
-      const blobUrl = URL.createObjectURL(response.data);
-      // Creates a temporary in-browser URL pointing to the downloaded file
-
-      const link = document.createElement("a");
-      // Builds a hidden <a> tag purely to trigger a file download
-
-      link.href = blobUrl;
-      link.download = `customers-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      // Filename includes today's date, e.g. "customers-export-2026-07-18.csv"
-
-      document.body.appendChild(link);
-      link.click();
-      // Programmatically "clicks" the link to start the download
-
-      link.remove();
-      // Cleans up the temporary <a> tag from the DOM
-
-      URL.revokeObjectURL(blobUrl);
-      // Frees the browser memory used by the temporary blob URL
-
-      showSuccess("Export downloaded.");
-      // Confirms success to the admin via a toast notification
-    } catch (error) {
-      showError("Failed to export customers. Please try again.");
-      // Shows a friendly error toast if the export request fails
+      if (success) {
+        showSuccess("Export downloaded.");
+        // Confirms success to the admin via a toast notification
+      } else {
+        showError(message || "Failed to export customers. Please try again.");
+        // Shows the backend's real reason where available, or a
+        // friendly fallback if the export request failed some other way
+      }
     } finally {
       setIsExporting(false);
       // Always turns off the loading spinner, whether it succeeded or failed

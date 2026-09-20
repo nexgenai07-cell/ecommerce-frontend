@@ -159,6 +159,41 @@ export const deleteDiscount = (id, signal) => {
 };
 
 // ----------------------------
+// API 43.1 - Delete multiple discount coupons in one request (Admin only)
+// ----------------------------
+// Soft-deletes several coupons in a single call. Replaces the old
+// pattern of calling deleteDiscount() once per selected row — each id
+// in the batch is still processed independently on the backend using
+// the exact same rules as deleteDiscount(), so one id failing never
+// blocks the rest of the batch.
+//
+// ids — a non-empty array of discount ids, maximum 100 per call. A
+// selection larger than 100 rows must be split into batches of 100
+// and sent as separate calls (see chunkArray in utils/chunkArray.js).
+//
+// The response is always 200 OK for a well-formed request, even if
+// some ids could not be deleted, so the result must be read from the
+// response body rather than the HTTP status:
+//   deleted_ids — ids that were deleted successfully
+//   missing_ids — ids that no longer exist (already deleted, or
+//                 stale in the current selection); these should be
+//                 dropped from the table and the selection quietly,
+//                 without showing an error
+//   failed      — present only when something unexpected happened
+//                 for a specific id; each entry is { id, error }
+//   message     — a ready-made summary sentence, suitable for a toast
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid ids, or more than 100 ids) and nothing was processed.
+export const bulkDeleteDiscounts = (ids, signal) => {
+  return axiosInstance.post(
+    "/api/v1/discounts/bulk-delete/",
+    { ids },
+    { signal },
+  );
+};
+
+// ----------------------------
 // API - Validate a coupon code (Customer-facing)
 // ----------------------------
 // Used at checkout when a customer types a coupon code into an

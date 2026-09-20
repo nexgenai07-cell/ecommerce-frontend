@@ -26,8 +26,9 @@ import {
   getReturns,
   getReturnDetail,
   updateReturnStatus,
+  bulkUpdateReturnStatus,
 } from "../../api/returns.api";
-// getReturns         — GET /api/v1/returns/. An admin calling this gets
+// getReturns             — GET /api/v1/returns/. An admin calling this gets
 //                       EVERY return request across the store (role-based
 //                       filtering happens server-side, no separate admin
 //                       endpoint is needed). `page`, `status`, `search`,
@@ -37,11 +38,14 @@ import {
 //                       fetched at a time. Each return carries
 //                       can_update_status and allowed_statuses, which say
 //                       whether the admin may decide it and how.
-// getReturnDetail    — GET /api/v1/returns/{id}/. Reloads a single return.
-// updateReturnStatus — PUT /api/v1/admin/returns/{id}/status/
+// getReturnDetail        — GET /api/v1/returns/{id}/. Reloads a single return.
+// updateReturnStatus     — PUT /api/v1/admin/returns/{id}/status/
 //                       body: { status: "approved" | "rejected" }. Only a
 //                       pending return can be decided, and the decision
 //                       is final.
+// bulkUpdateReturnStatus — POST /api/v1/admin/returns/bulk-status/, decides
+//                       every selected return in one call instead of one
+//                       request per return.
 //
 // The backend `search` matches order number and return reason text. It is
 // not guaranteed to match the return's own reference number (e.g.
@@ -78,6 +82,8 @@ import { RETURN_STATUS } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
 import formatPrice from "../../utils/formatPrice";
+import chunkArray from "../../utils/chunkArray";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -797,12 +803,13 @@ const ReturnsManagement = () => {
   };
 
   // --------------------------------------------------
-  // BULK APPROVE / REJECT — called once per selected return (there is no
-  // bulk endpoint on the backend). Only returns the backend allows the
-  // admin to decide (can_update_status) are eligible: already-decided
-  // returns in the selection are left untouched and reported as skipped,
-  // because a decision is final. Every request is attempted and reported
-  // on its own, so one failure does not hide the returns that succeeded.
+  // BULK APPROVE / REJECT — API 67.1. Only returns the backend allows
+  // the admin to decide (can_update_status) are sent at all: an
+  // already-decided return in the selection is left untouched and
+  // silently excluded here, since a decision is final. The eligible
+  // ids are sent in batches of up to 100 per request instead of one
+  // request per return, and each batch's own updated_ids/failed arrays
+  // are read to build the final summary.
   // --------------------------------------------------
   const selectedPendingReturns = visibleReturns.filter(
     (r) => selectedReturnIds.includes(r.id) && r.can_update_status === true,
@@ -817,61 +824,71 @@ const ReturnsManagement = () => {
   const handleConfirmBulkDecision = async () => {
     setIsBulkDeciding(true);
     try {
-      const results = await Promise.allSettled(
-        selectedPendingReturns.map((r) =>
-          updateReturnStatus(r.id, { status: bulkAction }),
-        ),
+      const batches = chunkArray(
+        selectedPendingReturns.map((r) => r.id),
+        100,
       );
-      const updatedCount = results.filter(
-        (result) => result.status === "fulfilled",
-      ).length;
-      const failedResults = results.filter(
-        (result) => result.status === "rejected",
-      );
+      let updatedCount = 0;
+      const failures = [];
+
+      for (const batch of batches) {
+        const response = await bulkUpdateReturnStatus(batch, bulkAction);
+        updatedCount += response.data.updated_ids?.length ?? 0;
+        // missing_ids means the return no longer exists in this
+        // selection — not a failure, so nothing is shown for it.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
 
       if (updatedCount > 0) {
         showSuccess(
           `${updatedCount} return${updatedCount === 1 ? "" : "s"} ${bulkAction}.`,
         );
       }
-      if (failedResults.length > 0) {
+      if (failures.length > 0) {
         showError(
-          failedResults[0].reason?.response?.data?.error ||
-            failedResults[0].reason?.response?.data?.message ||
-            `${failedResults.length} return${failedResults.length === 1 ? "" : "s"} could not be updated.`,
+          failures[0].error ||
+            `${failures.length} return${failures.length === 1 ? "" : "s"} could not be updated.`,
         );
       }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
       setSelectedReturnIds([]);
       setTableResetKey((key) => key + 1);
       setBulkAction(null);
+    } catch (error) {
+      showError(
+        error?.response?.data?.detail ||
+          "Failed to update the selected returns.",
+      );
     } finally {
       setIsBulkDeciding(false);
     }
   };
 
   // --------------------------------------------------
-  // EXPORT — downloads the returned blob as a .csv file
+  // EXPORT — API 99. downloadExportCsv() reads the JSON error back out
+  // of the blob on a validation failure, so the real reason reaches
+  // this toast instead of a generic message.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({
-        type: "returns",
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-      });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `returns-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Export downloaded.");
-    } catch {
-      showError("Failed to export returns. Please try again.");
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "returns",
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        },
+        `returns-export-${new Date().toISOString().slice(0, 10)}`,
+      );
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export returns. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }

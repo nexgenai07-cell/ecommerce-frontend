@@ -8,6 +8,7 @@ import { exportReport } from "../../api/analytics.api";
 // exportReport — `type: "revenue"` downloads this report as a CSV file
 
 import { showSuccess, showError } from "../../components/ui/Toast";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 
 import AnalyticsPageHeader from "../../components/admin-analytics/AnalyticsPageHeader";
 // AnalyticsPageHeader — the page title with the Filters and Export buttons
@@ -105,23 +106,22 @@ const RevenueReport = () => {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({
-        type: "revenue",
-        start_date: startDate,
-        end_date: endDate,
-        status, // same filter currently selected on screen, so the downloaded file always matches what's shown
-      });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `revenue-report-${startDate}-to-${endDate}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Report downloaded.");
-    } catch (error) {
-      showError("Failed to export report. Please try again.");
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "revenue",
+          start_date: startDate,
+          end_date: endDate,
+          status, // same filter currently selected on screen, so the downloaded file always matches what's shown
+        },
+        `revenue-report-${startDate}-to-${endDate}`,
+      );
+
+      if (success) {
+        showSuccess("Report downloaded.");
+      } else {
+        showError(message || "Failed to export report. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }

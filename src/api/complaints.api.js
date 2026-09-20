@@ -120,6 +120,50 @@ export const updateComplaintStatus = (id, data, signal) => {
 };
 
 // ----------------------------
+// API 71.1 - Update the status of multiple complaints in one request (Admin only)
+// ----------------------------
+// Moves several complaints to the same target status in a single call.
+// Replaces the old pattern of calling updateComplaintStatus() once per
+// selected row — each complaint in the batch still follows the exact
+// same fixed workflow as updateComplaintStatus() (open -> in_progress
+// -> resolved -> closed, or back to open; closed is final),
+// independently of the others, so one complaint failing never blocks
+// the rest of the batch. Setting a complaint to the status it already
+// has is accepted without error.
+//
+// ids — a non-empty array of complaint ids, maximum 100 per call. A
+// selection larger than 100 rows must be split into batches of 100
+// and sent as separate calls (see chunkArray in utils/chunkArray.js).
+// status — the target status to apply to every selected complaint,
+// one of: "open", "in_progress", "resolved", "closed".
+//
+// The response is always 200 OK for a well-formed request, even if
+// some complaints could not be updated, so the result must be read
+// from the response body rather than the HTTP status:
+//   updated_ids — complaint ids that were updated successfully
+//   missing_ids — complaint ids that no longer exist, or are stale in
+//                 the current selection; these should be dropped from
+//                 the table and the selection quietly, without an error
+//   failed      — complaints that exist but could not make the
+//                 requested move (for example a still-"open" complaint
+//                 being sent straight to "resolved", or a "closed"
+//                 complaint); each entry is { id, error }
+//   message     — a ready-made summary sentence, suitable for a toast
+//   results     — one small object per updated complaint, e.g. its new
+//                 status
+//
+// A 400 response means the request itself was invalid (empty ids,
+// invalid ids, more than 100 ids, or an invalid status) and nothing
+// was processed.
+export const bulkUpdateComplaintStatus = (ids, status, signal) => {
+  return axiosInstance.post(
+    "/api/v1/admin/complaints/bulk-status/",
+    { ids, status },
+    { signal },
+  );
+};
+
+// ----------------------------
 // API - Get a complaint's full message thread
 // ----------------------------
 // Replaces the old single admin "response" field entirely — a

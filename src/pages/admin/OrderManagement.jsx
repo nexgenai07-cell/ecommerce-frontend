@@ -9,13 +9,13 @@ import { AiOutlineEye, AiOutlineShoppingCart } from "react-icons/ai";
 import {
   getAdminOrders,
   filterAdminOrders,
-  updateOrderStatus,
+  bulkUpdateOrderStatus,
 } from "../../api/orders.api";
-// getAdminOrders    — GET /api/v1/admin/orders/ (no filters active)
-// filterAdminOrders — GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
+// getAdminOrders       — GET /api/v1/admin/orders/ (no filters active)
+// filterAdminOrders    — GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
 // Both forward `page`, and `ordering` works on the filter endpoint.
-// updateOrderStatus — PUT /api/v1/admin/orders/{id}/status/, used below to
-// drive the bulk status-update action bar.
+// bulkUpdateOrderStatus — POST /api/v1/admin/orders/bulk-status/, drives
+// the bulk status-update action bar below.
 
 import { exportReport } from "../../api/analytics.api";
 // exportReport — `type: "orders"` is an accepted value
@@ -25,6 +25,8 @@ import { ORDER_STATUS } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
+import chunkArray from "../../utils/chunkArray";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -281,63 +283,83 @@ const OrderManagement = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — downloads the returned blob as a real .csv file
+  // EXPORT — API 99. downloadExportCsv() downloads the returned blob as
+  // a real .csv file, and — on a validation failure — reads the JSON
+  // error back out of the blob so the real reason reaches this toast
+  // instead of a generic message.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await exportReport({
-        type: "orders",
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-      });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `orders-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-      showSuccess("Export downloaded.");
-    } catch {
-      // catch with no binding — we don't need the error object itself,
-      // only need to know the export failed so we can show a message.
-      showError("Failed to export orders. Please try again.");
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "orders",
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        },
+        `orders-export-${new Date().toISOString().slice(0, 10)}`,
+      );
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export orders. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }
   };
 
   // --------------------------------------------------
-  // BULK STATUS UPDATE — called once per selected order (there
-  // is no bulk endpoint on the backend). Uses Promise.allSettled so one
-  // failing order doesn't stop the rest of the batch from going
-  // through, then reports how many succeeded and how many failed.
+  // BULK STATUS UPDATE — API 63.2. Every selected order is sent in one
+  // request per batch of up to 100 order numbers instead of one request
+  // per order. Each order is still evaluated independently on the
+  // backend, so an order that isn't eligible for this transition (for
+  // example already delivered, or unpaid) is reported in that batch's
+  // "failed" array without stopping the rest of the batch.
+  //
+  // "Cancelled" is intentionally not offered in BULK_STATUS_OPTIONS
+  // above — cancelling requires a cancellation reason, and for a QR-paid
+  // order also manual refund details, which only make sense collected
+  // per order. Cancelling stays a per-order action on the Order Detail
+  // page (updateOrderStatus in orders.api.js).
   // --------------------------------------------------
   const handleBulkStatusUpdate = async () => {
     setIsBulkUpdating(true);
     try {
-      const results = await Promise.allSettled(
-        selectedOrderNumbers.map((orderNumber) =>
-          updateOrderStatus(orderNumber, { status: bulkTargetStatus }),
-        ),
-      );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
+      const batches = chunkArray(selectedOrderNumbers, 100);
+      let updatedCount = 0;
+      const failures = [];
 
-      if (succeeded > 0) {
+      for (const batch of batches) {
+        const response = await bulkUpdateOrderStatus(batch, bulkTargetStatus);
+        updatedCount += response.data.updated_ids?.length ?? 0;
+        // missing_ids means the order no longer matches this selection
+        // (for example it was deep-linked from a stale page) — that is
+        // not a failure, so it needs no message of its own.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
+
+      if (updatedCount > 0) {
         showSuccess(
-          `${succeeded} order${succeeded === 1 ? "" : "s"} updated to "${bulkTargetStatus}".${failed > 0 ? ` ${failed} failed.` : ""}`,
+          `${updatedCount} order${updatedCount === 1 ? "" : "s"} updated to "${bulkTargetStatus}".${failures.length > 0 ? ` ${failures.length} failed.` : ""}`,
         );
       }
-      if (succeeded === 0) {
+      if (updatedCount === 0) {
         showError("Failed to update the selected orders.");
       }
 
       refetch();
       setSelectedOrderNumbers([]);
       setConfirmBulkStatusOpen(false);
+    } catch (error) {
+      showError(
+        error?.response?.data?.detail ||
+          "Failed to update the selected orders.",
+      );
     } finally {
       setIsBulkUpdating(false);
     }

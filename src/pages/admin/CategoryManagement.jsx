@@ -9,10 +9,11 @@ import {
 } from "react-icons/ai";
 
 import { getCategories, deleteCategory } from "../../api/categories.api";
+import { exportReport } from "../../api/analytics.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
-import downloadCsv from "../../utils/downloadCsv";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -207,55 +208,29 @@ const CategoryManagement = () => {
     setCurrentPage(1);
   };
 
-  // The backend's page_size cap on /api/v1/categories/ — the same cap used
-  // for the on-screen pagination, also used here to pull a filtered export
-  // in as few requests as possible.
-  const EXPORT_PAGE_SIZE = 100;
-
-  // Exports EVERY category matching the currently applied filters (not
-  // just whatever page happens to be on screen right now), looping
-  // pages if needed, then builds the CSV from that full set.
+  // --------------------------------------------------
+  // EXPORT — API 99, type=categories. The backend builds and returns
+  // the CSV file directly for the currently applied filters, so this
+  // is one request instead of looping every page of results and
+  // building the file in the browser.
+  // --------------------------------------------------
   const handleExport = async () => {
-    try {
-      const baseParams = {
+    const { success, message } = await downloadExportCsv(
+      exportReport,
+      {
+        type: "categories",
         search: debouncedSearch || undefined,
         start_date: filters.startDate || undefined,
         end_date: filters.endDate || undefined,
         ordering: filters.ordering,
-        page_size: EXPORT_PAGE_SIZE,
-      };
+      },
+      "categories",
+    );
 
-      const allMatching = [];
-      let page = 1;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const response = await getCategories({ ...baseParams, page });
-        allMatching.push(...extractListData(response));
-        const matchingTotal = response?.data?.count ?? allMatching.length;
-        if (allMatching.length >= matchingTotal || !response?.data?.next) {
-          break;
-        }
-        page += 1;
-      }
-
-      downloadCsv(
-        allMatching.map((category) => ({
-          name: category.name,
-          product_count: category.product_count ?? 0,
-          created_at: category.created_at
-            ? formatDate(category.created_at)
-            : "",
-        })),
-        [
-          { key: "name", label: "Name" },
-          { key: "product_count", label: "Products" },
-          { key: "created_at", label: "Created Date" },
-        ],
-        "categories",
-      );
+    if (success) {
       showSuccess("Categories exported.");
-    } catch (error) {
-      showError("Failed to export categories. Please try again.");
+    } else {
+      showError(message || "Failed to export categories. Please try again.");
     }
   };
 

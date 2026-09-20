@@ -15,7 +15,7 @@ import {
 import {
   searchProducts,
   getLowStockProducts,
-  deleteProduct,
+  bulkDeleteProducts,
 } from "../../api/products.api";
 
 import { getCategories } from "../../api/categories.api";
@@ -24,6 +24,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import downloadCsv from "../../utils/downloadCsv";
+import chunkArray from "../../utils/chunkArray";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -294,27 +295,61 @@ const ProductList = () => {
   const totalCount = totalCountResponse?.data?.count ?? 0;
 
   // --------------------------------------------------
-  // BULK DELETE — API 21, called once per selected id (no bulk endpoint
-  // exists). The backend performs a real soft delete internally (an
-  // is_delete flag on each product's row, never exposed to the
-  // frontend), which is why a deleted product simply stops appearing
-  // in the search/low-stock queries after this succeeds.
+  // BULK DELETE — API 34.1. A single row selected through the row-level
+  // delete button still goes through this same function, so there is
+  // only one delete code path in this file.
+  //
+  // The backend performs a real soft delete internally (an is_delete
+  // flag on each product's row, never exposed to the frontend), which
+  // is why a deleted product simply stops appearing in the search/
+  // low-stock queries once this succeeds.
+  //
+  // The endpoint accepts at most 100 ids per call, so a selection
+  // larger than that is split into batches and sent one after another.
+  // Each batch's response is read for its own deleted_ids, missing_ids
+  // and failed arrays rather than trusted purely on HTTP status, since
+  // a 200 response can still contain a mix of successes and failures.
   // --------------------------------------------------
   const handleBulkDelete = async () => {
     setIsDeleting(true);
     try {
-      await Promise.all(
-        selectedIds.map((productId) => deleteProduct(productId)),
-      );
-      showSuccess(
-        `${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} deleted.`,
-      );
+      const batches = chunkArray(selectedIds, 100);
+      let deletedCount = 0;
+      const failures = [];
+
+      for (const batch of batches) {
+        const response = await bulkDeleteProducts(batch);
+        deletedCount += response.data.deleted_ids?.length ?? 0;
+        // missing_ids means the row was already gone before this call
+        // ran (deleted by someone else, or stale in the local
+        // selection) — that is not a failure, so nothing is shown for
+        // it and the row is simply left out of the refreshed table.
+        if (response.data.failed?.length) {
+          failures.push(...response.data.failed);
+        }
+      }
+
+      if (failures.length > 0) {
+        showError(
+          `${deletedCount} product${deletedCount === 1 ? "" : "s"} deleted. ${failures.length} could not be deleted: ${failures
+            .map((item) => item.error)
+            .join(" ")}`,
+        );
+      } else {
+        showSuccess(
+          `${deletedCount} product${deletedCount === 1 ? "" : "s"} deleted.`,
+        );
+      }
+
       setSelectedIds([]);
       setConfirmDeleteOpen(false);
       queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       refetch();
     } catch (error) {
-      showError("Some products couldn't be deleted. Please try again.");
+      showError(
+        error?.response?.data?.detail ||
+          "Some products couldn't be deleted. Please try again.",
+      );
     } finally {
       setIsDeleting(false);
     }

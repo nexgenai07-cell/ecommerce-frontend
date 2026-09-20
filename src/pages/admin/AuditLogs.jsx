@@ -12,10 +12,11 @@ import {
   getAuditLogEntities,
   getAuditLogUsers,
 } from "../../api/admin.api";
+import { exportReport } from "../../api/analytics.api";
 import extractListData from "../../utils/extractListData";
 import formatDate from "../../utils/formatDate";
 import useDebounce from "../../hooks/useDebounce";
-import downloadCsv from "../../utils/downloadCsv";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import StatsCard from "../../components/ui/StatsCard";
 import Badge from "../../components/ui/Badge";
@@ -167,68 +168,33 @@ const AuditLogs = () => {
   const getCount = (response) =>
     response?.data?.count ?? extractListData(response).length;
 
-  // Shared row shape for the CSV.
-  const buildExportRow = (log) => ({
-    timestamp: formatDate(log.created_at),
-    user: typeof log.user === "object" ? log.user?.name : log.user,
-    action: log.action,
-    entity: log.entity,
-    entity_id: log.entity_id,
-    ip_address: log.ip_address,
-  });
-
-  // Backend's page_size cap on /api/v1/admin/audit-logs/ (API 82) — now
-  // confirmed/supported by the backend, same as the on-screen pagination.
-  const EXPORT_PAGE_SIZE = 100;
-
+  // --------------------------------------------------
+  // EXPORT — API 99, type=audit_logs. The backend builds and returns
+  // the CSV file directly for the currently applied filters, so this
+  // is one request instead of looping every page of results and
+  // building the file in the browser.
+  // --------------------------------------------------
   const [isExporting, setIsExporting] = useState(false);
 
-  // Pulls EVERY log matching the currently applied filters (not just
-  // the page on screen right now), looping pages if needed, then
-  // builds the CSV from the full set.
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const baseParams = {
-        entity: entityFilter || undefined,
-        user: userFilter || undefined,
-        search: debouncedSearch || undefined,
-        page_size: EXPORT_PAGE_SIZE,
-      };
-
-      const allLogs = [];
-      let page = 1;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const response = await getAuditLogs({ ...baseParams, page });
-        allLogs.push(...extractListData(response));
-        const totalCount = response?.data?.count ?? allLogs.length;
-        if (allLogs.length >= totalCount || !response?.data?.next) {
-          break;
-        }
-        page += 1;
-      }
-
-      if (allLogs.length === 0) {
-        showError("No logs match the current filters to export.");
-        return;
-      }
-
-      downloadCsv(
-        allLogs.map(buildExportRow),
-        [
-          { key: "timestamp", label: "Timestamp" },
-          { key: "user", label: "User" },
-          { key: "action", label: "Action" },
-          { key: "entity", label: "Entity" },
-          { key: "entity_id", label: "Entity ID" },
-          { key: "ip_address", label: "IP Address" },
-        ],
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        {
+          type: "audit_logs",
+          entity: entityFilter || undefined,
+          user: userFilter || undefined,
+          search: debouncedSearch || undefined,
+        },
         "audit-logs",
       );
-      showSuccess("Export downloaded.");
-    } catch (error) {
-      showError("Failed to export logs. Please try again.");
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export logs. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }
