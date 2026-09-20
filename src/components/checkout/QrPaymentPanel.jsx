@@ -15,9 +15,10 @@
 //    panel switches to a waiting state — the order itself stays
 //    "pending_payment" until an admin manually approves the proof.
 
-import { useState } from "react";
-import { HiCheckCircle, HiOutlineClock } from "react-icons/hi2";
-import QrProofUploadForm from "../payments/QrProofUploadForm";
+import { useState } from "react"; // React hook to track local proof-submitted state
+import { HiCheckCircle, HiOutlineClock } from "react-icons/hi2"; // Icon set used for status indicators
+import QrProofUploadForm from "../payments/QrProofUploadForm"; // Form component for uploading payment screenshot
+import fallbackQrImage from "../../assets/easypaisa-jazzcash-qr.png"; // TEMPORARY: local placeholder QR image until backend provides qr_image_url
 
 const QrPaymentPanel = ({ orderNumber, qrImageUrl, paymentReference }) => {
   // Tracks whether proof has been submitted yet in THIS session — once
@@ -26,6 +27,9 @@ const QrPaymentPanel = ({ orderNumber, qrImageUrl, paymentReference }) => {
   // is the source of truth for payment.status going forward — this is
   // just what Checkout shows immediately after the upload succeeds.)
   const [proofSubmitted, setProofSubmitted] = useState(false);
+
+  // TEMPORARY: use the backend-provided QR image if it exists, otherwise fall back to the local placeholder image
+  const displayedQrImage = qrImageUrl || fallbackQrImage;
 
   if (proofSubmitted) {
     return (
@@ -54,9 +58,9 @@ const QrPaymentPanel = ({ orderNumber, qrImageUrl, paymentReference }) => {
         </h2>
         <div className="w-48 h-48 rounded-xl border border-gray-200 p-3 bg-white">
           <img
-            src={qrImageUrl}
-            alt="QR code for Easypaisa/JazzCash payment"
-            className="w-full h-full object-contain"
+            src={displayedQrImage} // Uses backend QR image when available, otherwise the temporary local placeholder
+            alt="QR code for Easypaisa/JazzCash payment" // Accessible description of the image for screen readers
+            className="w-full h-full object-contain" // Keeps QR code proportions intact within its container
           />
         </div>
         <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-2">

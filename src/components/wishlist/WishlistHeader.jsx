@@ -1,6 +1,5 @@
-import { AiOutlineShareAlt, AiFillHeart } from "react-icons/ai"; // Share icon for the copy-link button, filled heart for the wishlist icon box
+import { AiFillHeart } from "react-icons/ai"; // Filled heart icon for the wishlist icon box
 import { BsCartPlus } from "react-icons/bs"; // Cart-plus icon for the Add All to Cart button
-import { showSuccess } from "../ui/Toast"; // Toast notification helper for clipboard copy feedback
 import { Spinner } from "../ui/Spinner"; // Reusable spinner — shown inside the button while adding all items
 
 const WishlistHeader = ({
@@ -8,14 +7,6 @@ const WishlistHeader = ({
   onAddAllToCart, // function — callback fired when the customer clicks Add All to Cart
   isAddingAll, // boolean — true while the add-all mutation is in flight; disables the button
 }) => {
-  // handleShare — copies the current page URL to the clipboard
-  // navigator.clipboard is optional-chained in case the browser doesn't support it
-  // Shows a success toast to confirm the link was copied
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href); // copies e.g. "https://site.com/account/wishlist"
-    showSuccess("Wishlist link copied!"); // green toast confirms the action to the user
-  };
-
   return (
     // Outer row — stacks vertically on mobile (flex-col), aligns to bottom edge side by side on sm+
     // sm:items-end aligns the icon+heading block and the buttons along their bottom edges
@@ -55,20 +46,6 @@ const WishlistHeader = ({
           Hidden entirely when the wishlist is empty to keep the header clean      */}
       {itemCount > 0 && (
         <div className="flex items-center gap-3">
-          {/* Share Wishlist — glass/outline style, copies the page URL to clipboard on click */}
-          <button
-            onClick={handleShare}
-            className="
-              flex items-center gap-2 px-4 py-2.5
-              bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700
-              hover:border-primary/40 hover:bg-primary-50 hover:text-primary-dark
-              active:scale-[0.98] transition-all duration-200
-            "
-          >
-            <AiOutlineShareAlt className="w-4 h-4" /> {/* Share icon */}
-            Share Wishlist
-          </button>
-
           {/* Add All to Cart — gradient fill + soft brand-colored glow shadow gives
               this the "main action" weight it deserves as the primary CTA on the page
               disabled while isAddingAll is true to prevent duplicate mutations

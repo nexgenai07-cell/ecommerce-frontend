@@ -472,7 +472,7 @@ const ProductInfo = ({ product, imageRef }) => {
             "
           >
             <BsLightningCharge className="w-4 h-4" />
-            Buy Now
+            Buy Now(comming soon)
           </motion.button>
 
           <button
