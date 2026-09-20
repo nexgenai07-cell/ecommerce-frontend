@@ -1,6 +1,5 @@
 import FilterChip from "./FilterChip";
 import Input from "../../ui/Input";
-import Button from "../../ui/Button";
 
 // Key names that must always pass through untouched, regardless of
 // what's typed — none of these produce a character on their own, so
@@ -65,6 +64,10 @@ const formatWithThousands = (digits) =>
  * readability — minValue/maxValue themselves, and whatever
  * onMinChange/onMaxChange receive, are always the plain digit string.
  *
+ * Every change is applied to the list immediately, so there is no Apply
+ * button. The panel closes when the user clicks outside it or presses
+ * Escape.
+ *
  * Props:
  * - label:        Chip label, e.g. "Price".
  * - heading:      Small heading shown inside the panel, e.g. "Price Range".
@@ -94,44 +97,32 @@ const RangeFilterChip = ({
       onClear={onClear}
       panelClassName="w-60 max-w-[90vw] p-3"
     >
-      {({ close }) => (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-[11px] font-bold text-gray-800 mb-0.5">
-            {heading || `${label} Range`}
-          </p>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="Min"
-              value={formatWithThousands(minValue)}
-              onKeyDown={blockNonDigitKeydown}
-              onChange={(e) => onMinChange(stripToDigits(e.target.value))}
-              className="py-1.5 px-2 text-xs"
-            />
-            <span className="text-gray-300 shrink-0">-</span>
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="Max"
-              value={formatWithThousands(maxValue)}
-              onKeyDown={blockNonDigitKeydown}
-              onChange={(e) => onMaxChange(stripToDigits(e.target.value))}
-              className="py-1.5 px-2 text-xs"
-            />
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="primary"
-            fullWidth
-            onClick={close}
-            className="bg-gradient-to-r from-primary to-primary-dark font-semibold px-2 py-1 text-[11px]"
-          >
-            Apply
-          </Button>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-[11px] font-bold text-gray-800 mb-0.5">
+          {heading || `${label} Range`}
+        </p>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="Min"
+            value={formatWithThousands(minValue)}
+            onKeyDown={blockNonDigitKeydown}
+            onChange={(e) => onMinChange(stripToDigits(e.target.value))}
+            className="py-1.5 px-2 text-xs"
+          />
+          <span className="text-gray-300 shrink-0">-</span>
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="Max"
+            value={formatWithThousands(maxValue)}
+            onKeyDown={blockNonDigitKeydown}
+            onChange={(e) => onMaxChange(stripToDigits(e.target.value))}
+            className="py-1.5 px-2 text-xs"
+          />
         </div>
-      )}
+      </div>
     </FilterChip>
   );
 };

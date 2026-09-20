@@ -33,14 +33,12 @@ const OrderCard = ({ order, index = 0 }) => {
       ? totalItemCount - previewImages.length
       : 0;
 
-  // Track Order button is shown for orders that are still in motion (not yet delivered or cancelled)
-  const canTrack = [
-    ORDER_STATUS.PENDING,
-    ORDER_STATUS.ON_HOLD,
-    ORDER_STATUS.CONFIRMED,
-    ORDER_STATUS.SHIPPED,
-    ORDER_STATUS.OUT_FOR_DELIVERY,
-  ].includes(order.status);
+  // Track Order button is shown for orders that are still in motion. The
+  // backend flag (can_track) decides whether tracking is available at all
+  // — it is false for a cancelled order. A delivered order has nothing left
+  // to follow, so it gets the Return Items button instead of Track Order.
+  const canTrack =
+    order.can_track !== false && order.status !== ORDER_STATUS.DELIVERED;
 
   // Return Items button is shown only after the order has been successfully delivered
   const canReturn = order.status === ORDER_STATUS.DELIVERED;
@@ -184,8 +182,8 @@ const OrderCard = ({ order, index = 0 }) => {
               View Details
             </Link>
 
-            {/* Track Order — shown for orders still in motion: Pending, On Hold,
-                Confirmed, Shipped, or Out for Delivery
+            {/* Track Order — shown for orders still in motion (not cancelled
+                and not yet delivered)
                 Gradient fill + soft brand-colored glow shadow gives this the
                 "primary action" weight, consistent with other pages' main CTAs */}
             {canTrack && (

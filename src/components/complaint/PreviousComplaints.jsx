@@ -12,7 +12,8 @@ import { BsClockHistory } from "react-icons/bs";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that fetches the list of complaints from the backend
 import { getComplaints } from "../../api/complaints.api";
-import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the complaints endpoint)
+import extractListData from "../../utils/extractListData"; // Normalizer — handles both a plain array and a paginated response
+import useScrollToSectionOnHash from "../../hooks/useScrollToSectionOnHash"; // Scrolls this card into view when the page is opened with the #previous-complaints link (the dashboard's "View All")
 // Import the COMPLAINT_STATUS constant object containing the fixed status values used by the API
 import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 // Import a utility function that formats raw date strings into a human-readable format
@@ -76,8 +77,8 @@ const PreviousComplaints = () => {
   };
 
   // =============================================
-  // COMPLAINTS API
-  // API 55 — GET /api/v1/complaints/
+  // COMPLAINTS
+  // GET /api/v1/complaints/
   // =============================================
   // Fetch the list of complaints using React Query, also extracting the loading state
   const { data: complaintsData, isLoading } = useQuery({
@@ -89,9 +90,17 @@ const PreviousComplaints = () => {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Ref for the card below. When the page is opened with the
+  // "#previous-complaints" link, the page scrolls down to this card once its
+  // data has loaded.
+  const sectionRef = useScrollToSectionOnHash(
+    "previous-complaints",
+    !isLoading,
+  );
+
   // Safely extract the complaints array from the API response, defaulting to an empty array if data isn't available yet
-  // API_Documentation_Final.pdf (API 55) documents a flat array — routed
-  // through the normalizer defensively in case of backend/docs drift.
+  // Routed through the normalizer, which handles both a plain array and a
+  // paginated response.
   const allComplaints = extractListData(complaintsData);
   // Calculate the total number of complaints fetched
   const totalComplaints = allComplaints.length;
@@ -177,7 +186,7 @@ const PreviousComplaints = () => {
     {
       key: "actions",
       label: "Action",
-      // Navigates to the Complaint Detail page (API 56) for this specific complaint
+      // Navigates to the Complaint Detail page for this specific complaint
       render: (row) => (
         <Link
           to={ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", row.id)}
@@ -199,7 +208,12 @@ const PreviousComplaints = () => {
   // Begin the JSX returned by this component
   return (
     // Outer elevated card — white bg, rounded corners, soft shadow that glows emerald on hover, gradient strip on top
-    <div className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_26px_-8px_rgba(16,185,129,0.25)] transition-shadow duration-300 overflow-hidden">
+    // scroll-mt-28 keeps the card's heading clear of the fixed navbar when the
+    // page scrolls to it
+    <div
+      ref={sectionRef}
+      className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_26px_-8px_rgba(16,185,129,0.25)] transition-shadow duration-300 overflow-hidden scroll-mt-28"
+    >
       {/* Thin gradient accent strip across the top of the card, matching the Previous Returns table */}
       <div className="h-0.75 w-full bg-linear-to-r from-primary via-primary-light to-primary-dark" />
 

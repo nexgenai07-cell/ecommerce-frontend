@@ -434,6 +434,22 @@ const Checkout = () => {
   useEffect(() => {
     // If the user is not logged in, redirect them to the login page
     if (!isAuthenticated) {
+      if (isBuyNow) {
+        // DURABLE BACKUP — same reasoning as ProductInfo.jsx's own
+        // handleBuyNow: router state doesn't survive a hard page reload,
+        // which axiosInstance.js's session-refresh logic can trigger via
+        // window.location.href. This is a second write of the same
+        // backup for the (rarer) case where this page's own redirect
+        // fires instead of ProductInfo.jsx's — e.g. a direct link to
+        // /checkout carrying buyNow state while logged out.
+        try {
+          sessionStorage.setItem("buyNowRedirect", JSON.stringify(buyNowItem));
+        } catch {
+          // Storage unavailable — the router state below still covers
+          // the normal case.
+        }
+      }
+
       navigate(ROUTES.LOGIN, {
         state: {
           from: {

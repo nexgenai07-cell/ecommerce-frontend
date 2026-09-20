@@ -1,30 +1,22 @@
-import { useState } from "react"; // Local pagination state — which page of tickets is currently visible
-import { Link, useNavigate } from "react-router-dom"; // Link navigates to the return/complaint detail page when "View" is clicked; useNavigate drives the whole-row click
+import { Link, useNavigate } from "react-router-dom"; // Link opens a ticket's detail page or the full list; useNavigate drives the whole-row click
 import formatDate from "../../utils/formatDate"; // Converts an ISO date string into a readable format e.g. "Jun 29, 2026"
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
-import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel and the rest of the
-// customer account pages — swapped in here so this widget finally gets the
-// same green gradient header, row divider, compact font size, hover tint,
-// and whole-row click behavior as every other table in the app, instead of
-// the hand-built <table> markup it used before
+import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel and the customer account pages
 import { RETURN_STATUS, COMPLAINT_STATUS } from "../../constants/statusTypes"; // Shared status constants — used to map raw status values to readable labels
 
-// Selectable "rows per page" values for this widget's dropdown. Kept
-// smaller than the full history pages (OrderHistory, PreviousComplaints,
-// PreviousReturns) since this is still a compact dashboard summary, not
-// the full ticket list — but the customer can now expand it in place
-// instead of only having Prev/Next available.
-const PAGE_SIZE_OPTIONS = [3, 10, 20];
-const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
+// How many of the most recent tickets the dashboard preview shows. The full
+// history lives on the Complaints and Returns pages, reached through the
+// "View All" link in the card header.
+const MAX_VISIBLE_TICKETS = 3;
 
 // getTicketStatusLabel — converts a raw return/complaint status string into a human-readable label
-// A ticket here can only be a pending return (RETURN_STATUS.REQUESTED, real value
-// "pending") or a non-closed complaint ("open" / "in_progress" / "resolved"), since
-// AccountDashboard.jsx pre-filters the list before it ever reaches this component
+// A ticket is either a return (RETURN_STATUS.REQUESTED, whose value is "pending",
+// or an approved/rejected return) or a complaint ("open" / "in_progress" /
+// "resolved" / "closed"), as prepared by AccountDashboard.jsx
 const getTicketStatusLabel = (status) => {
   switch (status) {
     case RETURN_STATUS.REQUESTED:
-      return "Requested"; // Return request submitted, awaiting seller review
+      return "Pending"; // Return request submitted, awaiting seller review
     case COMPLAINT_STATUS.OPEN:
       return "Open"; // Complaint raised, not yet picked up
     case COMPLAINT_STATUS.IN_PROGRESS:
@@ -32,55 +24,33 @@ const getTicketStatusLabel = (status) => {
     case COMPLAINT_STATUS.RESOLVED:
       return "Resolved"; // Issue has been fixed, awaiting customer confirmation/closure
     default:
-      return status; // Fallback — shows the raw value instead of hiding it
+      // Any other status (for example approved, rejected or closed) is shown
+      // with its first letter capitalised
+      return status ? status.charAt(0).toUpperCase() + status.slice(1) : status;
   }
 };
 
 const ActiveTickets = ({
   tickets,
-  title = "Complaints & Returns", // Section heading shown above the table
+  title = "Complaints & Returns", // Section heading shown in the card header
+  viewAllTo, // Route (optionally with a #section hash) the "View All" link opens — the link is left out when omitted
   showType = true, // When false, hides the "Type" column — used when this
   // component renders a single-type table (e.g. only complaints, or only
   // returns) where every row would show the same value anyway
 }) => {
   const navigate = useNavigate();
   // navigate — drives the whole-row click, sending the customer to the same
-  // return/complaint detail page the row's own "View" link already goes to
+  // return/complaint detail page the row's own "View" link goes to
 
-  // Which page of the ticket list is currently visible — resets are not needed
-  // since this widget never re-filters; the underlying tickets array only grows
-  // or shrinks between query refetches, not between renders
-  const [currentPage, setCurrentPage] = useState(1);
-  // How many tickets are shown per page, controlled by the "Rows per page"
-  // dropdown rendered inside DataTable's built-in pagination footer
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-
-  // Called when the customer picks a different "rows per page" value.
-  // Resets back to page 1 as well, since staying on a deep page number
-  // could land past the end of the newly-sized result set.
-  const handlePageSizeChange = (size) => {
-    setPageSize(size);
-    setCurrentPage(1);
-  };
-
-  // Guard clause — render nothing at all when there are no active tickets
+  // Guard clause — render nothing at all when there are no tickets
   // This keeps the dashboard clean and avoids showing an empty card
   if (tickets.length === 0) return null;
 
-  // Total pages derived from the full (already-sorted) ticket list length
-  const totalPages = Math.ceil(tickets.length / pageSize);
+  // The preview only shows the most recent tickets (the list arrives sorted
+  // newest first)
+  const visibleTickets = tickets.slice(0, MAX_VISIBLE_TICKETS);
 
-  // Slice out just the rows for the current page — classic client-side
-  // pagination, same math used in NotificationHistory.jsx
-  const paginatedTickets = tickets.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
-
-  // Column configuration handed to the shared DataTable — mirrors the five
-  // visible columns the hand-built version rendered, plus the trailing
-  // View action, so nothing the customer sees changes except the styling
-  // and the new whole-row click.
+  // Column configuration handed to the shared DataTable
   const columns = [
     {
       key: "id",
@@ -108,8 +78,8 @@ const ActiveTickets = ({
       // Reference column — the order this ticket is linked to (order_number), OR,
       // for complaints that aren't tied to any order (e.g. type "other"), the
       // complaint's own category (e.g. "Payment", "Product") as a fallback.
-      // This column is never a blank/dead cell — it always shows the customer
-      // something they can use to identify what the ticket is actually about.
+      // The column always shows something the customer can use to identify
+      // what the ticket is about.
       label: "Reference",
       render: (ticket) => (
         <span className="text-gray-500">{ticket.reference}</span>
@@ -130,11 +100,11 @@ const ActiveTickets = ({
     },
     {
       key: "expectedResolution",
-      // Filed-on date — this is ticket.expectedResolution under the hood, which is actually
-      // mapped from created_at in AccountDashboard.jsx (see NOTE there: the API doesn't
-      // document a real "expected resolution" field, so we show the filing date instead
-      // and label the column honestly rather than implying a future resolution estimate).
+      // Filed-on date — ticket.expectedResolution holds the ticket's created_at
+      // date (see AccountDashboard.jsx). The column is hidden on phones to
+      // keep the table narrow enough to read without scrolling sideways.
       label: "Filed On",
+      className: "hidden sm:table-cell",
       render: (ticket) => (
         <span className="text-gray-400">
           {formatDate(ticket.expectedResolution)} {/* e.g. "Jul 5, 2026" */}
@@ -164,49 +134,45 @@ const ActiveTickets = ({
   ];
 
   return (
-    // Outer wrapper — h-full so this card stretches to match its sibling's
-    // height when the two of them sit side by side in a CSS grid row (the
-    // grid row itself already stretches both items to the tallest one's
-    // height by default; h-full is what lets THIS div actually fill that
-    // stretched space instead of staying at its own content height). No
-    // border/shadow of its own — DataTable supplies its own card chrome
-    // (border, shadow, rounded corners) around the table + pagination
-    // footer below, same pattern OrderManagement/ReturnsManagement use on
-    // the admin side, so this widget doesn't end up with a double
-    // border/shadow stacked on top of DataTable's.
-    <div className="h-full flex flex-col gap-3">
-      {/* Section title — sits above the table card instead of inside a
-          shared header bar, matching how every other admin page titles
-          its DataTable */}
-      <h2 className="text-base font-bold text-gray-900">{title}</h2>
+    // Card wrapper — the same card treatment as the Recent Orders table above
+    // it. h-full makes the card fill its grid cell, so two cards sitting side
+    // by side always end at the same height, whichever has fewer rows.
+    <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+      {/* ── Card header ────────────────────────────────────────────────────
+          Section title on the left, "View All" link on the right. The link
+          opens the full list on its own page and scrolls to its table. The
+          header has only a small bottom padding and no divider line, so the
+          table sits close underneath the title.                           */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        <h2 className="text-base font-bold text-gray-900">{title}</h2>
+        {viewAllTo && (
+          <Link
+            to={viewAllTo}
+            className="text-sm text-primary font-medium hover:underline"
+          >
+            View All
+          </Link>
+        )}
+      </div>
 
-      {/* DataTable — same shared component every admin table and the rest of
-          the customer account tables use, so this widget now matches them
-          exactly: green gradient header, visible row divider, compact font
-          size, stronger hover tint, and clicking anywhere on a row opens the
-          same detail page as its own "View" link. flex-1 lets this wrapper
-          consume the remaining height below the title, and className="h-full"
-          on DataTable itself carries that height into its own card, so a
-          short table's pagination footer still lands flush with a taller
-          sibling table's footer instead of floating right under its last row. */}
-      <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)] flex-1">
+      {/* DataTable — the same shared component used everywhere else, so this
+          widget has the same green gradient header, row dividers, compact font
+          size and hover tint. Clicking anywhere on a row opens the same
+          detail page as its own "View" link. There is no pagination here:
+          the preview is a fixed short list, and "View All" leads to the full
+          history. The wrapper has no top padding, so the table starts right
+          below the header. */}
+      <div className="px-4 pb-4">
         <DataTable
           columns={columns}
-          data={paginatedTickets}
+          data={visibleTickets}
           keyField="id"
           onRowClick={(ticket) => navigate(ticket.linkTo)}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalResults={tickets.length}
-          onPageChange={setCurrentPage}
-          pageSize={pageSize}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          onPageSizeChange={handlePageSizeChange}
-          className="h-full"
+          hidePagination
         />
       </div>
     </div>
   );
 };
 
-export default ActiveTickets; // Export so it can be conditionally composed into the Customer Account Dashboard page
+export default ActiveTickets; // Export so it can be composed into the Customer Account Dashboard page

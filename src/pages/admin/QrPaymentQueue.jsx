@@ -23,16 +23,14 @@ import Textarea from "../../components/ui/Textarea";
 
 // Row-level "⋮" actions menu for the QR Payments table.
 //
-// This does NOT reuse the shared <Popover/> component on purpose: Popover
-// positions its panel with `absolute`, which is fine in a normal toolbar
-// but breaks inside this table — every <td> in DataTable has
-// `overflow-hidden` (to keep the compact fixed row height), and the
-// scroll wrapper around the table has `overflow-x-auto`. Both of those
-// silently clip anything absolutely-positioned inside a cell, so the
-// Approve/Reject panel was rendering but invisible/clipped, which is why
-// clicking the dots appeared to do nothing.
+// This does not reuse the shared <Popover/> component on purpose: Popover
+// positions its panel with `absolute`, which does not work inside this
+// table — every <td> in DataTable has `overflow-hidden` (to keep the
+// compact fixed row height), and the scroll wrapper around the table has
+// `overflow-x-auto`. Both of those clip anything absolutely-positioned
+// inside a cell, so the Approve/Reject panel would be hidden.
 //
-// The fix: render the panel through a React portal straight onto
+// Instead the panel is rendered through a React portal straight onto
 // document.body, positioned with `fixed` coordinates computed from the
 // trigger button's own on-screen position. A portaled node sits outside
 // the table in the actual DOM tree, so none of the table's
@@ -53,11 +51,10 @@ const RowActionsMenu = ({ orderNumber, onApprove, onReject }) => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    // Right-align the panel's right edge with the trigger's right edge
-    // (matches the old align="right" Popover behaviour), then flip it
-    // above the trigger instead of below if there isn't enough room
-    // beneath it in the viewport — keeps it visible even for rows near
-    // the bottom of the screen.
+    // Right-align the panel's right edge with the trigger's right edge,
+    // then flip it above the trigger instead of below if there isn't
+    // enough room beneath it in the viewport — keeps it visible even for
+    // rows near the bottom of the screen.
     let top = rect.bottom + 4;
     let left = rect.right - MENU_WIDTH;
 
@@ -185,9 +182,13 @@ const QrPaymentQueue = () => {
 
   // Bulk selection — array of order_number values currently checked in
   // the table, driven by DataTable's built-in selection support. This
-  // is independent of approveTarget/rejectTarget above, which still
-  // drive the single-row Approve/Reject flow unchanged.
+  // is independent of approveTarget/rejectTarget above, which drive the
+  // single-row Approve/Reject flow.
   const [selectedOrderNumbers, setSelectedOrderNumbers] = useState([]);
+
+  // Changing this key remounts the table, which clears DataTable's internal
+  // checkbox selection once a bulk action has finished.
+  const [tableResetKey, setTableResetKey] = useState(0);
 
   // Bulk approve confirmation state.
   const [confirmBulkApproveOpen, setConfirmBulkApproveOpen] = useState(false);
@@ -230,9 +231,8 @@ const QrPaymentQueue = () => {
     onError: (error) => {
       // The backend returns validation/state errors under an "error"
       // key (e.g. "Order status is <status>, not pending_payment or
-      // on_hold.") — checking it before the older "message" key keeps
-      // this specific text visible instead of always falling through
-      // to the generic fallback.
+      // on_hold."); "message" is checked as a fallback so the specific
+      // text stays visible instead of the generic message.
       showError(
         error?.response?.data?.error ||
           error?.response?.data?.message ||
@@ -248,15 +248,25 @@ const QrPaymentQueue = () => {
     mutationFn: ({ orderNumber, reason }) =>
       rejectQrPayment(orderNumber, reason),
     onSuccess: (response) => {
-      // UPDATED (Sep 2026, API 74.4 backend fix): the order is now
-      // actually cancelled by a rejection (not left "pending"), and
-      // may be permanently cancelled once this was the 3rd rejection
-      // — the toast now reflects whichever of those actually happened,
-      // using the response's own message where available.
-      showSuccess(
-        response?.data?.message ||
-          `${rejectTarget} rejected. The customer has been notified.`,
-      );
+      // The first and second rejection leave the order in
+      // "pending_payment" so the customer can upload a new proof; the
+      // third rejection cancels the order permanently. The toast shows
+      // whichever of those happened, using the response's own message
+      // (which includes the attempts left) where available.
+      const result = response?.data;
+      if (result?.permanently_cancelled) {
+        showSuccess(
+          `${rejectTarget} rejected — maximum attempts reached, the order has been cancelled.`,
+        );
+      } else {
+        showSuccess(
+          result?.message ||
+            `${rejectTarget} rejected. The customer has been notified` +
+              (typeof result?.attempts_left === "number"
+                ? ` and has ${result.attempts_left} attempt${result.attempts_left === 1 ? "" : "s"} left.`
+                : "."),
+        );
+      }
       invalidateQueue();
       setRejectTarget(null);
       setRejectReason("");
@@ -283,28 +293,41 @@ const QrPaymentQueue = () => {
 
   // =============================================
   // BULK APPROVE — same approve endpoint, called once per selected
-  // order (there is no bulk endpoint on the backend).
+  // order (there is no bulk endpoint on the backend). Every request is
+  // attempted and reported on its own, so one failure does not hide the
+  // payments that were approved.
   // =============================================
   const handleConfirmBulkApprove = async () => {
     setIsBulkApproving(true);
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         selectedOrderNumbers.map((orderNumber) =>
           approveQrPayment(orderNumber),
         ),
       );
-      showSuccess(
-        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} approved.`,
+      const approvedCount = results.filter(
+        (result) => result.status === "fulfilled",
+      ).length;
+      const failedResults = results.filter(
+        (result) => result.status === "rejected",
       );
+
+      if (approvedCount > 0) {
+        showSuccess(
+          `${approvedCount} payment${approvedCount === 1 ? "" : "s"} approved.`,
+        );
+      }
+      if (failedResults.length > 0) {
+        showError(
+          failedResults[0].reason?.response?.data?.error ||
+            failedResults[0].reason?.response?.data?.message ||
+            `${failedResults.length} payment${failedResults.length === 1 ? "" : "s"} could not be approved.`,
+        );
+      }
       invalidateQueue();
       setSelectedOrderNumbers([]);
+      setTableResetKey((key) => key + 1);
       setConfirmBulkApproveOpen(false);
-    } catch (error) {
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to approve the selected payments.",
-      );
     } finally {
       setIsBulkApproving(false);
     }
@@ -313,7 +336,8 @@ const QrPaymentQueue = () => {
   // =============================================
   // BULK REJECT — same reject endpoint, called once per selected order
   // with the one shared reason typed below. The reason is mandatory —
-  // the backend 400s without it, same as the single-row flow.
+  // the backend 400s without it, same as the single-row flow. Every
+  // request is attempted and reported on its own.
   // =============================================
   const handleConfirmBulkReject = async () => {
     if (!bulkRejectReason.trim()) {
@@ -324,26 +348,43 @@ const QrPaymentQueue = () => {
     }
     setIsBulkRejecting(true);
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         selectedOrderNumbers.map((orderNumber) =>
           rejectQrPayment(orderNumber, bulkRejectReason.trim()),
         ),
       );
-      showSuccess(
-        // UPDATED (Sep 2026, API 74.4 backend fix): rejecting now
-        // cancels each order rather than leaving it "pending".
-        `${selectedOrderNumbers.length} payment${selectedOrderNumbers.length === 1 ? "" : "s"} rejected — those orders have been cancelled. Customers have been notified and can re-upload proof unless they've hit the 3-attempt limit.`,
+      const rejectedResults = results.filter(
+        (result) => result.status === "fulfilled",
       );
+      const failedResults = results.filter(
+        (result) => result.status === "rejected",
+      );
+      // Orders on their third rejection are cancelled permanently; every
+      // other rejected order stays pending payment for a new proof.
+      const cancelledCount = rejectedResults.filter(
+        (result) => result.value?.data?.permanently_cancelled,
+      ).length;
+
+      if (rejectedResults.length > 0) {
+        showSuccess(
+          `${rejectedResults.length} payment${rejectedResults.length === 1 ? "" : "s"} rejected. Customers have been notified.` +
+            (cancelledCount > 0
+              ? ` ${cancelledCount} order${cancelledCount === 1 ? " was" : "s were"} cancelled after reaching the maximum attempts.`
+              : ""),
+        );
+      }
+      if (failedResults.length > 0) {
+        showError(
+          failedResults[0].reason?.response?.data?.error ||
+            failedResults[0].reason?.response?.data?.message ||
+            `${failedResults.length} payment${failedResults.length === 1 ? "" : "s"} could not be rejected.`,
+        );
+      }
       invalidateQueue();
       setSelectedOrderNumbers([]);
+      setTableResetKey((key) => key + 1);
       setBulkRejectOpen(false);
       setBulkRejectReason("");
-    } catch (error) {
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to reject the selected payments.",
-      );
     } finally {
       setIsBulkRejecting(false);
     }
@@ -367,17 +408,16 @@ const QrPaymentQueue = () => {
               Duplicate
             </span>
           )}
-          {/* NEW (Sep 2026, API 74.2 backend fix): a small "Retry x/3"
-              badge on any row that's a retry review (order_status
-              "on_hold"), using rejection_count — helps the admin
-              prioritize/understand orders that have already failed
-              review once or twice before this one. */}
-          {row.order_status === "on_hold" && (
+          {/* "Rejected n/3 before" badge on any row that has been rejected
+              at least once (rejection_count above zero) — tells the admin
+              this is a retry review and how close the order is to the
+              3-attempt cap. */}
+          {row.rejection_count > 0 && (
             <span
-              title="This order's QR proof was rejected before — this is a retry review."
+              title="This order's payment proof was rejected before — this is a retry review."
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-light text-warning text-xs font-semibold"
             >
-              Retry {row.rejection_count ?? 0}/3
+              Rejected {row.rejection_count}/3 before
             </span>
           )}
         </div>
@@ -415,11 +455,8 @@ const QrPaymentQueue = () => {
           target="_blank"
           rel="noreferrer"
           className="block w-8 h-8 rounded-lg overflow-hidden border border-gray-200 hover:border-primary transition-colors"
-          // w-12 h-12 (48px) -> w-8 h-8 (32px): this thumbnail was well past the
-          // DataTable's fixed 36px row height and was forcing every row in this
-          // table to grow. It's still a clickable link that opens the full
-          // screenshot in a new tab, so the smaller preview doesn't lose any
-          // functionality — just the row no longer stretches to fit it.
+          // The 32px thumbnail fits within the DataTable's fixed row height. It
+          // is a clickable link that opens the full screenshot in a new tab.
         >
           <img
             src={row.screenshot_url}
@@ -451,9 +488,8 @@ const QrPaymentQueue = () => {
       key: "actions",
       label: "Actions",
       render: (row) => (
-        // Three-dot menu replaces the old side-by-side Approve/Reject
-        // buttons — same two actions, now tucked behind a single
-        // trigger so the Actions column no longer forces the table
+        // Three-dot menu holding the Approve and Reject actions behind a
+        // single trigger, so the Actions column does not force the table
         // wider than the viewport on small screens.
         <RowActionsMenu
           orderNumber={row.order_number}
@@ -469,10 +505,8 @@ const QrPaymentQueue = () => {
   ];
 
   return (
-    // Vertical spacing between the header, stats cards, toolbar, and table
-    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
-    // already used on Product Management, instead of leaving large empty
-    // bands between each section.
+    // Tight vertical spacing between the header, toolbar and table, matching
+    // the rhythm used on the other admin list pages.
     <div className="flex flex-col gap-2 flex-1 min-h-0">
       <PageHeader icon={<AiOutlineQrcode />} title="QR Payment Verification" />
 
@@ -516,6 +550,7 @@ const QrPaymentQueue = () => {
 
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)] flex flex-col flex-1 min-h-0">
         <DataTable
+          key={tableResetKey}
           columns={columns}
           data={payments}
           keyField="order_number"
@@ -558,15 +593,14 @@ const QrPaymentQueue = () => {
           <p className="text-sm text-gray-500">
             Order{" "}
             <span className="font-semibold text-gray-800">{rejectTarget}</span>{" "}
-            {/* UPDATED (Sep 2026, API 74.4 backend fix): a rejection
-                now cancels the order and releases its reserved stock —
-                it no longer just sits "pending". The customer can
-                still re-upload a corrected screenshot to reopen it,
-                unless this is their 3rd rejection, in which case the
-                cancellation becomes permanent. */}
-            will be cancelled and its reserved stock released — the customer can
-            re-upload a corrected screenshot to reopen it (unless this is their
-            3rd rejection). This reason is sent to them directly.
+            {/* The first and second rejection keep the order pending payment
+                so the customer can upload a corrected screenshot; the third
+                rejection cancels the order permanently and releases its
+                reserved stock. */}
+            will stay pending payment so the customer can upload a new proof. If
+            this is their 3rd rejection, the order will be cancelled permanently
+            and its reserved stock released. This reason is sent to the customer
+            directly.
           </p>
           <Textarea
             label="Reason for rejection"
@@ -627,9 +661,9 @@ const QrPaymentQueue = () => {
               {selectedOrderNumbers.length} order
               {selectedOrderNumbers.length === 1 ? "" : "s"}
             </span>{" "}
-            will be cancelled and their reserved stock released — each customer
-            can re-upload a corrected screenshot to reopen theirs (unless it was
-            their 3rd rejection). This same reason is sent to all of them.
+            will stay pending payment so each customer can upload a new proof.
+            Any order on its 3rd rejection will be cancelled permanently and its
+            reserved stock released. This same reason is sent to all of them.
           </p>
           <Textarea
             label="Reason for rejection"

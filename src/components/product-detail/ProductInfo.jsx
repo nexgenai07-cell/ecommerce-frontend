@@ -228,6 +228,24 @@ const ProductInfo = ({ product, imageRef }) => {
       // this — Login.jsx already knows how to read it back and hand it
       // straight to Checkout on success, for the password, 2FA, and
       // Google sign-in paths alike.
+      // DURABLE BACKUP: router state alone doesn't survive a hard page
+      // reload — and this app's own session-refresh logic
+      // (axiosInstance.js) can trigger exactly that via
+      // window.location.href if a request racing with this login happens
+      // to hit a 401 at the wrong moment. sessionStorage survives a hard
+      // reload within the same tab; Login.jsx falls back to reading this
+      // if the router state it was expecting isn't there.
+      try {
+        sessionStorage.setItem(
+          "buyNowRedirect",
+          JSON.stringify({ product, quantity }),
+        );
+      } catch {
+        // Storage unavailable (private browsing, quota, etc.) — the
+        // router state below still covers the normal, non-hard-reload
+        // case, so this is a silent, low-stakes fallback failure.
+      }
+
       navigate(ROUTES.LOGIN, {
         state: {
           from: {

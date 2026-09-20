@@ -16,8 +16,6 @@ import useBreadcrumb from "../../hooks/useBreadcrumb";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the centralized route paths, used to redirect a cancelled order back to its detail page
 import { ROUTES } from "../../constants/routes";
-// Import the shared order status constants, used to detect a cancelled order
-import { ORDER_STATUS } from "../../constants/statusTypes";
 // Import the API functions for fetching order details and order tracking info
 import { getOrderDetail, trackOrder } from "../../api/orders.api";
 // Import a layout wrapper component that applies consistent max-width/padding container styling
@@ -39,7 +37,7 @@ import ErrorState from "../../components/ui/ErrorState";
 
 // Main functional component for the Order Tracking page
 const OrderTracking = () => {
-  // URL se order number lo
+  // Read the order number from the URL
   // Extract the "id" route param from the URL and rename it to "orderNumber" for clarity
   const { id: orderNumber } = useParams();
 
@@ -56,8 +54,8 @@ const OrderTracking = () => {
 
   // =============================================
   // ORDER DETAIL API
-  // API 44 — GET /api/v1/orders/{order_number}/
-  // Product images, items, payment info ke liye
+  // GET /api/v1/orders/{order_number}/
+  // Provides the product images, items and payment info
   // =============================================
   // Use react-query to fetch the full order detail data, destructuring and renaming the returned values
   const {
@@ -84,14 +82,16 @@ const OrderTracking = () => {
   const order = orderData?.data || null;
 
   // A cancelled order has reached the end of its lifecycle, so it has no
-  // live tracking. Used below to skip the tracking request and to redirect
-  // the customer to the order detail page, which covers direct URL access.
-  const isCancelledOrder = order?.status === ORDER_STATUS.CANCELLED;
+  // live tracking. The backend reports this through the can_track flag,
+  // which is false for a cancelled order. It is used below to skip the
+  // tracking request and to redirect the customer to the order detail
+  // page, which also covers a tracking URL that is opened directly.
+  const isTrackingUnavailable = order?.can_track === false;
 
   // =============================================
   // TRACK ORDER API
-  // API 46 — GET /api/v1/orders/{order_number}/track/
-  // Status history timeline ke liye
+  // GET /api/v1/orders/{order_number}/track/
+  // Provides the status history timeline
   // =============================================
   // Use react-query to fetch the order's tracking/status-history data, destructuring only the "data" field
   const { data: trackingData } = useQuery({
@@ -99,11 +99,11 @@ const OrderTracking = () => {
     queryKey: QUERY_KEYS.ORDER_TRACKING(orderNumber),
     // The actual function that performs the API call to fetch tracking info
     queryFn: ({ signal }) => trackOrder(orderNumber, signal),
-    // Only run this query if orderNumber actually exists and the order is
-    // not cancelled (a cancelled order is never tracked)
-    enabled: !!orderNumber && !isCancelledOrder,
+    // Only run this query if orderNumber actually exists and the order can
+    // be tracked (the tracking endpoint refuses a cancelled order)
+    enabled: !!orderNumber && !isTrackingUnavailable,
     // Consider the cached data fresh for only 1 minute since tracking updates frequently
-    staleTime: 1000 * 60 * 1, // 1 minute — tracking frequently update hoti hai
+    staleTime: 1000 * 60 * 1, // 1 minute — tracking data changes frequently
     // Automatically refetch this query every 5 minutes to keep tracking info up to date
     refetchInterval: 1000 * 60 * 5, // Har 5 minute pe auto refresh
   });
@@ -144,12 +144,12 @@ const OrderTracking = () => {
     );
   }
 
-  // Cancelled state
+  // Tracking unavailable state
   // Tracking is not available for a cancelled order, so anyone who reaches this
   // page directly (for example by typing the URL) is sent to the order detail
   // page instead. "replace" keeps this page out of the browser history, so the
   // Back button does not bounce the customer straight back into the redirect.
-  if (isCancelledOrder) {
+  if (isTrackingUnavailable) {
     return (
       <Navigate
         to={ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber)}

@@ -4,7 +4,7 @@ import {
   BsExclamationCircleFill,
   BsClockHistory,
 } from "react-icons/bs"; // Icons for paid / rejected / under-review states
-import { PAYMENT_METHOD } from "../../constants/statusTypes";
+import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes";
 import QrProofUploadForm from "../payments/QrProofUploadForm";
 
 // Small lookup table mapping each possible payment.status value (see
@@ -13,8 +13,8 @@ import QrProofUploadForm from "../payments/QrProofUploadForm";
 // badge colors are specific to this compact payment row, not the generic
 // order/return/complaint badge styling used elsewhere.
 //
-// Exactly five values exist now (pending | under_review | paid | rejected
-// | refunded), for both Stripe and QR orders — under_review and rejected
+// Exactly five values exist (pending | under_review | paid | rejected |
+// refunded), for both Stripe and QR orders — under_review and rejected
 // only ever actually occur on QR orders.
 const PAYMENT_STATUS_CONFIG = {
   paid: {
@@ -45,9 +45,10 @@ const PAYMENT_STATUS_CONFIG = {
 };
 
 const PaymentInfo = ({ order }) => {
-  // Payment sub-object now comes back as:
+  // Payment sub-object shape:
   // { status, method, stripe_payment_intent_id, screenshot_url,
-  //   refund_method, refund_transaction_reference, paid_at }
+  //   refund_method, refund_transaction_reference, paid_at,
+  //   qr_rejection_count }
   const payment = order?.payment || {};
   const paymentStatus = payment.status || "pending";
   const paymentMethod = payment.method || PAYMENT_METHOD.STRIPE;
@@ -62,43 +63,55 @@ const PaymentInfo = ({ order }) => {
   // the badge above updates instantly instead of waiting on a refetch
   // that the form's own mutation already triggers in the background.
   const [justUploaded, setJustUploaded] = useState(false);
-  // NEW (Sep 2026, API 74.1 backend fix): captures order_status from
-  // the upload response so the just-uploaded badge can say "Under
-  // Review — Retry" for a re-opened QR order instead of the generic
-  // first-time "Payment Under Review" wording.
-  const [justUploadedOrderStatus, setJustUploadedOrderStatus] = useState(null);
+  // Captures reopened_after_rejection from the upload response so the
+  // just-uploaded badge can say "Under Review — Retry" after an earlier
+  // rejection instead of the generic first-time "Payment Under Review"
+  // wording.
+  const [justUploadedAsRetry, setJustUploadedAsRetry] = useState(false);
 
   // A single, unified transaction reference for either payment method —
   // the QR transaction ref for QR orders, or Stripe's own PaymentIntent
   // id for card orders. Falls back to the raw stripe_payment_intent_id
-  // field for orders fetched before this field existed on the API.
+  // field when no unified reference is present.
   const txnId = payment.reference || payment.stripe_payment_intent_id || "—";
 
   // Human-readable payment method name, e.g. "QR Payment" or "Card via
-  // Stripe" — comes straight from the backend now instead of being
-  // guessed on the frontend from payment.method.
+  // Stripe" — provided by the backend, with a local fallback derived from
+  // payment.method when it is missing.
   const methodLabel =
     payment.method_label ||
     (isQr ? "QR Payment (Easypaisa/JazzCash)" : "Card Payment (Stripe)");
 
   // How many times this order's QR proof has been rejected so far —
-  // NEW (Sep 2026, API 57 backend fix): now included on payment
-  // whenever payment.method is "qr", 0 if it's never been rejected.
+  // included on payment whenever payment.method is "qr", 0 if it has
+  // never been rejected.
   const rejectionCount = payment.qr_rejection_count || 0;
-  // UPDATED (Sep 2026, API 74.1 backend fix): once rejectionCount hits
-  // the backend's hard cap of 3, the order is permanently cancelled —
-  // the upload endpoint refuses any further attempt for it, so the
-  // button is hidden entirely instead of letting the customer submit
-  // into a guaranteed 400.
-  const hasReachedRejectionCap = rejectionCount >= 3;
+  // A QR proof can be rejected at most three times. After the third
+  // rejection the order is permanently cancelled and the upload endpoint
+  // refuses any further attempt.
+  const MAX_QR_ATTEMPTS = 3;
+  const attemptsLeft = Math.max(MAX_QR_ATTEMPTS - rejectionCount, 0);
 
-  // The customer can (re-)upload proof only while there's actually
-  // something to prove — i.e. before an admin has approved/paid it,
-  // and before the 3-attempt rejection cap has been reached.
+  // isPendingPayment — the order is still waiting for its payment. A
+  // rejected proof (1st or 2nd time) leaves the order in this state so
+  // the customer can upload a new one.
+  const isPendingPayment = order?.status === ORDER_STATUS.PENDING;
+
+  // hasReachedRejectionCap — the order was cancelled after the third
+  // rejected proof, so the customer has to contact support instead of
+  // uploading again.
+  const hasReachedRejectionCap =
+    order?.status === ORDER_STATUS.CANCELLED &&
+    rejectionCount >= MAX_QR_ATTEMPTS;
+
+  // The customer can (re-)upload proof only while the order is still
+  // waiting for its payment and nothing has been approved yet. Cancelled
+  // orders are refused by the backend, so the button is never shown for
+  // them.
   const canUploadProof =
     isQr &&
+    isPendingPayment &&
     !justUploaded &&
-    !hasReachedRejectionCap &&
     (paymentStatus === "pending" || paymentStatus === "rejected");
 
   return (
@@ -134,7 +147,7 @@ const PaymentInfo = ({ order }) => {
             <p className="text-sm font-medium text-gray-800">{methodLabel}</p>
             {/* Reference line — the QR transfer reference for QR orders, or
                 Stripe's PaymentIntent id for card orders, both under one
-                unified field so this never needs to branch by method again. */}
+                unified field so this never needs to branch by method. */}
             <p className="text-xs text-gray-400 mt-0.5 font-mono">
               Ref: {txnId}
             </p>
@@ -157,7 +170,7 @@ const PaymentInfo = ({ order }) => {
         >
           {config.icon}
           {justUploaded
-            ? justUploadedOrderStatus === "on_hold"
+            ? justUploadedAsRetry
               ? "Under Review — Retry"
               : PAYMENT_STATUS_CONFIG.under_review.label
             : config.label}
@@ -188,32 +201,28 @@ const PaymentInfo = ({ order }) => {
         </div>
       )}
 
-      {/* Rejection notice — tells the customer to check their notification
-          for the admin's reason, and re-upload a corrected screenshot.
-          UPDATED (Sep 2026, API 74.4 backend fix): also surfaces the
-          rejection count once at least one rejection has happened, so
-          the customer understands why the order shows "cancelled" /
-          "on hold" instead of the original "pending payment". */}
-      {paymentStatus === "rejected" && !justUploaded && (
-        <div className="px-5 pb-4 flex flex-col gap-1">
-          <p className="text-xs text-danger">
-            Your payment proof was rejected. Check your notifications for the
-            reason, then upload a new screenshot below.
-          </p>
-          {rejectionCount > 0 && (
-            <p className="text-xs text-gray-400">
-              Rejected {rejectionCount} time{rejectionCount === 1 ? "" : "s"}
-              {!hasReachedRejectionCap && " · up to 3 attempts allowed"}
+      {/* Rejection notice — shown while the order is still waiting for its
+          payment after a rejected proof. Tells the customer to check their
+          notifications for the admin's reason, how many attempts are left,
+          and to upload a corrected screenshot. */}
+      {isQr &&
+        isPendingPayment &&
+        paymentStatus === "rejected" &&
+        !justUploaded && (
+          <div className="px-5 pb-4 flex flex-col gap-1">
+            <p className="text-xs text-danger">
+              Payment proof rejected — please upload a new proof. Check your
+              notifications for the reason.
             </p>
-          )}
-        </div>
-      )}
+            <p className="text-xs text-gray-400">
+              {attemptsLeft} attempt{attemptsLeft === 1 ? "" : "s"} left
+            </p>
+          </div>
+        )}
 
-      {/* Rejection cap reached — NEW (Sep 2026, API 74.1 backend fix):
-          once qr_rejection_count reaches 3, the upload endpoint refuses
-          any further attempt and the order stays permanently
-          cancelled, so the re-upload button is replaced with a
-          "Contact Support" message instead of a dead-end error. */}
+      {/* Rejection cap reached — the order was cancelled after the third
+          rejected proof and no further upload is accepted, so the upload
+          button is replaced with a "contact support" message. */}
       {isQr && hasReachedRejectionCap && !justUploaded && (
         <div className="px-5 pb-5 border-t border-gray-50 pt-4">
           <p className="text-xs text-danger">
@@ -231,7 +240,9 @@ const PaymentInfo = ({ order }) => {
               orderNumber={order.order_number}
               onUploaded={(responseData) => {
                 setJustUploaded(true);
-                setJustUploadedOrderStatus(responseData?.order_status || null);
+                setJustUploadedAsRetry(
+                  responseData?.reopened_after_rejection === true,
+                );
                 setUploadOpen(false);
               }}
             />

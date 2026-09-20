@@ -3,12 +3,12 @@ import { motion } from "framer-motion"; // motion.div wraps the page to animate 
 import { BsSpeedometer2 } from "react-icons/bs"; // Speedometer icon used inside the page header's gradient icon box — represents "overview"
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
-import { getMyOrders, getMyOrderStats } from "../../api/orders.api"; // API functions — fetches the logged-in customer's orders, and their accurate total_orders/total_spent stats (API 56.1)
+import { getMyOrders, getMyOrderStats } from "../../api/orders.api"; // API functions — fetches the logged-in customer's orders, and their accurate total_orders/total_spent stats
 import { getWishlist } from "../../api/wishlist.api"; // API function — fetches the customer's saved wishlist items
 import { getNotifications } from "../../api/notifications.api"; // API function — fetches all notifications for the customer
 import { getReturns } from "../../api/returns.api"; // API function — fetches all return requests filed by the customer
 import { getComplaints } from "../../api/complaints.api"; // API function — fetches all complaints filed by the customer
-import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on notifications/returns/complaints endpoints)
+import extractListData from "../../utils/extractListData"; // Normalizer — list endpoints may return a plain array or a paginated object, and this handles both
 import { RETURN_STATUS } from "../../constants/statusTypes"; // Centralized status constant — never hardcode raw "pending"/"requested" strings when comparing statuses
 import getComplaintTypeLabel from "../../utils/getComplaintTypeLabel"; // Shared label formatter for a complaint's "type" (order/payment/product/delivery/other) — used as a fallback reference when a complaint isn't linked to an order
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
@@ -32,7 +32,7 @@ const AccountDashboard = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  // Order stats — API 56.1 — the accurate, backend-computed total_orders
+  // Order stats — the accurate, backend-computed total_orders
   // and total_spent for this customer, using the same "only a
   // confirmed/shipped/out_for_delivery/delivered order counts" rule
   // used everywhere else in the app. staleTime 2 min, same as orders.
@@ -78,13 +78,13 @@ const AccountDashboard = () => {
   // Only the 3 most recent orders are shown in the RecentOrdersTable preview
   const recentOrders = orders.slice(0, 3);
 
-  // Total Orders / Total Spent — sourced from API 56.1 (getMyOrderStats),
-  // NOT computed by summing/counting the orders array above. That list
-  // includes every order regardless of status (pending_payment, on_hold,
-  // cancelled, etc.), which previously produced an inflated number that
-  // didn't match what the backend and admin panel consider a real, paid
-  // order. total_spent is always returned as a string, so it's parsed
-  // with parseFloat here; both fall back to 0 while the query is loading.
+  // Total Orders / Total Spent — sourced from getMyOrderStats, NOT computed
+  // by summing/counting the orders array above. That list includes every
+  // order regardless of status (pending_payment, on_hold, cancelled, etc.),
+  // which would give a number that does not match what the backend and
+  // admin panel consider a real, paid order. total_spent is always returned
+  // as a string, so it's parsed with parseFloat here; both fall back to 0
+  // while the query is loading.
   const orderStats = orderStatsData?.data;
   const totalOrdersCount = orderStats?.total_orders || 0;
   const totalSpent = parseFloat(orderStats?.total_spent || 0);
@@ -92,55 +92,49 @@ const AccountDashboard = () => {
   // Full wishlist items array — falls back to empty array
   const wishlistItems = wishlistData?.data?.items || [];
 
-  // Full notifications array — falls back to empty array
-  // API_Documentation_Final.pdf (API 59) documents a flat array, but
-  // real responses show a paginated object — backend/docs mismatch.
+  // Full notifications array — falls back to empty array. The response may
+  // be a paginated object, so it goes through the normalizer.
   const notifications = extractListData(notificationsData);
 
   // Count of notifications the customer hasn't read yet — drives the red badge in RecentNotifications
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  // Full returns array — falls back to empty array
-  // API_Documentation_Final.pdf (API 51) documents a flat array. We
-  // still route this through the normalizer defensively, in case the
-  // actual backend response drifts from docs like categories/notifications did.
+  // Full returns array — falls back to empty array. The response may be a
+  // plain array or a paginated object, so it goes through the normalizer.
   const returns = extractListData(returnsData);
 
   // Count of returns still awaiting seller review — shown in the DashboardStats card
-  // Compares against the RETURN_STATUS constant instead of a hardcoded string —
-  // see the NOTE in constants/statusTypes.js for why the real value is "pending".
+  // Compares against the RETURN_STATUS constant instead of a hardcoded string
+  // (the backend value for a return awaiting review is "pending").
   const pendingReturns = returns.filter(
     (r) => r.status === RETURN_STATUS.REQUESTED,
   ).length;
 
-  // Full complaints array — falls back to empty array
-  // API_Documentation_Final.pdf (API 55) documents a flat array. Routed
-  // through the normalizer defensively for the same reason as returns.
+  // Full complaints array — falls back to empty array. Goes through the
+  // normalizer for the same reason as returns.
   const complaints = extractListData(complaintsData);
 
-  // activeReturns / activeComplaints — kept as two separate lists (previously
-  // merged into one combined "activeTickets" array) so the dashboard can show
-  // two side-by-side tables instead of one combined table. Each is sorted
-  // most-recently-filed-first on its own.
+  // activeReturns / activeComplaints — two separate lists, so the dashboard
+  // shows a table for each type side by side. Each is sorted
+  // most-recently-filed-first on its own, and the table cards show the
+  // latest few with a "View All" link to the full list.
   //
-  // activeReturns intentionally shows EVERY return regardless of status (not
-  // just ones still awaiting review) — per explicit request, so an
-  // Approved/Rejected return still shows up here the same way it does on the
-  // full Returns page's "Previous Returns" table, instead of disappearing
-  // from the dashboard the moment a decision is made.
+  // activeReturns includes EVERY return regardless of status, so an
+  // approved or rejected return still shows up here, the same way it does on
+  // the full Returns page's "Previous Returns" table.
   const activeReturns = returns
     .map((r) => ({
       id: `#TIC-${r.id}`, // prefixed ticket ID for display
       type: "Return Request", // human-readable type label
-      // Returns are always tied to an order per the API contract (API 51 always
-      // returns order_number), so this reference is never empty in practice
+      // Returns are always tied to an order, so order_number is always
+      // present and this reference is never empty in practice
       reference: r.order_number,
       status: r.status, // raw status string passed to the table
-      // NOTE: "updated_at" is NOT a field on the Return object — confirmed against
-      // real Network-tab responses (API 51), which only expose id, order, order_number,
-      // reason, resolved_at, status, created_at. Using created_at as the filed-on date.
+      // The Return object has no "updated_at" field (it exposes id, order,
+      // order_number, reason, resolved_at, status and created_at), so
+      // created_at is used as the filed-on date.
       expectedResolution: r.created_at,
-      // Route to this specific return's detail page (API 66) — uses the return's
+      // Route to this specific return's detail page — uses the return's
       // raw numeric id, not the "#TIC-" prefixed display id above.
       linkTo: ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", r.id),
     }))
@@ -148,37 +142,39 @@ const AccountDashboard = () => {
       (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),
     );
 
-  // activeComplaints intentionally shows EVERY complaint regardless of status
-  // (including closed ones) — per explicit request, so a closed complaint
-  // still shows up here the same way a decided return now does above,
-  // instead of disappearing from the dashboard once it's closed.
+  // activeComplaints includes EVERY complaint regardless of status
+  // (including closed ones), so a closed complaint still shows up here the
+  // same way a decided return does above.
   const activeComplaints = complaints
     .map((c) => ({
       id: `#CMP-${c.id}`, // prefixed complaint ID for display
       type: "Complaint", // human-readable type label
-      // Real complaint responses (confirmed via Network tab, API 55) expose BOTH
-      // "order" (raw FK id, e.g. 9) and "order_number" (human-readable, e.g. "ORD-2026-00009").
-      // Previously this read the raw "order" FK directly, which the app never displays
-      // anywhere else (order_number is the app-wide convention — same fix already
-      // applied to ComplaintDetail/OrderDetail components). A complaint filed with
-      // type "other" often isn't linked to any order at all (order/order_number both
-      // null) — in that case we fall back to the complaint's own category (e.g.
-      // "Payment", "Product") via the shared getComplaintTypeLabel util, so the column
-      // is never a dead blank cell — it always shows something the customer can act on.
+      // A complaint response exposes BOTH "order" (raw FK id) and
+      // "order_number" (human-readable, e.g. "ORD-2026-00009"); order_number
+      // is the app-wide convention, so that is what is shown. A complaint
+      // filed with type "other" often isn't linked to any order at all
+      // (order/order_number both null) — in that case the complaint's own
+      // category (e.g. "Payment", "Product") is shown via the shared
+      // getComplaintTypeLabel util, so the column is never a blank cell.
       reference: c.order_number || getComplaintTypeLabel(c.type),
       status: c.status, // raw status string passed to the table
-      // NOTE: "updated_at" is NOT a field on the Complaint object either — confirmed
-      // against real Network-tab responses (API 55), which only expose id, customer,
-      // customer_name, message, order, order_number, resolved_by_name, response,
-      // status, type, created_at. Using created_at as the filed-on date.
+      // The Complaint object has no "updated_at" field either (it exposes id,
+      // customer, customer_name, message, order, order_number,
+      // resolved_by_name, response, status, type and created_at), so
+      // created_at is used as the filed-on date.
       expectedResolution: c.created_at,
-      // Route to this specific complaint's detail page (API 56) — uses the
+      // Route to this specific complaint's detail page — uses the
       // complaint's raw numeric id, not the "#CMP-" prefixed display id above.
       linkTo: ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", c.id),
     }))
     .sort(
       (a, b) => new Date(b.expectedResolution) - new Date(a.expectedResolution),
     );
+
+  // Whether each ticket table has anything to show — decides whether the row
+  // is rendered at all and whether it uses one column or two
+  const hasComplaints = activeComplaints.length > 0;
+  const hasReturns = activeReturns.length > 0;
 
   // ── Loading state ───────────────────────────────────────────────────────────
   // Show a full-page skeleton while the primary orders query is still in flight
@@ -238,8 +234,8 @@ const AccountDashboard = () => {
             {/* ── Stats cards ──────────────────────────────────────────────────────
                 4-card grid showing key metrics derived from the API responses above */}
             <DashboardStats
-              totalOrders={totalOrdersCount} // accurate paid-order count from API 56.1 (getMyOrderStats)
-              totalSpent={totalSpent} // accurate spend total from API 56.1 (getMyOrderStats)
+              totalOrders={totalOrdersCount} // accurate paid-order count from getMyOrderStats
+              totalSpent={totalSpent} // accurate spend total from getMyOrderStats
               wishlistCount={wishlistItems.length} // total number of saved wishlist products
               pendingReturns={pendingReturns} // count of returns still awaiting review
             />
@@ -260,31 +256,39 @@ const AccountDashboard = () => {
             </div>
 
             {/* ── Complaints + Returns — side by side on desktop ────────────────
-                Split into two separate tables (previously one combined table),
-                each showing its full history (not just still-open items) —
-                so each type is easier to scan on its own; each renders nothing
-                when its own list is empty. Single column on mobile, 2-column
-                grid on lg+ screens, same pattern as the Wishlist/Notifications
-                row above. */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-              {/* items-stretch: makes both tables always match height, whichever
-                  has less data — their pagination footers line up at the same
-                  bottom edge instead of one floating higher than the other */}
-              <ActiveTickets
-                tickets={activeComplaints}
-                title="Complaints"
-                showType={false}
-                // showType=false hides the redundant "Type" column — every
-                // row in this table is already a complaint
-              />
-              <ActiveTickets
-                tickets={activeReturns}
-                title="Returns"
-                showType={false}
-                // showType=false hides the redundant "Type" column — every
-                // row in this table is already a return request
-              />
-            </div>
+                Each card shows the latest few tickets of its own type, with a
+                "View All" link in its header that opens the full list on the
+                Complaints / Returns page and scrolls to its table. A card
+                renders nothing when its own list is empty; when only one of
+                the two exists it takes the full width instead of leaving half
+                the row empty. Single column on mobile, 2-column grid on lg+
+                screens, same pattern as the Wishlist/Notifications row above. */}
+            {(hasComplaints || hasReturns) && (
+              <div
+                className={`grid grid-cols-1 ${
+                  hasComplaints && hasReturns ? "lg:grid-cols-2" : ""
+                } gap-6 items-stretch`}
+              >
+                {/* items-stretch: both cards always match height, whichever
+                    has fewer rows */}
+                <ActiveTickets
+                  tickets={activeComplaints}
+                  title="Complaints"
+                  viewAllTo={`${ROUTES.ACCOUNT_COMPLAINTS}#previous-complaints`}
+                  showType={false}
+                  // showType=false hides the redundant "Type" column — every
+                  // row in this table is already a complaint
+                />
+                <ActiveTickets
+                  tickets={activeReturns}
+                  title="Returns"
+                  viewAllTo={`${ROUTES.ACCOUNT_RETURNS}#previous-returns`}
+                  showType={false}
+                  // showType=false hides the redundant "Type" column — every
+                  // row in this table is already a return request
+                />
+              </div>
+            )}
           </div>
         </Container>
       </motion.div>

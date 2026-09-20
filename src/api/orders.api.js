@@ -8,13 +8,19 @@
 //
 // These functions are designed to be used as query/mutation functions
 // inside TanStack Query (React Query) hooks throughout the app.
+//
+// Order objects returned by the customer endpoints (checkout, list,
+// detail, cancel) and by the admin detail/status endpoints include two
+// booleans, can_cancel and can_track. They are the source of truth for
+// whether the Cancel Order and Track Order actions are available, so
+// the UI reads them instead of deriving the answer from the status text.
 
 import axiosInstance from "../lib/axiosInstance";
 // Importing the pre-configured Axios instance, which automatically
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API  - Convert the cart into an actual order (Checkout)
+// Convert the cart into an actual order (Checkout)
 // ----------------------------
 // Called when the customer completes the checkout process.
 // This takes everything in their current cart and turns it into
@@ -25,11 +31,16 @@ import axiosInstance from "../lib/axiosInstance";
 //   marked is_default if omitted; still 400s if neither exists)
 // - payment_method: "stripe" | "qr" (required)
 // - notes: any special instructions from the customer
+// - province: only needed when the address is typed manually instead
+//   of being picked from the Address Book. The backend then checks
+//   that the city belongs to the selected province and answers with a
+//   400 under the "province" key when it does not. Checkout with a
+//   saved address never needs it.
 //
 // Response differs by payment_method:
-// - "stripe": call createPaymentIntent() (payments.api.js, API 69)
+// - "stripe": call createPaymentIntent() (payments.api.js)
 //   immediately after, with the returned order_number, to start the
-//   Stripe payment — exactly as before.
+//   Stripe payment.
 // - "qr": the response ALSO includes qr_image_url (a static,
 //   config-driven QR image) and payment_reference (the order_number,
 //   to write in the transfer note) — no Stripe call needed at all.
@@ -43,7 +54,7 @@ export const checkout = (data, signal) => {
 };
 
 // ----------------------------
-// API - Request a checkout verification code
+// Request a checkout verification code
 // ----------------------------
 // Sends a 6-digit one-time code to the logged-in customer's account
 // email. Every checkout() call must be immediately preceded by this
@@ -68,7 +79,7 @@ export const sendCheckoutOtp = (signal) => {
 };
 
 // ----------------------------
-// API - Verify a checkout verification code
+// Verify a checkout verification code
 // ----------------------------
 // Confirms the code sent by sendCheckoutOtp() above. On success, the
 // customer has valid_for_minutes (returned in the response) to
@@ -86,31 +97,29 @@ export const verifyCheckoutOtp = (data, signal) => {
 };
 
 // ----------------------------
-// API 56 - Get the logged-in customer's own orders
+// Get the logged-in customer's own orders
 // ----------------------------
 // Fetches orders placed by the currently logged-in customer. Used on
 // the "My Orders" page in the customer account section.
 //
-// BACKEND FIX CONFIRMED: this endpoint's pagination behavior has now
-// been explicitly confirmed by the backend team — see OrderHistory.jsx
-// for how the frontend fetches every page to guarantee the customer's
-// complete order history is always shown, regardless of how many
-// orders they have.
+// Query params:
+// - status: pending, confirmed, shipped, delivered or cancelled
+// - start_date / end_date: "YYYY-MM-DD". start_date may equal end_date
+//   but can never be later than it; an invalid range or a malformed
+//   date is answered with a 400 and an "error" message.
+// - page: which page of results to fetch
 //
-// UPDATED (16 Sep 2026, Filtering Fix pass, API 56): `status` (NEW) is
-// now a confirmed, working filter — pending, confirmed, shipped,
-// delivered, cancelled — combinable with the existing `start_date` /
-// `end_date` params. OrderHistory.jsx still fetches the complete order
-// history (this customer's own orders are a small, bounded list), so
-// its status-tab counts and date-range filtering can stay accurate
-// across every tab at once; this new param is documented here for any
-// future page that only needs one status at a time server-side.
+// Every order in the list carries can_cancel and can_track.
+//
+// OrderHistory.jsx fetches every page so the customer's complete order
+// history is always shown, which keeps its status-tab counts and
+// date-range filtering accurate across every tab at once.
 export const getMyOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/orders/", { signal, params });
 };
 
 // ----------------------------
-// API 56.1 - Get the logged-in customer's own order stats
+// Get the logged-in customer's own order stats
 // ----------------------------
 // Returns exactly two numbers for the current customer: total_orders
 // and total_spent. Both are computed using the same locked counting
@@ -137,59 +146,47 @@ export const getMyOrderStats = (signal) => {
 };
 
 // ----------------------------
-// API - Get full details of a specific order (CUSTOMER-OWNED ONLY)
+// Get full details of a specific order (CUSTOMER-OWNED ONLY)
 // ----------------------------
 // Fetches everything about one specific order, identified by its
 // order number — including the items ordered, payment details,
 // and shipping information. Used on the CUSTOMER's own order detail
 // page ("/account/orders/:id").
 //
-// IMPORTANT: this endpoint only returns an order if it belongs to
-// the currently logged-in user — the backend returns a 404 for any
-// order that exists but isn't owned by the requester, even if that
-// requester is an admin. This was confirmed via real testing (an
-// admin got "No Order matches the given query" for a real, existing
-// order that wasn't theirs) and reported to the backend team.
+// This endpoint only returns an order if it belongs to the currently
+// logged-in user — the backend returns a 404 for any order that exists
+// but isn't owned by the requester, even if that requester is an admin.
+// Use getAdminOrderDetail() below for the admin order detail page.
 //
-// UPDATED (Sep 2026, API 57 backend fix): the returned payment object
-// now also includes qr_rejection_count (integer, 0 if the QR proof
-// has never been rejected) — how many times this order's proof has
-// been rejected by an admin. Surface it on the customer Order Detail
-// page (see PaymentInfo.jsx) so the customer understands why the
-// order shows "on hold" / "cancelled" after a rejected proof.
-//
-// DO NOT reuse this function for the admin order detail page — use
-// getAdminOrderDetail() below instead, which calls the new
-// admin-only endpoint the backend added specifically to fix this.
+// The returned order carries can_cancel and can_track. For a QR order
+// the payment object also includes qr_rejection_count (0 when the proof
+// has never been rejected). After the 1st or 2nd rejection the order
+// stays "pending_payment" with payment.status "rejected" so the
+// customer can upload a new proof; after the 3rd rejection it becomes
+// "cancelled" for good.
 export const getOrderDetail = (orderNumber, signal) => {
   return axiosInstance.get(`/api/v1/orders/${orderNumber}/`, { signal });
   // Template literal inserts the "orderNumber" directly into the URL path
 };
 
 // ----------------------------
-// API - Cancel an order
+// Cancel a customer's own order
 // ----------------------------
 // Allows the customer to cancel an order, identified by its order
-// number. The comment notes this should only be ALLOWED on the
-// frontend if the order hasn't already been delivered or cancelled
-// (this restriction logic is enforced in the UI/component, and
-// likely double-checked on the backend as well).
-// ----------------------------
-// API - Cancel a customer's own order
-// ----------------------------
-// data.reason is entirely optional — sending no body at all (or
-// data with no reason) continues to work exactly as before. When
-// provided, it's just a free-text string for the customer's own
-// context; it does not change how the cancellation itself is handled.
+// number. Cancellation is only possible while the order is
+// "pending_payment", "on_hold" or "confirmed"; the same rule is exposed
+// to the UI through the can_cancel flag on the order.
 //
-// UPDATED (Sep 2026, API 58 backend fix): the customer can now only
-// cancel an order BEFORE it ships — "shipped", "out_for_delivery", and
-// "delivered" are all blocked now (previously only "delivered" was
-// blocked). The frontend hides the Cancel button itself once the
-// order reaches one of those statuses (see NeedHelp.jsx's canCancel),
-// but the backend also enforces this with a specific 400 message per
-// status (e.g. "This order has already been shipped and can no
-// longer be cancelled."), returned under an "error" key.
+// data.reason is entirely optional — sending no body at all (or
+// data with no reason) works too. When provided, it's just a free-text
+// string for the customer's own context; it does not change how the
+// cancellation itself is handled.
+//
+// The backend also enforces the rule with a specific 400 message per
+// status (e.g. "This order has already been shipped and can no longer
+// be cancelled."), returned under an "error" key. On success the
+// returned order has status "cancelled" with can_cancel and can_track
+// both false.
 export const cancelOrder = (orderNumber, data, signal) => {
   return axiosInstance.put(`/api/v1/orders/${orderNumber}/cancel/`, data, {
     signal,
@@ -197,17 +194,21 @@ export const cancelOrder = (orderNumber, data, signal) => {
 };
 
 // ----------------------------
-// API - Track an order's status history
+// Track an order's status history
 // ----------------------------
 // Fetches the tracking timeline/history for a specific order
 // (e.g. "Order Placed" -> "Confirmed" -> "Shipped" -> "Delivered"),
 // identified by its order number. Used on the order tracking page.
+//
+// A customer requesting a cancelled order gets a 400 with an "error"
+// message, so this must not be called for an order whose can_track
+// flag is false. Admin users can still look up any order.
 export const trackOrder = (orderNumber, signal) => {
   return axiosInstance.get(`/api/v1/orders/${orderNumber}/track/`, { signal });
 };
 
 // ----------------------------
-// API  - Get all orders from all customers (Admin only)
+// Get all orders from all customers (Admin only)
 // ----------------------------
 // Fetches orders across the ENTIRE store (not just one customer's
 // orders). Used in the admin panel's orders management page when no
@@ -223,33 +224,33 @@ export const getAdminOrders = (params, signal) => {
 };
 
 // ----------------------------
-// API  - Filter admin orders (Admin only)
+// Filter admin orders (Admin only)
 // ----------------------------
 // Allows admins to narrow down the orders list using various filters.
 // The "params" object can include:
-// - status: filter by order status (e.g. pending, shipped, delivered)
+// - status: filter by order status (e.g. pending, shipped, delivered);
+//   "pending" is accepted as an alias for "pending_payment"
 // - start_date / end_date: filter orders within a date range
+//   ("YYYY-MM-DD"). start_date may equal end_date but can never be
+//   later than it; an invalid range or a malformed date is answered
+//   with a 400 and an "error" message.
 // - search: search by customer name, order number, and phone number
 //   (both the number saved on the customer's profile and the
 //   contact_phone entered at checkout)
-// - customer_id: added by the backend team specifically so we
-//   can show one customer's own order history (see getCustomerOrders
-//   below). Returns only orders placed by that exact customer.
+// - customer_id: returns only orders placed by that exact customer
+//   (see getCustomerOrders below)
+// - product: partial, case-insensitive match against any product
+//   name inside the order (across every line item)
+// - category: same matching behavior, against the category name of
+//   any product inside the order
 // - ordering: sort field, e.g. "-created_at", "created_at",
 //   "-total_amount", "total_amount"
 // - page: which page of results to fetch
 // - page_size: rows per page; server default is 10, capped at 100
 //
-// NEW (Sep 2026, API 62 backend fix): two additional filters, both
-// combinable with everything else above in the same request —
-// - product: partial, case-insensitive match against any product
-//   name inside the order (across every line item)
-// - category: same matching behavior, against the category name of
-//   any product inside the order
-// Also, status now accepts "pending" as an alias for
-// "pending_payment", so that value returns the expected results
-// instead of an empty list. An order is never duplicated in the
-// results even if it contains multiple items matching product/category.
+// All filters combine in the same request, and an order is never
+// duplicated in the results even if it contains multiple items
+// matching product/category.
 export const filterAdminOrders = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/orders/filter/", { signal, params });
   // Passing "params" as the second argument tells Axios to automatically
@@ -257,22 +258,18 @@ export const filterAdminOrders = (params, signal) => {
 };
 
 // ----------------------------
-// — Get every order placed by ONE specific customer (Admin only)
+// Get every order placed by ONE specific customer (Admin only)
 // ----------------------------
-// Added after the backend team implemented the `customer_id` filter
-// param on API 48 (per our request — see Backend-Request doc). This
-// is used on the admin Customers page, inside the customer detail
+// Used on the admin Customers page, inside the customer detail
 // drawer, to show that exact customer's order history.
 //
 // `params` can additionally include status / search / ordering / page /
 // page_size — all of which combine correctly with customer_id on the
 // backend, e.g.:
 //   getCustomerOrders(20, { status: "delivered", ordering: "-total_amount", page: 2, page_size: 20 })
-// UPDATED (16 Sep 2026, Filtering Fix pass, API 62): `ordering` is
-// wired up on the Customer Detail Drawer's Orders tab so a customer's
-// full order history sorts server-side, instead of only re-sorting
-// whichever single page happened to already be loaded (see
-// CustomerDetailDrawer.jsx).
+// `ordering` is applied server-side, so a customer's full order history
+// sorts as a whole instead of only re-sorting whichever single page
+// happens to be loaded (see CustomerDetailDrawer.jsx).
 export const getCustomerOrders = (customerId, params = {}, signal) => {
   return filterAdminOrders({ ...params, customer_id: customerId }, signal);
   // Reuses filterAdminOrders so both functions always stay in sync —
@@ -280,33 +277,23 @@ export const getCustomerOrders = (customerId, params = {}, signal) => {
 };
 
 // ----------------------------
-// — Get full details of ANY order (Admin only)
+// Get full details of ANY order (Admin only)
 // ----------------------------
-// Added after a real bug was found and reported to the backend team:
-// the customer-facing getOrderDetail() above only ever returns an
-// order that belongs to the requesting user, which meant an admin
-// got a 404 "Order not found" for real orders that simply weren't
-// theirs. The backend team added this new dedicated admin endpoint
-// to fix it — it returns full order details for ANY order in the
-// store, regardless of who placed it, as long as the requester has
-// the admin role. Matches the same "/admin/..." prefix convention
-// already used by getAdminOrders() and filterAdminOrders() above.
+// Returns full order details for ANY order in the store, regardless of
+// who placed it, as long as the requester has the admin role. It
+// matches the same "/admin/..." prefix convention used by
+// getAdminOrders() and filterAdminOrders() above.
 //
 // Used ONLY on the admin order detail page ("/admin/orders/:id") —
-// the customer-facing page keeps using getOrderDetail() unchanged.
-//
-// UPDATED (Sep 2026, API 61 backend fix): same addition as the
-// customer-facing getOrderDetail() above — the payment object now
-// also includes qr_rejection_count. Show this, and treat
-// order.status "on_hold" distinctly from "pending_payment", on the
-// admin Order Detail page so the admin can tell a first review apart
-// from a retry review.
+// the customer-facing page uses getOrderDetail() instead. The payment
+// object includes qr_rejection_count for QR orders, so the admin can
+// see how many times the proof has been rejected.
 export const getAdminOrderDetail = (orderNumber, signal) => {
   return axiosInstance.get(`/api/v1/admin/orders/${orderNumber}/`, { signal });
 };
 
 // ----------------------------
-// API - Update an order's status (Admin only)
+// Update an order's status (Admin only)
 // ----------------------------
 // Allows admins to move an order forward in its lifecycle
 // (e.g. from "confirmed" to "shipped") and optionally attach a
@@ -316,31 +303,36 @@ export const getAdminOrderDetail = (orderNumber, signal) => {
 // - tracking_number: the courier/shipping tracking number (if applicable)
 // - cancellation_reason: required whenever status is "cancelled" — its
 //   exact text is included in the customer's cancellation notification
-// - refund_method / refund_transaction_reference: ONLY required when
-//   status is "cancelled" AND the order's payment.method is "qr".
-//   refund_method is always "manual" in that case (no live gateway
-//   exists to refund automatically); refund_transaction_reference is
-//   mandatory and the backend 400s without it. For payment.method
-//   "stripe", omit both entirely — refund stays fully automatic,
-//   exactly as before.
+// - refund_method / refund_transaction_reference: only for cancelling
+//   an order that was PAID via QR. refund_method is always "manual" in
+//   that case (no live gateway exists to refund automatically) and
+//   refund_transaction_reference is mandatory. For a Stripe order, or
+//   a QR order whose payment was never approved, omit both — nothing
+//   needs a manual refund.
 //
-// UPDATED (Sep 2026, API 63 backend fix) — several new restrictions
-// the frontend now needs to respect when building the status dropdown
-// (see AdminOrderDetail.jsx's getSelectableStatusOptions):
-// 1) "confirmed" now also requires payment.status "paid" (previously
-//    only enforced starting from "shipped").
-// 2) Once payment.status is "paid", status can never move back to
-//    "pending_payment" — blocked outright.
-// 3) Once payment.status is "refunded" or "rejected", NO further
-//    status change is allowed via this endpoint at all — only the
-//    Reinstate endpoint (reinstateOrder() below) can reopen it.
-// 4) The status sequence is now strictly forward-only: pending_payment
-//    → confirmed → shipped → out_for_delivery → delivered. Any
-//    backward move within that sequence is rejected, even if paid.
-// 5) When status is "shipped" with a tracking_number in the same
-//    request, the customer's notification now includes it.
-// 6) The unpaid-order error message now starts with "Please approve
-//    payment first." — returned under an "error" key, not "message".
+// Rules enforced by the backend (see AdminOrderDetail.jsx's
+// getStatusOptions, which builds the status dropdown from them):
+// 1) The status sequence is strictly forward-only: pending_payment
+//    -> confirmed -> shipped -> out_for_delivery -> delivered. Any
+//    backward move is rejected, even if paid.
+// 2) "confirmed" and every status after it require payment.status
+//    "paid".
+// 3) Once payment.status is "paid", the status can never move back to
+//    "pending_payment".
+// 4) A delivered order and a cancelled order are final: any status
+//    change on them is refused.
+// 5) Once payment.status is "refunded", no further status change is
+//    allowed.
+// 6) A rejected QR payment does not lock the order by itself: an order
+//    that is "pending_payment" with payment.status "rejected" can
+//    still be cancelled (a cancellation_reason is still required).
+// 7) When status is "shipped" with a tracking_number in the same
+//    request, the customer's notification includes it.
+//
+// Errors come back as 400 with the reason under an "error" key, e.g.
+// "Please approve payment first." or "This order has been cancelled —
+// its status is final and cannot be changed.". The returned order
+// object carries can_cancel and can_track.
 export const updateOrderStatus = (orderNumber, data, signal) => {
   return axiosInstance.put(
     `/api/v1/admin/orders/${orderNumber}/status/`,
@@ -350,37 +342,15 @@ export const updateOrderStatus = (orderNumber, data, signal) => {
 };
 
 // ----------------------------
-// API 63.1 - Reinstate a cancelled order (Admin only)
-// ----------------------------
-// Reverses a cancelled order back to "pending_payment" so the customer
-// can pay for it again. Clears the old payment record on the backend
-// (status back to "pending", stripe_payment_intent_id, paid_at, and
-// refunded_at all reset) so a fresh Stripe PaymentIntent can be
-// created next time the customer pays, and sends the customer a
-// notification that the order has been reinstated. No request body.
-//
-// Only a "cancelled" order can be reinstated — the backend 400s with
-// { "error": "Only a cancelled order can be reinstated." } otherwise.
-// This is the ONLY way to move an order forward again once its
-// payment has ended up "refunded" or "rejected", since
-// updateOrderStatus() above now refuses any further change in that
-// case. After reinstating, the customer pays again via the normal Pay
-// Now flow — call createPaymentIntent() (payments.api.js) with this
-// same order_number.
-export const reinstateOrder = (orderNumber, signal) => {
-  return axiosInstance.put(
-    `/api/v1/admin/orders/${orderNumber}/reinstate/`,
-    undefined,
-    { signal },
-  );
-};
-
-// ----------------------------
-// API - Request a return for a delivered order
+// Request a return for a delivered order
 // ----------------------------
 // Allows the customer to request a return for an order that has
 // already been delivered. The "data" payload is expected to include:
 // - reason: why the customer wants to return the order/item
+//
+// Only delivered orders are eligible, and a new request is refused
+// while the order already has a pending or approved return. A new
+// return starts with status "pending".
 export const requestReturn = (orderNumber, data, signal) => {
   return axiosInstance.post(`/api/v1/orders/${orderNumber}/return/`, data, {
     signal,

@@ -3,24 +3,22 @@
 // ----------------------------
 
 export const ORDER_STATUS = {
-  PENDING: "pending_payment", // Order placed, awaiting Stripe payment confirmation
-  // NEW (Sep 2026, API 74.1/74.4 backend fix): a QR order that was
-  // cancelled specifically because its payment proof was rejected, and
-  // has since had a fresh screenshot re-uploaded for a retry review.
-  // Distinct from PENDING so the admin QR queue and order detail pages
-  // can tell a first-time review apart from a retry — this status is
-  // only ever set by the backend itself (never a selectable option in
-  // the admin "Update Status" dropdown).
+  PENDING: "pending_payment", // Order placed, awaiting payment (Stripe confirmation or QR proof approval)
+  // Legacy state for QR orders that were reopened after a rejected proof.
+  // The backend does not assign it to new orders: a rejected QR order
+  // stays in "pending_payment" while the customer re-uploads a proof. It
+  // remains defined so orders that already carry this status still
+  // display correctly. It is never a selectable option in the admin
+  // "Update Status" dropdown.
   ON_HOLD: "on_hold",
-  CONFIRMED: "confirmed", // Payment succeeded (Stripe webhook) — order confirmed
+  CONFIRMED: "confirmed", // Payment succeeded — order confirmed
   SHIPPED: "shipped", // Order has been dispatched/shipped to the customer
-  // Courier is actively delivering to the customer's address — backend
-  // confirmed (Bug #30 fix) this requires payment.status === "paid" first,
-  // same rule as SHIPPED/DELIVERED, and triggers its own customer
-  // notification ("Order {order_number} is out for delivery.")
+  // Courier is actively delivering to the customer's address. Requires
+  // payment.status === "paid", like SHIPPED and DELIVERED, and triggers
+  // its own customer notification.
   OUT_FOR_DELIVERY: "out_for_delivery",
-  DELIVERED: "delivered", // Order has successfully reached the customer
-  CANCELLED: "cancelled", // Order was cancelled (by customer or admin)
+  DELIVERED: "delivered", // Order has reached the customer — final, no further status changes
+  CANCELLED: "cancelled", // Order was cancelled (by customer, admin, or automatically) — final, no further status changes
 };
 
 // ----------------------------
@@ -35,14 +33,12 @@ export const PAYMENT_STATUS = {
   PENDING: "pending", // Payment has not been completed yet
   UNDER_REVIEW: "under_review", // QR only — proof uploaded, awaiting admin approval
   PAID: "paid", // Payment was successfully completed
-  // UPDATED (Sep 2026, API 74.4 backend fix): rejecting a QR proof now
-  // also moves order.status to CANCELLED and releases reserved stock —
-  // it no longer leaves the order sitting at "pending_payment". The
-  // payment object also now carries a `qr_rejection_count` integer
-  // (how many times this order's proof has been rejected) — surfaced
-  // on the customer Order Detail page and the admin QR queue/detail
-  // pages so both sides can see how close an order is to the
-  // 3-attempt cap (see PAYMENT_METHOD.QR flows in payments.api.js).
+  // A rejected proof leaves the order in "pending_payment" so the customer
+  // can upload a new one. The third rejection cancels the order
+  // permanently. The payment object carries a `qr_rejection_count`
+  // integer (how many times the proof has been rejected), which the
+  // customer Order Detail page and the admin QR pages use to show how
+  // many attempts are used.
   REJECTED: "rejected", // QR only — admin rejected the uploaded proof
   REFUNDED: "refunded", // Payment was refunded back to the customer
 };
@@ -52,15 +48,12 @@ export const PAYMENT_STATUS = {
 // ----------------------------
 // Represents the current state of a product return request
 export const RETURN_STATUS = {
-  // NOTE: Real backend responses (confirmed via Network tab on /api/v1/returns/)
-  // send "pending" for a freshly-filed, undecided return — NOT "requested" as
-  // the API docs implied. Value corrected to match the ACTUAL backend contract.
-  // This one value is consumed everywhere (getStatusColor.js badge coloring,
-  // ActiveTickets.jsx label mapping, AccountDashboard.jsx filtering) — fixing
-  // it here fixes all three call sites at once instead of patching each one.
-  REQUESTED: "pending", // Customer has requested a return, decision pending
-  APPROVED: "approved", // Admin has approved the return request
-  REJECTED: "rejected", // Admin has rejected the return request
+  // A newly filed return awaiting an admin decision. The value sent by the
+  // backend is "pending"; the key name is kept because it is referenced by
+  // the badge colors, ticket labels and dashboard filters.
+  REQUESTED: "pending",
+  APPROVED: "approved", // Admin has approved the return request — final
+  REJECTED: "rejected", // Admin has rejected the return request — final
 };
 
 // ----------------------------

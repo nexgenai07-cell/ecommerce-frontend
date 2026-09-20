@@ -2,13 +2,14 @@ import { useState } from "react"; // useState manages the current pagination pag
 import { useQuery } from "@tanstack/react-query"; // useQuery handles fetching, caching, and loading state
 import { BsClockHistory } from "react-icons/bs"; // History-clock icon for the gradient header badge
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants
-import { getReturns } from "../../api/returns.api"; // API 51 — GET /api/v1/returns/
+import { getReturns } from "../../api/returns.api"; // GET /api/v1/returns/
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — handles both flat-array and paginated API response shapes
 import formatDate from "../../utils/formatDate"; // Converts ISO date string into a readable format e.g. "Jun 29, 2026"
 import { Link, useNavigate } from "react-router-dom"; // Link navigates to the Return Detail page when "View" is clicked; useNavigate drives the whole-row click
 import { ROUTES } from "../../constants/routes"; // Route path constants, used for the "View" link below
 import Badge from "../ui/Badge"; // Reusable status pill — auto-resolves color via getStatusColor
-import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel — its built-in pagination footer replaces the standalone Pagination control this file used before
+import DataTable from "../ui/DataTable"; // Shared table component used across the admin panel and the account pages — its built-in footer provides the pagination controls
+import useScrollToSectionOnHash from "../../hooks/useScrollToSectionOnHash"; // Scrolls this card into view when the page is opened with the #previous-returns link (the dashboard's "View All")
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the pattern used across the admin tables. The first option
@@ -36,8 +37,8 @@ const PreviousReturns = () => {
   };
 
   // =============================================
-  // RETURNS API
-  // API 51 — GET /api/v1/returns/
+  // RETURNS
+  // GET /api/v1/returns/
   // =============================================
   // Same QUERY_KEYS.RETURNS cache key used by the submit mutation in ReturnRequest.jsx,
   // so this table refreshes automatically right after a new return is submitted.
@@ -47,9 +48,14 @@ const PreviousReturns = () => {
     staleTime: 1000 * 60 * 5,
   });
 
+  // Ref for the card below. When the page is opened with the
+  // "#previous-returns" link, the page scrolls down to this card once its
+  // data has loaded.
+  const sectionRef = useScrollToSectionOnHash("previous-returns", !isLoading);
+
   // Full returns array, newest first — falls back to empty array
-  // Routed through extractListData defensively (API docs say flat array,
-  // but other list endpoints in this project have drifted to paginated shape)
+  // Routed through extractListData, which handles both a plain array and a
+  // paginated response
   const allReturns = [...extractListData(returnsData)].sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at),
   );
@@ -118,7 +124,7 @@ const PreviousReturns = () => {
     {
       key: "actions",
       label: "Action",
-      // Navigates to the Return Detail page (API 66) for this specific return
+      // Navigates to the Return Detail page for this specific return
       render: (row) => (
         <Link
           to={ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", row.id)}
@@ -139,7 +145,12 @@ const PreviousReturns = () => {
 
   return (
     // Outer elevated card — white bg, rounded corners, soft shadow that glows emerald on hover, gradient strip on top
-    <div className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_26px_-8px_rgba(16,185,129,0.25)] transition-shadow duration-300 overflow-hidden">
+    // scroll-mt-28 keeps the card's heading clear of the fixed navbar when
+    // the page scrolls to it
+    <div
+      ref={sectionRef}
+      className="relative bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_26px_-8px_rgba(16,185,129,0.25)] transition-shadow duration-300 overflow-hidden scroll-mt-28"
+    >
       {/* Thin gradient accent strip across the top of the card, matching every other card on this page */}
       <div className="h-0.75 w-full bg-linear-to-r from-primary via-primary-light to-primary-dark" />
 

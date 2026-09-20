@@ -10,13 +10,9 @@ const RecentOrdersTable = ({ orders }) => {
   // navigate — drives the whole-row click; sends the customer to the same
   // order detail page that each row's own "View Details" link opens
 
-  // NOTE ON MOBILE LAYOUT: this component used to render two entirely
-  // separate layouts — a <table> for sm+ screens and a hand-built card
-  // list for mobile. DataTable only renders one, horizontally
-  // scrollable table across every screen size, so the dedicated mobile
-  // card view no longer exists after this migration. This trade-off
-  // (consistency across the app vs. a mobile-specific layout for this
-  // one widget) was a deliberate choice, not an oversight.
+  // Layout: DataTable renders a single, horizontally scrollable table across
+  // every screen size, so this widget has no separate mobile card layout.
+  // That keeps it consistent with the other tables in the app.
   const columns = [
     {
       key: "order_number",
@@ -105,9 +101,8 @@ const RecentOrdersTable = ({ orders }) => {
         </Link>
       </div>
 
-      {/* DataTable's own EmptyState (variant="noResults") now covers the
-          "No orders yet" case that used to be a hand-written empty row /
-          empty div in each of the two old layouts. */}
+      {/* DataTable's own EmptyState (variant="noResults") covers the
+          "No orders yet" case. */}
       <div className="p-4">
         <DataTable
           columns={columns}

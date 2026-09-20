@@ -1,47 +1,32 @@
 import { useState } from "react";
 
-// TanStack Query — fetches the Sales Report data (API 83) and caches it
+// TanStack Query — fetches the Sales Report data and caches it
 import { useQuery } from "@tanstack/react-query";
 
-// Icons — download icon for the CSV button, line-chart icon for the page
-// header badge (the exact icon already used for "Sales Report" in the
-// admin sidebar, kept consistent here)
-import { AiOutlineDownload, AiOutlineLineChart } from "react-icons/ai";
+// Icon — the line-chart icon shown in the page header badge (the same icon
+// used for "Sales Report" in the admin sidebar)
+import { AiOutlineLineChart } from "react-icons/ai";
 
 import { getSalesReport, exportReport } from "../../api/analytics.api";
-// getSalesReport — API 83, the single source of ALL real data on this page
-// exportReport   — API 90, "sales" is the ONE example type the doc actually
-//                  confirms (unlike "orders"/"returns"/"customers"/"discounts"
-//                  used on other pages, which were all assumptions) — this
-//                  is the one export button in the whole admin panel that
-//                  isn't a guess.
+// getSalesReport — the source of all report data on this page
+// exportReport   — downloads the report as a CSV file
 
 import { showSuccess, showError } from "../../components/ui/Toast";
-import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
-import cn from "../../utils/cn";
-// cn — merges Tailwind class strings, used to style the active/inactive
-// quick-range chip buttons below
 
-import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already used on
-// every other admin screen (Dashboard, Orders, Products, Returns...). Added
-// here so Sales Report finally matches the rest of the panel instead of
-// using its own plain <h1>.
-
-import Select from "../../components/ui/Select";
-// Select — powers the new Sold / Cancelled / Refunded / All status filter
+import AnalyticsPageHeader from "../../components/admin-analytics/AnalyticsPageHeader";
+// AnalyticsPageHeader — the page title with the Filters and Export buttons
+// at the top right, and the filter chips (date range with quick ranges, and
+// status) that open under it
 
 import SalesStatsCards from "../../components/admin-analytics/SalesStatsCards";
 import SalesOverTimeChart from "../../components/admin-analytics/SalesOverTimeChart";
 import DailyBreakdownTable from "../../components/admin-analytics/DailyBreakdownTable";
 
-// STATUS_OPTIONS — the status filter now available on the Sales Report
-// (API 92). "sold" is the default and matches the report's original,
-// always-paid-orders-only behavior — the other options let an admin
-// look at cancelled or refunded orders instead, or lift the filter
-// entirely with "all". The exact same value is also sent to the CSV
-// export (API 99) so the downloaded file always matches the screen.
+// STATUS_OPTIONS — the status filter of the Sales Report. "sold" is the
+// default and shows paid orders only — the other options let an admin look
+// at cancelled or refunded orders instead, or lift the filter entirely with
+// "all". The exact same value is also sent to the CSV export so the
+// downloaded file always matches the screen.
 const STATUS_OPTIONS = [
   { value: "sold", label: "Sold" },
   { value: "cancelled", label: "Cancelled" },
@@ -61,15 +46,15 @@ const getDefaultRange = () => {
 };
 
 // --------------------------------------------------
-// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips under the date
-// pickers (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
+// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips next to the date
+// range (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
 // Every value is computed live from the real current date, nothing is
 // hardcoded, so the chips stay correct on any day the admin opens the page.
 // --------------------------------------------------
 const getPresetRanges = () => {
   const now = new Date();
   // toISO — converts a Date object to the "YYYY-MM-DD" string shape the
-  // date <Input> and the API's start_date/end_date query params both expect
+  // date inputs and the API's start_date/end_date query params both expect
   const toISO = (date) => date.toISOString().slice(0, 10);
   const today = toISO(now);
 
@@ -136,8 +121,8 @@ const SalesReport = () => {
 
   const dataPoints = response?.data?.data || [];
 
-  // Applies a preset's start/end dates in one tap — both date inputs
-  // update together so the chart, cards, and table all refetch in sync
+  // Applies a preset's start/end dates in one tap — both dates update
+  // together so the chart, cards, and table all refetch in sync
   const handleSelectPreset = (preset) => {
     setStartDate(preset.startDate);
     setEndDate(preset.endDate);
@@ -171,109 +156,34 @@ const SalesReport = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* ================================================================
-          PAGE HEADER — shared gradient icon + title component, matching
-          every other admin screen. The date-range pickers, CSV export
-          button, and quick-range chips are passed in as `actions` so they
-          render on the right side of the header (and wrap below the
-          title on narrow screens, since PageHeader's outer row is
-          flex-wrap).
+          PAGE HEADER — the title, the Filters / Export buttons at the top
+          right, and the filter chips that open under them (date range with
+          the quick ranges inside its dropdown, and the status filter).
           ================================================================ */}
-      <PageHeader
+      <AnalyticsPageHeader
         icon={<AiOutlineLineChart />}
         title="Sales Report"
-        actions={
-          // w-full on mobile so the block below can stack full-width;
-          // sm:w-auto lets it shrink back to its natural size once the
-          // date row switches to a single horizontal line
-          <div className="flex flex-col gap-2 w-full sm:w-auto">
-            {/* Date range row — stacks into a single column on mobile
-                (flex-col, each field full width) and becomes one
-                horizontal row with compact fixed-width fields from the
-                sm breakpoint up, so it never overflows the header on a
-                phone screen */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
-              <div className="w-full sm:w-37.5 shrink-0">
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  aria-label="Start date"
-                />
-              </div>
-
-              {/* Separator dash — hidden on mobile where the fields
-                  stack vertically instead of sitting side by side */}
-              <span className="text-gray-300 hidden sm:inline">-</span>
-
-              <div className="w-full sm:w-37.5 shrink-0">
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  aria-label="End date"
-                />
-              </div>
-
-              <Button
-                variant="secondary"
-                leftIcon={<AiOutlineDownload className="w-4 h-4" />}
-                onClick={handleExport}
-                isLoading={isExporting}
-                className="w-full sm:w-auto shrink-0"
-              >
-                CSV
-              </Button>
-            </div>
-
-            {/* Status filter row — Sold / Cancelled / Refunded / All.
-                Sits on its own row under the date pickers so it never
-                crowds the CSV button on a narrow phone screen. */}
-            <div className="w-full sm:w-45">
-              <Select
-                aria-label="Order status filter"
-                options={STATUS_OPTIONS}
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              />
-            </div>
-
-            {/* ==========================================================
-                QUICK-RANGE CHIPS — one-tap shortcuts sitting directly
-                below the date pickers. Horizontally scrollable with the
-                scrollbar hidden (defined project-wide in index.css) so
-                all five chips stay reachable even on a narrow phone
-                screen without breaking the layout.
-                ========================================================== */}
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-              {presetRanges.map((preset) => {
-                // A chip is "active" when both its start and end dates
-                // exactly match the currently selected range
-                const isActive =
-                  preset.startDate === startDate && preset.endDate === endDate;
-
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={cn(
-                      "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 border",
-                      isActive
-                        ? "bg-linear-to-r from-primary to-primary-dark text-white border-transparent shadow-sm shadow-primary/25"
-                        : "bg-white text-gray-500 border-gray-200 hover:text-gray-700 hover:bg-gray-50",
-                    )}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        }
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        defaultStartDate={defaultRange.startDate}
+        defaultEndDate={defaultRange.endDate}
+        presetRanges={presetRanges}
+        onSelectPreset={handleSelectPreset}
+        selects={[
+          {
+            key: "status",
+            label: "Status",
+            options: STATUS_OPTIONS,
+            value: status,
+            defaultValue: "sold",
+            onChange: setStatus,
+          },
+        ]}
+        onExport={handleExport}
+        isExporting={isExporting}
       />
-      {/* Note: "PDF Report" from the design is NOT included — API 90's
-          documented Export Report endpoint only returns a CSV file,
-          there's no PDF generation option anywhere in the API. */}
 
       <SalesStatsCards
         startDate={startDate}
@@ -286,11 +196,6 @@ const SalesReport = () => {
         endDate={endDate}
         status={status}
       />
-      {/* Note: "Sales by Category" and "Payment Methods" widgets from
-          the design are NOT included — see the flag notes shared
-          before this code: no category-revenue endpoint exists, and a
-          multi-provider payment breakdown doesn't apply since this
-          project only processes payments through Stripe. */}
 
       <DailyBreakdownTable dataPoints={dataPoints} isLoading={isLoading} />
     </div>

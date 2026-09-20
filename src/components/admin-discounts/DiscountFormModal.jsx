@@ -39,6 +39,18 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
+// Current local clock time as "HH:MM", same shape as the native time
+// input's value. Used only to block a start time that has already
+// elapsed TODAY — a flash sale starting tomorrow or later is never
+// affected, since only today's date is ever compared against the
+// current clock.
+const getNowTimeString = () => {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
 // Builds a sortable "instant" string for the range check below, mirroring
 // how the backend itself treats a bare date (API 40, Sep 2026 addendum):
 // a start date with no time defaults to the very start of that day, and
@@ -52,13 +64,15 @@ const toComparableInstant = (date, time, fallbackTime) =>
 // --------------------------------------------------
 // Schema factory (API 40 / API 42, Sep 2026 addendum) — built inside the
 // component rather than as a single module-level constant, because the
-// "start date cannot be in the past" rule needs one exception: editing a
+// "start date cannot be in the past" rule needs an exception: editing a
 // coupon must not start rejecting it just because it already had an old
-// start_date before this rule existed. originalStartDateRef holds the
-// value the form was opened with, read live (not captured) so the same
-// schema instance stays correct across every open/close of the modal.
+// start_date (or, for a flash sale, an already-elapsed start_time)
+// before these rules existed. originalStartDateRef/originalStartTimeRef
+// hold the values the form was opened with, read live (not captured) so
+// the same schema instance stays correct across every open/close of the
+// modal.
 // --------------------------------------------------
-const buildDiscountSchema = (originalStartDateRef) =>
+const buildDiscountSchema = (originalStartDateRef, originalStartTimeRef) =>
   z
     .object({
       code: z
@@ -136,6 +150,39 @@ const buildDiscountSchema = (originalStartDateRef) =>
       }
     })
     // --------------------------------------------------
+    // A flash-sale start time that has already passed TODAY is blocked
+    // the same way a past start date is — the backend itself doesn't
+    // enforce this (its own rule explicitly allows any time on today's
+    // date), but letting an admin pick "10:00 AM" for a sale when it's
+    // already 5:00 PM makes no practical sense, so this is a frontend-
+    // only guard on top of the backend's rule.
+    //
+    // Only ever checked when start_date is today — a sale starting
+    // tomorrow or later is untouched regardless of what time is picked.
+    // The same edit-mode exception as above applies: a coupon whose
+    // start date AND start time were already set before the admin
+    // opened the form isn't newly flagged just for editing something
+    // else.
+    // --------------------------------------------------
+    .superRefine((data, ctx) => {
+      if (!data.use_specific_time || !data.start_time || !data.start_date) {
+        return;
+      }
+      if (data.start_date !== getTodayDateString()) return;
+
+      const isUnchangedFromOriginal =
+        data.start_date === originalStartDateRef.current &&
+        data.start_time === originalStartTimeRef.current;
+
+      if (data.start_time < getNowTimeString() && !isUnchangedFromOriginal) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Start time cannot be in the past.",
+          path: ["start_time"],
+        });
+      }
+    })
+    // --------------------------------------------------
     // Once "specific time" is switched on, both a start time and an end
     // time are required — a flash sale needs both bounds to mean
     // anything — and a date has to actually be picked for whichever
@@ -186,8 +233,9 @@ const buildDiscountSchema = (originalStartDateRef) =>
     // A same-day, no-time coupon (start_date === end_date) is explicitly
     // allowed — the backend treats a date-only end_date as valid through
     // 11:59:59 PM of that day. A same-day coupon WITH times only fails
-    // when the end time is genuinely earlier than the start time (e.g.
-    // start 6:00 PM, end 10:00 AM on the same date).
+    // when the end time is genuinely earlier (or equal) than the start
+    // time (e.g. start 6:00 PM, end 10:00 AM on the same date) — a
+    // flash sale can't run backward or last zero minutes.
     // --------------------------------------------------
     .superRefine((data, ctx) => {
       if (!data.start_date || !data.end_date) return;
@@ -205,10 +253,21 @@ const buildDiscountSchema = (originalStartDateRef) =>
         "23:59",
       );
 
-      if (endInstant < startInstant) {
+      // A same-day, date-only range is allowed to be "equal" (that's
+      // simply a whole-day coupon, handled by the 00:00/23:59 fallback
+      // above) — but once real times are involved, an equal instant
+      // means a zero-minute sale, which is just as invalid as a
+      // backward one.
+      const isInvalidRange = data.use_specific_time
+        ? endInstant <= startInstant
+        : endInstant < startInstant;
+
+      if (isInvalidRange) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "End date cannot be earlier than the start date.",
+          message: data.use_specific_time
+            ? "End time must be after the start time."
+            : "End date cannot be earlier than the start date.",
           path: [data.use_specific_time ? "end_time" : "end_date"],
         });
       }
@@ -237,17 +296,20 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
   const queryClient = useQueryClient();
   const isEditMode = !!activeDiscount;
 
-  // Holds the start_date the form was opened with (edit mode) or null
-  // (create mode). Read live inside the schema's superRefine above, so
-  // updating .current here never requires rebuilding the schema itself.
+  // Holds the start_date (and, for a flash sale, start_time) the form
+  // was opened with in edit mode, or null in create mode. Read live
+  // inside the schema's superRefine checks above, so updating .current
+  // here never requires rebuilding the schema itself.
   const originalStartDateRef = useRef(null);
+  const originalStartTimeRef = useRef(null);
 
-  // Built once per mounted instance of this modal — the ref's identity
-  // never changes, only its .current value, so the validator inside
-  // always reads the latest original start date without needing a new
-  // schema object every time a different discount is opened for editing.
+  // Built once per mounted instance of this modal — the refs' identity
+  // never changes, only their .current values, so the validators inside
+  // always read the latest original start date/time without needing a
+  // new schema object every time a different discount is opened for
+  // editing.
   const discountSchema = useMemo(
-    () => buildDiscountSchema(originalStartDateRef),
+    () => buildDiscountSchema(originalStartDateRef, originalStartTimeRef),
     [],
   );
 
@@ -333,10 +395,12 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
         !!storedEndTime && !ALL_DAY_END_TIMES.includes(storedEndTime);
       const useSpecificTime = hasSpecificStartTime || hasSpecificEndTime;
 
-      // Recorded so the past-date validator above can tell "an old
-      // start_date this coupon already had" apart from "a new past date
-      // the admin just typed in".
+      // Recorded so the past-date/past-time validators above can tell
+      // "an old start_date (or already-elapsed start_time) this coupon
+      // already had" apart from "a new past value the admin just typed
+      // in".
       originalStartDateRef.current = isEditMode ? startDateValue : null;
+      originalStartTimeRef.current = isEditMode ? storedStartTime : null;
 
       reset({
         code: activeDiscount?.code || "",
@@ -545,7 +609,18 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
               label="Start Time"
               type="time"
               required
-              hint="24-hour clock, e.g. 10:00"
+              // Only meaningful for today's date — a flash sale starting
+              // tomorrow or later has no "already passed" time to block.
+              min={
+                startDateValue === getTodayDateString()
+                  ? getNowTimeString()
+                  : undefined
+              }
+              // The native time input ignores the real "placeholder"
+              // attribute entirely — overlayText fakes one instead,
+              // shown only while this field is empty and unfocused.
+              overlayText="e.g. 10:00 AM"
+              value={watch("start_time")}
               {...register("start_time")}
               error={errors.start_time?.message}
             />
@@ -553,7 +628,8 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
               label="End Time"
               type="time"
               required
-              hint="Same day as End Date above"
+              overlayText="e.g. 6:00 PM"
+              value={watch("end_time")}
               {...register("end_time")}
               error={errors.end_time?.message}
             />

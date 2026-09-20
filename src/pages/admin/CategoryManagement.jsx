@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AiOutlinePlus,
@@ -46,17 +46,15 @@ const CategoryImageCell = ({ category }) => {
         alt={category.name}
         onError={() => setImageFailed(true)}
         className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
-        // w-10 h-10 (40px) -> w-7 h-7 (28px): same fix as ProductList's thumbnail —
-        // 40px was taller than the DataTable's fixed 36px row, forcing every category
-        // row to grow past it
+        // 28px thumbnail — fits within the DataTable's fixed 36px row
       />
     );
   }
 
   return (
     <div className="w-7 h-7 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0 ring-1 ring-black/5">
-      {/* w-10 h-10 -> w-7 h-7: matches the real-image branch above so the placeholder
-          icon box is never taller than the fixed row height either */}
+      {/* Same 28px size as the real-image branch above, so the placeholder icon
+          box never exceeds the fixed row height either */}
       <AiOutlinePicture className="w-4 h-4" />
     </div>
   );
@@ -118,11 +116,10 @@ const CategoryManagement = () => {
   // (Total Categories / Total Categorized Products). Categories are a
   // small, bounded, store-owned dataset (unlike the product catalog),
   // so pulling the complete list for an accurate total is safe here.
-  // No `page` param is sent, so per API 23's opt-in pagination rule the
-  // response stays the same plain array as before — and this reuses
-  // the EXACT SAME cache key/query as the navbar/footer/shop filter
-  // checkboxes (see categories.api.js), so it costs no extra request
-  // in practice; it's simply shared from React Query's cache.
+  // No `page` param is sent, so the backend returns a plain array — and
+  // this reuses the same cache key/query as the navbar/footer/shop filter
+  // checkboxes (see categories.api.js), so it costs no extra request in
+  // practice; it is shared from React Query's cache.
   // --------------------------------------------------
   const { data: allCategoriesResponse, isLoading: isLoadingAllCategories } =
     useQuery({
@@ -138,17 +135,17 @@ const CategoryManagement = () => {
   );
 
   // --------------------------------------------------
-  // ADMIN TABLE query — real server-side search, date-range filtering,
-  // sorting, and pagination (API 23, Sep 2026 filtering fix pass).
-  // `page` is explicitly sent, so the backend switches into its
-  // paginated { count, next, previous, results } shape for this
-  // request only — every other caller of getCategories() above keeps
-  // getting the plain array, since they never send `page`.
+  // ADMIN TABLE query — server-side search, date-range filtering,
+  // sorting, and pagination. `page` is explicitly sent, so the backend
+  // switches into its paginated { count, next, previous, results } shape
+  // for this request only — every other caller of getCategories() above
+  // keeps getting the plain array, since they never send `page`.
   // --------------------------------------------------
   const {
     data: categoriesResponse,
     isLoading,
     isError,
+    error: listError,
     refetch,
   } = useQuery({
     queryKey: [
@@ -181,6 +178,14 @@ const CategoryManagement = () => {
   const totalCount = categoriesResponse?.data?.count ?? tableCategories.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  // If the backend rejects the request (for example an invalid date
+  // range), show the reason it gives instead of only the generic table
+  // error.
+  useEffect(() => {
+    const message = listError?.response?.data?.error;
+    if (message) showError(message);
+  }, [listError]);
+
   // --------------------------------------------------
   // Filter helpers
   // --------------------------------------------------
@@ -202,9 +207,9 @@ const CategoryManagement = () => {
     setCurrentPage(1);
   };
 
-  // Backend's page_size cap on /api/v1/categories/ (API 23) — same cap
-  // already used for the on-screen pagination, now also used here to
-  // pull a filtered export in as few requests as possible.
+  // The backend's page_size cap on /api/v1/categories/ — the same cap used
+  // for the on-screen pagination, also used here to pull a filtered export
+  // in as few requests as possible.
   const EXPORT_PAGE_SIZE = 100;
 
   // Exports EVERY category matching the currently applied filters (not
@@ -446,17 +451,10 @@ const CategoryManagement = () => {
         </div>
       )}
 
-      {/* REMOVED: this table used to sit inside its own extra
-          "bg-white rounded-2xl border shadow-md" card with p-3 sm:p-4
-          padding, wrapped around a manual isLoading/empty-state check —
-          on top of DataTable's own card styling. That produced a visibly
-          double-boxed table with an extra padded shell around it, unlike
-          every other admin list page, which renders <DataTable /> directly.
-          DataTable already handles the loading skeleton and the empty
-          state internally via its isLoading prop and the emptyTitle/
-          emptyDescription overrides added for this exact case, so the
-          extra wrapper, the manual Spinner, and the manual EmptyState
-          call are no longer needed. */}
+      {/* DataTable is rendered directly, without an extra card around it, like
+          every other admin list page. It handles the loading skeleton and the
+          empty state internally through its isLoading prop and the
+          emptyTitle/emptyDescription overrides. */}
       <DataTable
         columns={columns}
         data={tableCategories}

@@ -9,31 +9,20 @@ import { useQuery } from "@tanstack/react-query";
 // the admin sidebar ("Product Performance"), kept consistent here
 import { AiOutlineTrophy } from "react-icons/ai";
 
-// getBestSellers -> the single API call this whole page is built on;
-// returns products ranked by sales for the chosen date range
+// getBestSellers -> the API call this page is built on; returns products
+// ranked by sales for the chosen date range, and can also return them
+// ordered by revenue
 import { getBestSellers } from "../../api/analytics.api";
-// getCategories -> NEW (16 Sep 2026, Filtering Fix pass, API 95)
-// powers the "Category" filter dropdown below, and its value is now
-// forwarded to getBestSellers as category_id
+// getCategories -> powers the "Category" filter dropdown below, and its
+// value is forwarded to getBestSellers as category_id
 import { getCategories } from "../../api/categories.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 
-// Input -> shared input component, used here twice for the two date pickers
-import Input from "../../components/ui/Input";
-// Select -> shared dropdown component, used for the new Category filter
-import Select from "../../components/ui/Select";
-
-import cn from "../../utils/cn";
-// cn — merges Tailwind class strings, used to style the active/inactive
-// quick-range chip buttons below (same helper Sales Report uses for
-// the exact same purpose)
-
-// PageHeader -> the SAME shared gradient icon + title header already
-// used on every other admin screen (Dashboard, Orders, Sales Report,
-// Revenue Report...) — kept exactly as-is here so this page matches
-// the rest of the panel.
-import PageHeader from "../../components/shared/PageHeader";
+// AnalyticsPageHeader -> the page title with the Filters button at the top
+// right, and the filter chips (date range with quick ranges, and category)
+// that open under it
+import AnalyticsPageHeader from "../../components/admin-analytics/AnalyticsPageHeader";
 
 // ProductPerformanceStatsCards -> the KPI card row (units sold,
 // total revenue, best seller)
@@ -58,8 +47,8 @@ const getDefaultRange = () => {
 };
 
 // --------------------------------------------------
-// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips under the date
-// pickers (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
+// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips next to the date
+// range (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
 // Same preset set and same live-computed-from-today approach as the
 // Sales Report page, so both pages behave identically.
 // --------------------------------------------------
@@ -122,24 +111,18 @@ const ProductsPerformance = () => {
   // day the component first mounted
   const presetRanges = getPresetRanges();
 
-  // Applies a preset's start/end dates in one tap — both date inputs
-  // update together so every section on the page refetches in sync
+  // Applies a preset's start/end dates in one tap — both dates update
+  // together so every section on the page refetches in sync
   const handleSelectPreset = (preset) => {
     setStartDate(preset.startDate);
     setEndDate(preset.endDate);
   };
 
-  // Shared source for BOTH the "Top Products by Revenue" bar list and
-  // the full table below — fetched once here (limit: 50, a deliberate
-  // middle ground — see the flag notes in ProductPerformanceStatsCards
-  // for why this isn't pretending to cover the entire 254-product catalog)
-  //
-  // UPDATED (16 Sep 2026, Filtering Fix pass, API 95): category_id is
-  // now a confirmed, working filter, combinable with the existing
-  // start_date/end_date/limit params. Sending it here does not change
-  // the response shape — `limit` is still respected as before, since
-  // `page` is never sent (this page never turns on API 95's opt-in
-  // real pagination).
+  // Source for the full table below the revenue list. The backend returns
+  // it ranked by units sold (its default ordering), which is what the
+  // table's Rank column shows. `category_id` combines with the date range,
+  // and `limit` is respected because `page` is never sent (this page does
+  // not use the opt-in pagination), so the response stays a plain array.
   const { data: response, isLoading } = useQuery({
     queryKey: ["productsPerformance", "list", startDate, endDate, categoryId],
     queryFn: ({ signal }) =>
@@ -159,113 +142,76 @@ const ProductsPerformance = () => {
   // request fails, so every child component below can safely call
   // .map()/.slice() on it without needing its own null-check
 
+  // Source for the "Top Products by Revenue" list. The backend orders the
+  // products by revenue BEFORE applying the limit, so the highest-earning
+  // products are always returned — even one that sold few units and would
+  // fall outside the top 50 when ranked by units sold.
+  const { data: revenueResponse, isLoading: isRevenueLoading } = useQuery({
+    queryKey: [
+      "productsPerformance",
+      "topRevenue",
+      startDate,
+      endDate,
+      categoryId,
+    ],
+    queryFn: ({ signal }) =>
+      getBestSellers(
+        {
+          start_date: startDate,
+          end_date: endDate,
+          limit: 50,
+          category_id: categoryId || undefined,
+          ordering: "-total_revenue",
+        },
+        signal,
+      ),
+  });
+
+  const topRevenueProducts = revenueResponse?.data || [];
+
   return (
     <div className="flex flex-col gap-6">
       {/* ================================================================
-          PAGE HEADER — shared gradient icon + title component, matching
-          every other admin screen. The date-range pickers sit on the
-          right side of the header row, with the quick-range chips
-          placed directly BELOW them (same layout Sales Report uses)
-          instead of off to the side, so picking a precise date and
-          tapping a quick preset both happen in the same visual spot.
+          PAGE HEADER — the title, the Filters button at the top right, and
+          the filter chips that open under it (date range with the quick
+          ranges inside its dropdown, and the category filter).
           ================================================================ */}
-      <PageHeader
+      <AnalyticsPageHeader
         icon={<AiOutlineTrophy />}
         title="Products Performance"
-        actions={
-          // w-full on mobile so the block below can stack full-width;
-          // sm:w-auto lets it shrink back to its natural size once the
-          // date row switches to a single horizontal line
-          <div className="flex flex-col gap-2 w-full sm:w-auto">
-            {/* Date row — stacks into a single column on mobile
-                (flex-col, each field full width) and becomes one
-                horizontal row from the sm breakpoint up */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
-              <div className="w-full sm:w-37.5 shrink-0">
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  aria-label="Start date"
-                />
-              </div>
-
-              {/* Separator dash — hidden on mobile where the fields
-                  stack vertically instead of sitting side by side */}
-              <span className="text-gray-300 hidden sm:inline">-</span>
-
-              <div className="w-full sm:w-37.5 shrink-0">
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  aria-label="End date"
-                />
-              </div>
-            </div>
-
-            {/* ==========================================================
-                QUICK-RANGE CHIPS — one-tap shortcuts sitting directly
-                below the date pickers, exactly like Sales Report.
-                Horizontally scrollable with the scrollbar hidden so
-                all five chips stay reachable even on a narrow phone
-                screen without breaking the layout.
-                ========================================================== */}
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-              {presetRanges.map((preset) => {
-                const isActive =
-                  preset.startDate === startDate && preset.endDate === endDate;
-
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={cn(
-                      "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-150 shrink-0 border",
-                      isActive
-                        ? "bg-linear-to-r from-primary to-primary-dark text-white border-transparent shadow-sm shadow-primary/25"
-                        : "bg-white text-gray-500 border-gray-200 hover:text-gray-700 hover:bg-gray-50",
-                    )}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-            {/* ==========================================================
-                CATEGORY FILTER — NEW (16 Sep 2026, Filtering Fix pass,
-                API 95). Sits directly under the quick-range chips,
-                same column as the rest of this header's filter
-                controls.
-                ========================================================== */}
-            <div className="w-full sm:w-45">
-              <Select
-                aria-label="Category filter"
-                options={categoryOptions}
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              />
-            </div>
-          </div>
-        }
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        defaultStartDate={defaultRange.startDate}
+        defaultEndDate={defaultRange.endDate}
+        presetRanges={presetRanges}
+        onSelectPreset={handleSelectPreset}
+        selects={[
+          {
+            key: "category",
+            label: "Category",
+            options: categoryOptions,
+            value: categoryId,
+            defaultValue: "",
+            onChange: setCategoryId,
+          },
+        ]}
       />
 
       <ProductPerformanceStatsCards startDate={startDate} endDate={endDate} />
-      {/* Note: "Most Viewed Product" and "Avg Product Rating" cards
-          from the design are NOT included — no view-aggregation or
-          ratings/reviews system exists anywhere in the documented API. */}
 
       {/* ================================================================
-          TOP PRODUCTS BY REVENUE — now full width (w-full), instead of
-          being capped to a percentage of the page — matches the rest
-          of this page's sections, which all run edge-to-edge.
+          TOP PRODUCTS BY REVENUE — full width (w-full), matching the
+          rest of this page's sections, which all run edge-to-edge. It
+          reads from its own revenue-ordered request, separate from the
+          units-ranked table below.
           ================================================================ */}
       <div className="w-full">
-        <TopProductsRevenueList products={products} isLoading={isLoading} />
-        {/* "Sales by Category" donut from the original design is NOT
-            included — same gap already flagged on the Sales Report
-            page: no category-revenue-breakdown endpoint exists. */}
+        <TopProductsRevenueList
+          products={topRevenueProducts}
+          isLoading={isRevenueLoading}
+        />
       </div>
 
       <ProductsPerformanceTable products={products} isLoading={isLoading} />

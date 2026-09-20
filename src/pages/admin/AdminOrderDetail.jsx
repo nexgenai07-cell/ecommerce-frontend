@@ -20,22 +20,15 @@ import {
   getAdminOrderDetail,
   trackOrder,
   updateOrderStatus,
-  reinstateOrder,
 } from "../../api/orders.api";
-// getAdminOrderDetail — NEW admin-only endpoint (added after backend
-// fixed a real bug: the old customer-facing getOrderDetail() only
-// returned orders the requester themselves owned, so an admin got a
-// 404 for real orders that weren't theirs). This now correctly
-// returns ANY order in the store for an admin request. UPDATED (Sep
-// 2026, API 61 backend fix): payment now also carries
-// qr_rejection_count.
-// trackOrder        — API 46: GET /api/v1/orders/{order_number}/track/
-// updateOrderStatus — API 49/63: PUT /api/v1/admin/orders/{order_number}/status/
-//   Enforces a forward-only sequence, a paid-before-confirmed gate, and
-//   a hard lock once payment is refunded/rejected — see
+// getAdminOrderDetail — GET /api/v1/admin/orders/{order_number}/
+//   Returns ANY order in the store for an admin request. The payment
+//   object carries qr_rejection_count for QR orders.
+// trackOrder          — GET /api/v1/orders/{order_number}/track/
+// updateOrderStatus   — PUT /api/v1/admin/orders/{order_number}/status/
+//   Enforces a forward-only sequence and a paid-before-confirmed gate,
+//   and refuses any change on a delivered or cancelled order — see
 //   getStatusOptions() below.
-// reinstateOrder    — API 63.1: PUT /api/v1/admin/orders/{order_number}/reinstate/
-//   The only way to reopen an order once its payment is refunded/rejected.
 
 import { ROUTES } from "../../constants/routes";
 import {
@@ -60,16 +53,15 @@ import OrderStatusBadge from "../../components/shared/OrderStatusBadge";
 import OrderStatusStepper from "../../components/shared/OrderStatusStepper";
 
 // Every real, admin-settable ORDER_STATUS value, in the exact forward
-// sequence the backend now enforces (Sep 2026, API 63 backend fix):
-// pending_payment -> confirmed -> shipped -> out_for_delivery ->
-// delivered. ON_HOLD is intentionally excluded — it's a backend-only
-// state (a QR retry review) and was never a settable option here.
+// sequence the backend enforces: pending_payment -> confirmed ->
+// shipped -> out_for_delivery -> delivered. ON_HOLD is intentionally
+// excluded — it is a legacy backend-only state and is never a settable
+// option here.
 const FORWARD_STATUS_SEQUENCE = [
   { value: ORDER_STATUS.PENDING, label: "Pending Payment" },
   { value: ORDER_STATUS.CONFIRMED, label: "Confirmed" },
   { value: ORDER_STATUS.SHIPPED, label: "Shipped" },
-  // Added per Bug #30 fix — backend confirmed this endpoint accepts
-  // "out_for_delivery" and enforces the same paid-only rule as
+  // "out_for_delivery" follows the same paid-only rule as
   // Shipped/Delivered (400 if payment isn't confirmed yet)
   { value: ORDER_STATUS.OUT_FOR_DELIVERY, label: "Out for Delivery" },
   { value: ORDER_STATUS.DELIVERED, label: "Delivered" },
@@ -79,7 +71,7 @@ const FORWARD_STATUS_SEQUENCE = [
 // "New Status" dropdown. Every status is always listed; the ones the
 // admin cannot pick from the order's current state are flagged
 // `disabled: true`, so they appear greyed out and cannot be selected.
-// The rules mirror the backend's checks for API 63:
+// The rules mirror the backend's checks:
 // 1) The sequence is strictly forward-only — any status before the
 //    order's current position in FORWARD_STATUS_SEQUENCE is disabled,
 //    since moving backward is rejected outright.
@@ -95,9 +87,8 @@ const FORWARD_STATUS_SEQUENCE = [
 //    selected for it, so an empty list is returned. (The backend also
 //    rejects every status change on a delivered order, including
 //    "cancelled".)
-// This function is skipped entirely once payment is "refunded" or
-// "rejected" — see isPermanentlyLocked below, which disables status
-// changes altogether in that case.
+// A rejected QR payment does not lock the order: an order that is still
+// "pending_payment" can always be cancelled, whatever its payment status.
 const getStatusOptions = (order) => {
   const currentStatus = order?.status;
 
@@ -208,16 +199,16 @@ const AdminOrderDetail = () => {
   const [statusFormError, setStatusFormError] = useState("");
 
   // Alternatives the backend suggests once an order is actually cancelled
-  // (API 63 response) — e.g. similar in-stock products the admin can
+  // (returned by the status update) — e.g. similar in-stock products the admin can
   // point the customer toward. Lives only in this component's state
   // (not on the order object itself) because the backend sends it once,
   // as part of the cancel response, not on every future order fetch.
   const [suggestedAlternatives, setSuggestedAlternatives] = useState([]);
 
   // --------------------------------------------------
-  // ORDER DETAIL — now uses the NEW admin-only endpoint, fixed after
-  // real testing found the old shared customer endpoint returning a
-  // false 404 for orders admins didn't personally own
+  // ORDER DETAIL — uses the admin-only endpoint, which returns any
+  // order in the store (the customer endpoint only returns orders the
+  // requester owns)
   // --------------------------------------------------
   const { data: orderResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
@@ -228,27 +219,18 @@ const AdminOrderDetail = () => {
   // The actual order object — everything below reads from this
 
   // A delivered order is final: the backend rejects every status
-  // change for it (including "cancelled"), and there is no reinstate
-  // action for it either.
+  // change for it, including "cancelled".
   const isDelivered = order?.status === ORDER_STATUS.DELIVERED;
 
-  // A cancelled order has reached the end of its lifecycle and can no
-  // longer be moved to another status from this page.
+  // A cancelled order is final as well — whether it was cancelled by the
+  // customer, an admin, a timeout or a third rejected QR proof, it can
+  // never be reopened or moved to another status.
   const isCancelled = order?.status === ORDER_STATUS.CANCELLED;
 
-  // True when the Update Status controls must not be available.
+  // True when the Update Status controls must not be available. A
+  // rejected QR payment does not count: a pending_payment order with a
+  // rejected proof must still be cancellable by the admin.
   const isStatusFinal = isDelivered || isCancelled;
-
-  // NEW (Sep 2026, API 63 backend fix): once payment.status is
-  // "refunded" or "rejected", the backend refuses ANY further status
-  // change on this order via updateOrderStatus() — the only way to
-  // move it forward again is reinstateOrder() (API 63.1), which
-  // reverses it back to "pending_payment". The status dropdown is
-  // disabled entirely in that case and the Reinstate button below
-  // takes its place.
-  const isPermanentlyLocked =
-    order?.payment?.status === PAYMENT_STATUS.REFUNDED ||
-    order?.payment?.status === PAYMENT_STATUS.REJECTED;
 
   // The options of the "New Status" dropdown — every status is listed,
   // and the ones the admin cannot currently move this order into are
@@ -257,7 +239,7 @@ const AdminOrderDetail = () => {
   const statusOptions = order ? getStatusOptions(order) : [];
 
   // --------------------------------------------------
-  // TRACKING HISTORY — API 46 — feeds the reused OrderStatusStepper
+  // TRACKING HISTORY — feeds the reused OrderStatusStepper
   // --------------------------------------------------
   const { data: trackResponse } = useQuery({
     queryKey: ["orderTracking", orderNumber],
@@ -272,14 +254,18 @@ const AdminOrderDetail = () => {
   // .map() if the tracking endpoint hasn't returned yet
 
   // --------------------------------------------------
-  // UPDATE STATUS MUTATION — API 49
+  // UPDATE STATUS MUTATION
   // --------------------------------------------------
   const isCancelling = newStatus === ORDER_STATUS.CANCELLED;
   const isQrOrder = order?.payment?.method === PAYMENT_METHOD.QR;
-  // The manual refund fields only apply when BOTH are true — cancelling
-  // AND the order was paid via QR (Stripe cancellations keep working
-  // exactly as before, with an automatic refund and no extra fields).
-  const requiresManualRefundProof = isCancelling && isQrOrder;
+  const isPaidOrder = order?.payment?.status === PAYMENT_STATUS.PAID;
+  // The manual refund fields only apply when the admin is cancelling an
+  // order that was actually PAID via QR — there is money to send back
+  // and no live gateway to do it automatically. A QR order whose
+  // payment was never approved (proof pending, under review or
+  // rejected) has nothing to refund, and Stripe cancellations refund
+  // automatically with no extra fields.
+  const requiresManualRefundProof = isCancelling && isQrOrder && isPaidOrder;
 
   const updateStatusMutation = useMutation({
     mutationFn: () =>
@@ -319,13 +305,11 @@ const AdminOrderDetail = () => {
       // Closes the modal automatically on success
     },
     onError: (error) =>
-      // UPDATED (Sep 2026, API 63 backend fix): the new
-      // sequence/paid-gate/lock errors (e.g. "Please approve payment
-      // first...", "Order status cannot move backward from 'shipped'
-      // to 'confirmed'.") come back under an "error" key, not
-      // "message" — checking both keeps every one of these specific
-      // messages visible instead of silently falling back to the
-      // generic text below.
+      // The sequence, paid-gate and lock errors (e.g. "Please approve
+      // payment first...", "This order has been cancelled — its status
+      // is final and cannot be changed.") come back under an "error"
+      // key; "message" is checked as a fallback so every specific
+      // message stays visible instead of the generic text below.
       showError(
         error?.response?.data?.error ||
           error?.response?.data?.message ||
@@ -333,33 +317,6 @@ const AdminOrderDetail = () => {
       ),
     // Falls back to a generic message if the backend didn't send
     // a specific error message field
-  });
-
-  // --------------------------------------------------
-  // REINSTATE MUTATION — API 63.1
-  // --------------------------------------------------
-  // The only path back to life for an order whose payment ended up
-  // "refunded" or "rejected" (updateOrderStatus() above refuses any
-  // further change in that case). Reverses the order to
-  // "pending_payment" so the customer can pay again from scratch.
-  const reinstateMutation = useMutation({
-    mutationFn: () => reinstateOrder(orderNumber),
-    onSuccess: () => {
-      showSuccess("Order reinstated — the customer can pay again.");
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["orderTracking", orderNumber],
-      });
-      queryClient.invalidateQueries({ queryKey: ["adminOrders"] });
-    },
-    onError: (error) =>
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to reinstate this order.",
-      ),
   });
 
   const handleSaveStatus = () => {
@@ -435,22 +392,10 @@ const AdminOrderDetail = () => {
         icon={<AiOutlineFileText />}
         title="Order Details"
         actions={
-          // The header action depends on the order's state:
-          // - delivered: the status is final, so no action is shown
-          // - payment refunded/rejected: status changes are refused by
-          //   the backend, so the Reinstate action (API 63.1) is shown
-          // - cancelled (any other payment state): the order is at the
-          //   end of its lifecycle, so no action is shown
-          // - otherwise: the regular Update Status button
-          isDelivered ? null : isPermanentlyLocked ? (
-            <Button
-              variant="primary"
-              onClick={() => reinstateMutation.mutate()}
-              isLoading={reinstateMutation.isPending}
-            >
-              Reinstate Order
-            </Button>
-          ) : isCancelled ? null : (
+          // Delivered and cancelled orders are final, so no action is
+          // shown for them; every other order gets the Update Status
+          // button.
+          isStatusFinal ? null : (
             <Button variant="primary" onClick={openStatusModal}>
               Update Status
             </Button>
@@ -495,7 +440,7 @@ const AdminOrderDetail = () => {
 
       {/* ================================================================
           SUGGESTED ALTERNATIVES — only rendered right after a cancel that
-          actually came back with alternatives (API 63 response). Purely
+          actually came back with alternatives. Purely
           session-local: it disappears on dismiss or on navigating away,
           since the backend doesn't persist it back onto the order.
           ================================================================ */}
@@ -644,18 +589,10 @@ const AdminOrderDetail = () => {
               Customer Info
             </h3>
             {order.customer?.name ? (
-              // FIXED — the real API response nests customer details
-              // inside an `order.customer` object:
-              //   { id, name, email, phone }
-              // The previous code read flat fields that don't exist on
-              // this response at all — order.customer_name,
-              // order.customer_phone, order.customer_email — which were
-              // always undefined, so this section fell through to the
-              // "not available" message every single time, even though
-              // the backend was sending full customer data correctly.
-              // Reading order.customer.name / .phone / .email (with
-              // optional chaining, so nothing crashes if `customer` is
-              // ever missing on some order) fixes it.
+              // The response nests customer details inside an
+              // `order.customer` object: { id, name, email, phone }.
+              // They are read with optional chaining, so nothing
+              // crashes if `customer` is missing on some order.
               <>
                 <p className="text-sm font-medium text-gray-900">
                   {order.customer.name}
@@ -719,11 +656,10 @@ const AdminOrderDetail = () => {
                 </span>
               </div>
             )}
-            {/* NEW (Sep 2026, API 61 backend fix): payment.qr_rejection_count
-                is now included for QR orders — shown whenever it's above
-                zero so the admin immediately sees how many times this
-                order's proof has already been rejected, and how close it
-                is to the 3-attempt permanent-cancellation cap. */}
+            {/* payment.qr_rejection_count — shown for QR orders whenever it is
+                above zero, so the admin immediately sees how many times this
+                order's proof has already been rejected and how close it is
+                to the 3-attempt permanent-cancellation cap. */}
             {order.payment?.method === PAYMENT_METHOD.QR &&
               order.payment?.qr_rejection_count > 0 && (
                 <div className="flex items-center justify-between gap-2 text-sm">
@@ -739,16 +675,18 @@ const AdminOrderDetail = () => {
                   </span>
                 </div>
               )}
-            {/* NEW (Sep 2026, API 61 backend fix): flags a retry review
-                distinctly from a first-time one, since both can sit at
-                payment.status "under_review" but mean different things
-                to the admin deciding on it. */}
-            {order.status === ORDER_STATUS.ON_HOLD && (
-              <p className="text-xs text-warning">
-                This is a retry review — the order was previously cancelled
-                after a rejected QR proof and has been reopened by a new upload.
-              </p>
-            )}
+            {/* Flags a retry review distinctly from a first-time one, since
+                both sit at payment.status "under_review" but mean different
+                things to the admin deciding on it. A retry is recognised by
+                an earlier rejection (qr_rejection_count above zero). */}
+            {order.payment?.method === PAYMENT_METHOD.QR &&
+              order.payment?.status === PAYMENT_STATUS.UNDER_REVIEW &&
+              order.payment?.qr_rejection_count > 0 && (
+                <p className="text-xs text-warning">
+                  This is a retry review — the previous payment proof was
+                  rejected and the customer has uploaded a new one.
+                </p>
+              )}
           </div>
 
           {/* Order Summary */}

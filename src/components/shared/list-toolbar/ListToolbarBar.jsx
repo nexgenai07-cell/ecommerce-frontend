@@ -10,7 +10,10 @@ import cn from "../../../utils/cn";
  * The single top row shared by every admin list page: a collapsible
  * round search button on the left of the group, a "Filters" toggle in
  * the middle (with a live count badge once any filter is active), and
- * an optional "Export" button on the right. An optional extra action
+ * an optional "Export" button on the right. The search button is optional
+ * too — it is only rendered when onSearchChange is provided, so a page
+ * with nothing to search (such as an analytics report) gets just the
+ * Filters and Export buttons. An optional extra action
  * (e.g. "Add Product") can be rendered before the group via
  * `leadingActions`.
  *
@@ -22,7 +25,8 @@ import cn from "../../../utils/cn";
  *
  * Props:
  * - searchValue:        Current text in the search box.
- * - onSearchChange:      (value) => void, called on every keystroke.
+ * - onSearchChange:      (value) => void, called on every keystroke. When
+ *                        omitted, no search button is rendered at all.
  * - searchPlaceholder:   Placeholder text for the search input.
  * - activeFilterCount:   Number shown in the badge on the Filters button.
  * - areFiltersOpen:      Whether the filter-chips row below is expanded.
@@ -83,12 +87,9 @@ const ListToolbarBar = ({
   };
 
   return (
-    // Vertical padding reduced from py-2 to py-1 — this bar was leaving a
-    // visible empty band between itself and the table header directly
-    // below it on every admin list page that uses it (Discounts,
-    // Products, Categories, Orders, etc.), on top of the page-level gap
-    // already separating them. Shrinking the bar's own padding removes
-    // that duplicated space without touching the table or page layout.
+    // Small vertical padding (py-1) keeps the bar from adding an empty band
+    // between itself and the content directly below it, on top of the
+    // page-level gap already separating them.
     <div
       className={cn(
         "flex items-center gap-1.5 px-3 py-1 flex-wrap sm:flex-nowrap",
@@ -99,37 +100,41 @@ const ListToolbarBar = ({
 
       <div className="flex-1" />
 
-      {isSearchOpen ? (
-        <div className="relative w-full sm:w-52 shrink-0">
-          <input
-            ref={searchInputRef}
-            autoFocus
-            type="text"
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
-            onBlur={handleSearchBlur}
-            maxLength={25}
-            className="w-full h-8 pl-3 pr-9 text-xs rounded-full border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-          />
-          <button
-            type="button"
-            onClick={handleSearchIconClick}
-            aria-label="Search"
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-primary hover:text-primary-dark transition-colors"
-          >
-            <FaSearch className="w-4 h-4" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleSearchIconClick}
-          aria-label="Search"
-          className="w-7 h-7 flex items-center justify-center shrink-0 text-primary hover:text-primary-dark transition-colors"
-        >
-          <FaSearch className="w-4 h-4" />
-        </button>
+      {onSearchChange && (
+        <>
+          {isSearchOpen ? (
+            <div className="relative w-full sm:w-52 shrink-0">
+              <input
+                ref={searchInputRef}
+                autoFocus
+                type="text"
+                placeholder={searchPlaceholder}
+                value={searchValue}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onBlur={handleSearchBlur}
+                maxLength={25}
+                className="w-full h-8 pl-3 pr-9 text-xs rounded-full border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={handleSearchIconClick}
+                aria-label="Search"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-primary hover:text-primary-dark transition-colors"
+              >
+                <FaSearch className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSearchIconClick}
+              aria-label="Search"
+              className="w-7 h-7 flex items-center justify-center shrink-0 text-primary hover:text-primary-dark transition-colors"
+            >
+              <FaSearch className="w-4 h-4" />
+            </button>
+          )}
+        </>
       )}
 
       {onToggleFilters && (

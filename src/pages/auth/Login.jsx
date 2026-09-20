@@ -49,16 +49,80 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || ROUTES.HOME;
   const registeredEmail = location.state?.registeredEmail;
+
+  // DURABLE FALLBACK for the Buy Now payload — read once, on mount, then
+  // cleared below so it's never reused by a later, unrelated login on
+  // this same page. Router state (location.state?.from?.state, read
+  // below) is normally all that's needed, but it doesn't survive a hard
+  // page reload — and this app's own session-refresh logic
+  // (axiosInstance.js) can trigger exactly that via window.location.href
+  // if some other request racing with this login happens to hit a 401 at
+  // the wrong moment. When that happens, this page reloads from scratch
+  // with a completely empty location.state, which used to mean the
+  // customer's Buy Now product/quantity was simply gone and they landed
+  // on Home after signing in instead of back on their Buy Now checkout.
+  // sessionStorage survives that reload within the same tab, so it's
+  // used here as a fallback.
+  //
+  // Read with a lazy useState initializer (not a plain top-of-component
+  // read) so it only runs once and its value survives this page's own
+  // re-renders — including a failed login attempt being retried without
+  // a reload, which must still have this available. Only reading here —
+  // never removing — since React 18 StrictMode intentionally
+  // double-invokes state initializers in development, and removing the
+  // key on the first of those two calls would make the second one read
+  // back nothing. The actual removal happens in the effect below.
+  const [buyNowFallback] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("buyNowRedirect");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    // Consume-once: clear the backup after this page has read it above,
+    // so it can never leak into a later, unrelated "please sign in
+    // first" redirect. A plain effect (not part of the lazy initializer
+    // above) specifically because StrictMode's double-invoke doesn't
+    // apply the same way to effects — both invocations here just call
+    // removeItem on an already-cleared key, which is a harmless no-op.
+    try {
+      sessionStorage.removeItem("buyNowRedirect");
+    } catch {
+      // ignore — nothing to clean up if storage isn't available
+    }
+  }, []);
+
+  // "from" is normally just wherever router state says redirected here.
+  // BUT on the exact hard-reload this backup exists to cover, router
+  // state is completely empty — from.pathname included — so relying on
+  // "from === ROUTES.CHECKOUT" as a condition for using the backup would
+  // never be true in precisely the case it needs to fire. Instead: if
+  // there's no explicit "from" AND a Buy Now backup exists, it's safe to
+  // infer this redirect was headed for Checkout — sessionStorage only
+  // ever gets written right before a Buy Now redirect to Login in the
+  // first place (see ProductInfo.jsx / Checkout.jsx), so its mere
+  // presence already tells us that.
+  const from =
+    location.state?.from?.pathname ||
+    (buyNowFallback ? ROUTES.CHECKOUT : ROUTES.HOME);
+
   // BUY NOW: when Checkout redirects an unauthenticated customer here, it
   // attaches the Buy Now product/quantity as from.state (see the
   // login-redirect effect in Checkout.jsx) so it can be handed straight
   // back to Checkout once sign-in succeeds, instead of being lost the
-  // moment the customer left the checkout page. Undefined for every other
-  // "please sign in first" redirect, which is exactly what we want —
-  // nothing extra gets replayed for those.
-  const fromState = location.state?.from?.state;
+  // moment the customer left the checkout page. Falls back to the
+  // sessionStorage backup above when the router state itself doesn't
+  // have it (see that comment for why that happens, and the "from"
+  // comment above for why presence of the backup alone is enough).
+  // Undefined for every other "please sign in first" redirect, which is
+  // exactly what we want — nothing extra gets replayed for those.
+  const fromState =
+    location.state?.from?.state ??
+    (buyNowFallback ? { buyNow: buyNowFallback } : undefined);
 
   // ----------------------------------------------------------------
   // SAFE REDIRECT TARGET — customer accounts only
@@ -167,11 +231,28 @@ const Login = () => {
 
   useEffect(() => {
     // Already logged in — redirect away from the login page.
+    //
+    // BUGFIX: this used to call navigate(destination, { replace: true })
+    // with no state, mirroring only half of what completeLogin does
+    // below. isAuthenticated flips to true the moment completeLogin
+    // calls login(user, tokens) — which happens BEFORE completeLogin's
+    // own navigate() call — so this effect is scheduled to run again
+    // right on the heels of that first navigate. Depending on exactly
+    // when React commits that re-render relative to the router
+    // processing the first navigate, this second, state-less call could
+    // overwrite the state fromState set, silently dropping a Buy Now
+    // payload the customer would otherwise have landed back on. Mirroring
+    // completeLogin's destination/state logic here exactly closes that
+    // gap regardless of the timing.
     if (isAuthenticated) {
-      navigate(getPostLoginDestination(role), { replace: true });
+      const destination = getPostLoginDestination(role);
+      navigate(destination, {
+        replace: true,
+        ...(destination === safeFrom && fromState ? { state: fromState } : {}),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, role, navigate, safeFrom]);
+  }, [isAuthenticated, role, navigate, safeFrom, fromState]);
 
   // Shared success handler — used both by a normal (no-2FA) login AND by the
   // 2FA verify step (API 10), since both ultimately return { user, tokens }.

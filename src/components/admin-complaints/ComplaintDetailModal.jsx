@@ -11,15 +11,13 @@ import {
 
 import { updateComplaintStatus } from "../../api/complaints.api";
 import { getCustomerDetail } from "../../api/customers.api";
-// getCustomerDetail — API 102: GET /api/v1/admin/customers/{id}/
-// Used ONLY when the admin opens this modal for a specific complaint.
-// The complaint object itself (from API 55) only gives back a bare
-// customer id and a customer_name string — no email/phone/address.
-// Rather than inventing those fields, this modal fetches the real
-// customer profile (which genuinely does have email/phone/address/
-// total_orders/total_spent) the moment it opens, using the exact same
-// endpoint the Returns detail modal and the Customer Management page
-// already rely on.
+// getCustomerDetail — GET /api/v1/admin/customers/{id}/
+// Used only when the admin opens this modal for a specific complaint.
+// The complaint object itself only gives back a bare customer id and a
+// customer_name string — no email/phone/address. The customer profile
+// (email, phone, address, total_orders, total_spent) is therefore
+// fetched when the modal opens, using the same endpoint as the Returns
+// detail modal and the Customer Management page.
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { COMPLAINT_STATUS } from "../../constants/statusTypes";

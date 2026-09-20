@@ -22,58 +22,56 @@ import {
 } from "react-icons/ai";
 import { FaWhatsapp } from "react-icons/fa";
 
-import { getReturns, updateReturnStatus } from "../../api/returns.api";
-// getReturns         — API 65: GET /api/v1/returns/ — an admin calling this
-//                       gets EVERY return request across the store (role-based
+import {
+  getReturns,
+  getReturnDetail,
+  updateReturnStatus,
+} from "../../api/returns.api";
+// getReturns         — GET /api/v1/returns/. An admin calling this gets
+//                       EVERY return request across the store (role-based
 //                       filtering happens server-side, no separate admin
-//                       endpoint needed).
-// updateReturnStatus — API 53: PUT /api/v1/admin/returns/{id}/status/
-//                       body: { status: "approved" | "rejected" }
+//                       endpoint is needed). `page`, `status`, `search`,
+//                       `start_date`, `end_date` and `ordering` all filter
+//                       and paginate on the server and combine in one
+//                       request, so only ONE already-filtered page is
+//                       fetched at a time. Each return carries
+//                       can_update_status and allowed_statuses, which say
+//                       whether the admin may decide it and how.
+// getReturnDetail    — GET /api/v1/returns/{id}/. Reloads a single return.
+// updateReturnStatus — PUT /api/v1/admin/returns/{id}/status/
+//                       body: { status: "approved" | "rejected" }. Only a
+//                       pending return can be decided, and the decision
+//                       is final.
 //
-// BACKEND FIX CONFIRMED: `page`, `status`, `search`, `start_date`,
-// `end_date`, and `ordering` all now filter/paginate correctly and
-// combine together in one request. The old bug (every request,
-// regardless of ?status=, silently returned the exact same unfiltered
-// page — confirmed via the Network tab at the time) is fixed. This
-// page now sends every filter straight to the backend and only fetches
-// ONE already-filtered page at a time.
-//
-// One narrower note: the backend's `search` is confirmed to match
-// order number and return reason text. It was NOT explicitly confirmed
-// to match the return's own reference number (e.g. "RET-6") or the
-// customer's name — both of which the OLD client-side search used to
-// match. If admins commonly search by return ID or customer name and
-// notice search no longer finds those, that's the reason — worth a
-// quick follow-up confirmation with the backend if so.
+// The backend `search` matches order number and return reason text. It is
+// not guaranteed to match the return's own reference number (e.g.
+// "RET-6") or the customer's name.
 
 import { sendNotification } from "../../api/notifications.api";
-// sendNotification — API 74: POST /api/v1/notifications/send/
-// This is the actual answer to "admin customer ko msg kaise bhejega" —
-// used inside the detail modal's "Message Customer" section so an admin
-// can send a real, custom in-app notification straight to the customer
-// who filed this return. Field convention (user/title/message/type/
-// sent_via) copied exactly from the existing, already-working
-// NotificationTemplates.jsx admin page — same shape, same backend call.
+// sendNotification — POST /api/v1/notifications/send/
+// Used inside the detail modal's "Message Customer" section so an admin
+// can send a custom in-app notification straight to the customer who
+// filed this return. The field convention (user/title/message/type/
+// sent_via) is the same as the NotificationTemplates.jsx admin page.
 
 import { sendWhatsAppMessage } from "../../api/whatsapp.api";
-// sendWhatsAppMessage — API 105: POST /api/v1/whatsapp/send/
-// Second channel in the same "Message Customer" section — sends a real
-// WhatsApp message to the customer's phone number. Field convention
-// (phone_number/message) copied exactly from the existing, already-working
-// ManualEntryModal.jsx used on the WhatsApp admin pages.
+// sendWhatsAppMessage — POST /api/v1/whatsapp/send/
+// Second channel in the "Message Customer" section — sends a WhatsApp
+// message to the customer's phone number. The field convention
+// (phone_number/message) is the same as ManualEntryModal.jsx on the
+// WhatsApp admin pages.
 
 import { getCustomerDetail } from "../../api/customers.api";
-// getCustomerDetail — API 102: GET /api/v1/admin/customers/{id}/
-// Used ONLY when the admin opens the detail modal for a specific return.
-// The returns list itself (API 51) only gives back a bare customer id and a
-// customer_name string — no email/phone/address. Rather than inventing those
-// fields, this page fetches the real customer profile (which genuinely does
-// have email/phone/address/total_orders/total_spent) the moment the modal
-// opens, using the same endpoint the Customer Management page already relies
-// on (see CustomerDetailDrawer.jsx for the identical field usage).
+// getCustomerDetail — GET /api/v1/admin/customers/{id}/
+// Used only when the admin opens the detail modal for a specific return.
+// The returns list only gives back a bare customer id and a customer_name
+// string — no email/phone/address — so the customer profile (email, phone,
+// address, total_orders, total_spent) is fetched when the modal opens,
+// using the same endpoint as the Customer Management page (see
+// CustomerDetailDrawer.jsx for the identical field usage).
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — "returns" is now a CONFIRMED accepted `type` value
+// exportReport — "returns" is an accepted `type` value
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { RETURN_STATUS } from "../../constants/statusTypes";
@@ -93,20 +91,17 @@ import Modal from "../../components/ui/Modal";
 import DataTable from "../../components/ui/DataTable";
 import StatsCard from "../../components/ui/StatsCard";
 import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already used on
-// every other admin screen (Orders, Products, Categories, Dashboard...).
-// Added here so Returns finally matches the rest of the panel instead of
-// using its own plain <h1>.
+// PageHeader — the shared gradient icon + title header used on every
+// admin screen (Orders, Products, Categories, Dashboard...).
 import ReturnFilters from "../../components/admin-returns/ReturnFilters";
-// ReturnFilters — the shared-style toolbar above the table (status
-// tabs, search, Filters toggle, Export, Date Range/Sort chips). The
-// sort option list itself now lives inside that file.
+// ReturnFilters — the toolbar above the table (status filter, search,
+// Filters toggle, Export, Date Range/Sort chips). The sort option list
+// lives inside that file.
 
 // --------------------------------------------------
-// STATUS TABS — one pill per real RETURN_STATUS value, plus "All".
-// "Refunded" is intentionally excluded — RETURN_STATUS only has 3 real
-// values (pending/approved/rejected); there is no "refunded" state anywhere
-// in the documented backend contract.
+// STATUS TABS — one entry per real RETURN_STATUS value, plus "All".
+// RETURN_STATUS has exactly three values (pending, approved, rejected),
+// and these are the values sent to the backend as the `status` filter.
 // --------------------------------------------------
 const STATUS_TABS = [
   { key: "", label: "All" },
@@ -115,9 +110,8 @@ const STATUS_TABS = [
   { key: RETURN_STATUS.REJECTED, label: "Rejected" },
 ];
 
-// Note: the sort option list (Newest/Oldest/Customer Name) now lives
-// inside ReturnFilters.jsx, right next to the Sort dropdown chip that
-// renders it.
+// The sort option list (Newest/Oldest/Customer Name) lives inside
+// ReturnFilters.jsx, next to the Sort dropdown chip that renders it.
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -125,21 +119,18 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // ============================================================
-// ReturnDetailModal — sub-component rendered at the bottom of this file.
-// Shows the FULL detail of one return request. Layout order, top to
-// bottom: Customer (who this is about, shown first per Rimsha's request),
-// Return Overview (status + order + dates), Reason, Message Customer, then
-// the Status Actions footer. Each section is its own soft-bordered card so
-// the modal reads as a clean, scannable dashboard rather than a plain list
-// of text. Kept inside this same file (instead of a separate component
-// file) so Rimsha only has to copy-paste one file for this whole feature.
+// ReturnDetailModal — sub-component used by the page below.
+// Shows the full detail of one return request. Layout order, top to
+// bottom: Customer (who the return is about), Return Overview (status +
+// order + dates), Reason, Message Customer, then the Status Actions
+// footer. Each section is its own soft-bordered card so the modal reads
+// as a clean, scannable dashboard rather than a plain list of text.
 // ============================================================
 const ReturnDetailModal = ({
   returnItem, // The row object clicked on (null when the modal is closed)
   onClose, // Closes the modal — clears the parent's selected row state
-  onDecide, // Opens the confirm modal — used both for the first Approve/
-  // Reject decision on a Pending return, and for switching an
-  // already-decided return between Approved and Rejected.
+  onDecide, // Opens the confirm modal for an Approve or Reject decision on a
+  // return the admin is allowed to decide (see can_update_status).
 }) => {
   // Fetches the real customer profile (name, email, phone, address, order
   // history) the moment a return is selected — only runs when there IS a
@@ -159,17 +150,15 @@ const ReturnDetailModal = ({
   const customer = customerResponse?.data;
 
   // --------------------------------------------------
-  // MESSAGE CUSTOMER — the actual answer to "admin customer ko msg kaise
-  // bhejega". Two real, doc-backed channels, both already used elsewhere
-  // in this exact project (see the import comments above):
-  //   - "notification" → API 74, an in-app notification (bell icon)
-  //   - "whatsapp"      → API 105, a real WhatsApp text message
-  // NOTE — Approving or rejecting this return (the buttons further down)
-  // ALREADY sends the customer an automatic "order" notification by
-  // itself, per API 63's documented behavior. This section is for
-  // anything EXTRA the admin wants to say beyond that automatic message —
-  // e.g. asking for more photos, explaining a rejection, confirming a
-  // pickup time.
+  // MESSAGE CUSTOMER — lets the admin contact the customer through two
+  // channels (see the import comments above):
+  //   - "notification" → an in-app notification (bell icon)
+  //   - "whatsapp"      → a WhatsApp text message
+  // Approving or rejecting this return (the buttons further down)
+  // already sends the customer an automatic notification by itself. This
+  // section is for anything extra the admin wants to say beyond that
+  // automatic message — e.g. asking for more photos, explaining a
+  // rejection, confirming a pickup time.
   // --------------------------------------------------
   const [messageChannel, setMessageChannel] = useState("notification");
   const [messageTitle, setMessageTitle] = useState(
@@ -180,22 +169,20 @@ const ReturnDetailModal = ({
   const sendMessageMutation = useMutation({
     mutationFn: () => {
       if (messageChannel === "whatsapp") {
-        // API 105 — only needs the customer's phone number and the text.
+        // WhatsApp only needs the customer's phone number and the text.
         return sendWhatsAppMessage({
           phone_number: customer.phone,
           message: messageBody,
         });
       }
-      // API 74 — "user" must be the underlying account id (customer.user),
-      // NOT the customer profile id (customer.id) — same distinction the
-      // existing NotificationTemplates.jsx admin page already relies on.
-      // type: "order" — matches the same type the backend itself uses for
-      // every automatic return/order notification, so this message lands
-      // in the customer's "Orders" notification tab alongside them.
-      // reference_type / reference_id — API 78 (v4) marks both fields as
-      // required on this endpoint. This modal always operates on a single
-      // open return, so the real return id is already available and is
-      // sent here instead of being left out.
+      // "user" must be the underlying account id (customer.user), NOT the
+      // customer profile id (customer.id) — the same distinction the
+      // NotificationTemplates.jsx admin page relies on.
+      // type: "order" — the same type the backend uses for every automatic
+      // return/order notification, so this message lands in the customer's
+      // "Orders" notification tab alongside them.
+      // reference_type / reference_id — both are required by the endpoint.
+      // This modal always operates on a single return, so its id is sent.
       return sendNotification({
         user: customer.user,
         title: messageTitle,
@@ -229,8 +216,7 @@ const ReturnDetailModal = ({
       : !!customer?.user && messageTitle.trim());
 
   // cardClass — the one shared "section card" look every block below uses,
-  // pulled into a constant so all sections stay visually identical instead
-  // of each one drifting slightly out of sync.
+  // kept in a constant so all sections stay visually identical.
   const cardClass = "rounded-2xl border border-gray-100 p-5";
 
   return (
@@ -246,11 +232,10 @@ const ReturnDetailModal = ({
       {returnItem && (
         <div className="flex flex-col gap-4">
           {/* ================================================================
-              1. CUSTOMER — shown FIRST, per Rimsha's request, since "who is
-              this return about" is the thing an admin actually needs to see
-              first. A soft emerald-tinted banner card, matching the brand
-              gradient already used in PageHeader, makes this section read
-              as the visual anchor of the whole modal.
+              1. CUSTOMER — shown first, since "who is this return about" is
+              what an admin needs to see first. A soft emerald-tinted banner
+              card, matching the brand gradient used in PageHeader, makes
+              this section the visual anchor of the modal.
               ================================================================ */}
           <div
             className={`${cardClass} bg-linear-to-br from-primary-50/70 via-white to-white`}
@@ -293,10 +278,10 @@ const ReturnDetailModal = ({
                   </div>
                 </div>
 
-                {/* Contact info — pill-shaped chips instead of a plain
-                    list, so this reads as scannable tags rather than a
-                    form. Email always present; phone/address only shown
-                    when the backend actually returned them. */}
+                {/* Contact info — pill-shaped chips, so it reads as scannable
+                    tags rather than a form. Email is always present;
+                    phone/address are only shown when the backend returned
+                    them. */}
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100">
                     <AiOutlineMail className="w-3.5 h-3.5 text-primary" />
@@ -357,13 +342,9 @@ const ReturnDetailModal = ({
                 rounded
               />
             </div>
-            {/* Compact stacked list instead of a 2-column grid — each
-                row is FULL width and label + value sit on the SAME
-                line, so the order number always has enough room and
-                never wraps onto a second line. Rows are also shorter
-                (py-2 instead of py-2.5, single line instead of a small
-                label line + a separate bold value line), so this whole
-                block takes up noticeably less vertical space too. */}
+            {/* Compact stacked list — each row is full width and its label
+                and value sit on the same line, so the order number always
+                has enough room and never wraps onto a second line. */}
             <div className="flex flex-col rounded-lg border border-gray-100 divide-y divide-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
                 <AiOutlineShoppingCart className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -381,9 +362,8 @@ const ReturnDetailModal = ({
                   {formatDate(returnItem.created_at)}
                 </span>
               </div>
-              {/* resolved_at only exists once an admin has actually made a
-                  decision — hidden entirely for still-pending returns
-                  instead of showing a blank/misleading date. */}
+              {/* resolved_at only exists once an admin has made a decision —
+                  it is hidden for still-pending returns. */}
               {returnItem.resolved_at && (
                 <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
                   <AiOutlineCheckCircle className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -445,9 +425,8 @@ const ReturnDetailModal = ({
                   type="button"
                   onClick={() => setMessageChannel("whatsapp")}
                   disabled={!customer.phone}
-                  // Disabled instead of hidden — makes it obvious to the
-                  // admin WHY WhatsApp isn't available (no phone on file)
-                  // rather than the option silently vanishing.
+                  // Disabled rather than hidden, so it is clear to the admin
+                  // why WhatsApp isn't available (no phone on file).
                   title={
                     !customer.phone
                       ? "No phone number on file for this customer"
@@ -515,57 +494,58 @@ const ReturnDetailModal = ({
           )}
 
           {/* ================================================================
-              5. STATUS ACTIONS — API 67 (PUT /api/v1/admin/returns/{id}/
-              status/) only ever accepts status: "approved" | "rejected" in
-              its request body — "pending" is NOT a value this endpoint
-              accepts, so a decided return can never be reverted back to
-              Pending through this API.
-              CONFIRMED (v5.5, 18 Sep 2026): a status-lock is now enforced
-              on the Return model itself — once a return is approved or
-              rejected, it can NEVER be changed to a different status
-              through this API, in either direction. The "switch the
-              decision" button that used to be offered here has been
-              removed; an already-decided return is now shown as a
-              read-only, locked state instead. Wrapped in a tinted footer
-              card so it reads as the modal's final "decision" step rather
-              than blending into the rest.
+              5. STATUS ACTIONS — the Approve / Reject decision. The buttons
+              are offered only when the backend says the admin may decide
+              this return (can_update_status), and only for the statuses it
+              lists in allowed_statuses. A decision is final: once a return
+              is approved or rejected it can never be changed again, so it
+              is shown as read-only text instead. Wrapped in a tinted footer
+              card so it reads as the modal's final "decision" step.
               ================================================================ */}
-          {returnItem.status === RETURN_STATUS.REQUESTED ? (
-            // ---- Case 1: still Pending — the normal first decision ----
+          {returnItem.can_update_status === true ? (
             <div className="rounded-2xl bg-gray-50 p-4 flex flex-col items-end gap-2">
               <p className="text-xs text-gray-400">
                 Approving or rejecting automatically notifies the customer.
               </p>
               <div className="flex items-center gap-3">
-                <Button
-                  variant="danger"
-                  onClick={() => onDecide(returnItem, RETURN_STATUS.REJECTED)}
-                >
-                  Reject
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => onDecide(returnItem, RETURN_STATUS.APPROVED)}
-                >
-                  Approve
-                </Button>
+                {(returnItem.allowed_statuses || []).includes(
+                  RETURN_STATUS.REJECTED,
+                ) && (
+                  <Button
+                    variant="danger"
+                    onClick={() => onDecide(returnItem, RETURN_STATUS.REJECTED)}
+                  >
+                    Reject
+                  </Button>
+                )}
+                {(returnItem.allowed_statuses || []).includes(
+                  RETURN_STATUS.APPROVED,
+                ) && (
+                  <Button
+                    variant="primary"
+                    onClick={() => onDecide(returnItem, RETURN_STATUS.APPROVED)}
+                  >
+                    Approve
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
-            // ---- Case 2: already decided — status is permanently locked,
-            // in either direction, so no action is offered here anymore. ----
-            <div className="rounded-2xl bg-gray-50 p-4 flex items-center justify-end gap-2">
-              <p className="text-xs text-gray-400 text-right">
-                This return has already been{" "}
-                <span className="font-medium text-gray-600">
-                  {returnItem.status === RETURN_STATUS.APPROVED
-                    ? "approved"
-                    : "rejected"}
-                </span>
-                . This decision is final and can't be changed to a different
-                status.
-              </p>
-            </div>
+            (returnItem.status === RETURN_STATUS.APPROVED ||
+              returnItem.status === RETURN_STATUS.REJECTED) && (
+              <div className="rounded-2xl bg-gray-50 p-4 flex items-center justify-end gap-2">
+                <p className="text-xs text-gray-400 text-right">
+                  This return has already been{" "}
+                  <span className="font-medium text-gray-600">
+                    {returnItem.status === RETURN_STATUS.APPROVED
+                      ? "approved"
+                      : "rejected"}
+                  </span>
+                  . This decision is final and can't be changed to a different
+                  status.
+                </p>
+              </div>
+            )
           )}
         </div>
       )}
@@ -582,19 +562,17 @@ const ReturnsManagement = () => {
 
   const [search, setSearch] = useState("");
   // search — raw text typed into the search box before debouncing, sent
-  // to the backend as `search` (confirmed to match order number and
-  // return reason text — see the note near the getReturns import above
-  // for what's NOT confirmed).
+  // to the backend as `search` (matches order number and return reason
+  // text — see the note near the getReturns import above).
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  // startDate / endDate — client-side date-range filter against created_at
-  // (no documented date-range query param on API 51, so this never fires a
-  // new network request — see the backend-bug flag near the imports).
+  // startDate / endDate — date-range filter on the return's creation
+  // date, sent to the backend as `start_date` / `end_date`. The end date
+  // can never be earlier than the start date.
 
   const [sortBy, setSortBy] = useState("-created_at");
-  // sortBy — client-side sort, defaults to "Newest First" so the page's
-  // default ordering never changes for the admin.
+  // sortBy — server-side ordering, defaults to "Newest First".
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -608,17 +586,19 @@ const ReturnsManagement = () => {
   // detail modal.
 
   const [detailTarget, setDetailTarget] = useState(null);
-  // The return row currently open in the read-only detail modal (the "eye"
-  // icon action). null when the modal is closed.
+  // The return row currently open in the detail modal (the "eye" icon
+  // action, or a click on the row). null when the modal is closed.
 
   const [isExporting, setIsExporting] = useState(false);
-  const [isDeciding, setIsDeciding] = useState(false);
 
   // Bulk selection — array of return ids currently checked in the
   // table, driven by DataTable's built-in selection support. This is
-  // independent of decisionTarget above, which still drives the
-  // single-row Approve/Reject flow unchanged.
+  // independent of decisionTarget above, which drives the single-row
+  // Approve/Reject flow.
   const [selectedReturnIds, setSelectedReturnIds] = useState([]);
+  // Changing this key remounts the table, which clears DataTable's
+  // internal checkbox selection once a bulk decision has finished.
+  const [tableResetKey, setTableResetKey] = useState(0);
   // "approved" | "rejected" — which bulk action the confirm modal below
   // is currently open for.
   const [bulkAction, setBulkAction] = useState(null);
@@ -632,15 +612,15 @@ const ReturnsManagement = () => {
   // Drives the "Clear all" link's visibility in the toolbar.
 
   // --------------------------------------------------
-  // MAIN LIST — real server-side status/search/date filtering,
-  // sorting, and pagination. Only ONE already-filtered page of
-  // returns is ever fetched, no matter how many return requests
-  // exist in total.
+  // MAIN LIST — server-side status/search/date filtering, sorting, and
+  // pagination. Only ONE already-filtered page of returns is ever
+  // fetched, no matter how many return requests exist in total.
   // --------------------------------------------------
   const {
     data: returnsResponse,
     isLoading,
     isError,
+    error: listError,
     refetch,
   } = useQuery({
     queryKey: [
@@ -673,9 +653,17 @@ const ReturnsManagement = () => {
   const visibleReturns = extractListData(returnsResponse);
   const totalCount = returnsResponse?.data?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  // `visibleReturns` is now always exactly one real, already-filtered,
-  // already-sorted page straight from the backend — no more client-side
-  // re-filtering, re-sorting, or re-slicing on top of it.
+  // `visibleReturns` is always exactly one already-filtered, already-sorted
+  // page straight from the backend — no client-side re-filtering,
+  // re-sorting, or re-slicing on top of it.
+
+  // If the backend rejects the request (for example an invalid date
+  // range), show the reason it gives instead of only the generic table
+  // error.
+  useEffect(() => {
+    const message = listError?.response?.data?.error;
+    if (message) showError(message);
+  }, [listError]);
 
   // --------------------------------------------------
   // STAT CARD COUNTS — each its own lightweight request that reads
@@ -750,9 +738,8 @@ const ReturnsManagement = () => {
   };
 
   // --------------------------------------------------
-  // APPROVE / REJECT — API 53. Shared by both the table row buttons and
-  // the buttons inside the detail modal — both paths funnel through the
-  // same decisionTarget state and the same confirm modal.
+  // APPROVE / REJECT — both the buttons inside the detail modal and the
+  // confirm modal funnel through the same decisionTarget state.
   // --------------------------------------------------
   const decisionMutation = useMutation({
     mutationFn: () =>
@@ -767,23 +754,41 @@ const ReturnsManagement = () => {
       );
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
       setDecisionTarget(null);
-      setDetailTarget(null);
       // Also closes the detail modal, if the decision was made from there —
-      // the return's status has changed, so the modal it was open on is now
-      // stale.
+      // the decision is final, so the Approve/Reject controls must not stay
+      // on screen.
+      setDetailTarget(null);
     },
-    onError: (error) =>
-      showError(error?.response?.data?.message || "Failed to update return."),
+    onError: async (error) => {
+      // The backend answers an invalid decision with an "error" message —
+      // for example when another admin already decided this return.
+      showError(
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "Failed to update return.",
+      );
+
+      const failedReturnId = decisionTarget?.returnItem?.id;
+      setDecisionTarget(null);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
+
+      // Reload the return so the detail modal shows its real, current
+      // state (for example "already approved") instead of stale buttons.
+      if (failedReturnId) {
+        try {
+          const refreshed = await getReturnDetail(failedReturnId);
+          setDetailTarget((current) =>
+            current && current.id === failedReturnId ? refreshed.data : current,
+          );
+        } catch {
+          // The list refetch above keeps the table current; the modal keeps
+          // showing the last state it had.
+        }
+      }
+    },
   });
 
-  const handleConfirmDecision = async () => {
-    setIsDeciding(true);
-    try {
-      await decisionMutation.mutateAsync();
-    } finally {
-      setIsDeciding(false);
-    }
-  };
+  const handleConfirmDecision = () => decisionMutation.mutate();
 
   // Opens the confirm modal — called from the Approve/Reject buttons inside
   // ReturnDetailModal.
@@ -792,15 +797,15 @@ const ReturnsManagement = () => {
   };
 
   // --------------------------------------------------
-  // BULK APPROVE / REJECT — API 53, called once per selected return
-  // (there is no bulk endpoint on the backend). Only returns still
-  // awaiting a decision are eligible: already-decided returns in the
-  // selection are left untouched and reported as skipped, rather than
-  // silently flipping a return that was already resolved.
+  // BULK APPROVE / REJECT — called once per selected return (there is no
+  // bulk endpoint on the backend). Only returns the backend allows the
+  // admin to decide (can_update_status) are eligible: already-decided
+  // returns in the selection are left untouched and reported as skipped,
+  // because a decision is final. Every request is attempted and reported
+  // on its own, so one failure does not hide the returns that succeeded.
   // --------------------------------------------------
   const selectedPendingReturns = visibleReturns.filter(
-    (r) =>
-      selectedReturnIds.includes(r.id) && r.status === RETURN_STATUS.REQUESTED,
+    (r) => selectedReturnIds.includes(r.id) && r.can_update_status === true,
   );
   const skippedSelectedCount =
     selectedReturnIds.length - selectedPendingReturns.length;
@@ -812,29 +817,41 @@ const ReturnsManagement = () => {
   const handleConfirmBulkDecision = async () => {
     setIsBulkDeciding(true);
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         selectedPendingReturns.map((r) =>
           updateReturnStatus(r.id, { status: bulkAction }),
         ),
       );
-      showSuccess(
-        `${selectedPendingReturns.length} return${selectedPendingReturns.length === 1 ? "" : "s"} ${bulkAction}.`,
+      const updatedCount = results.filter(
+        (result) => result.status === "fulfilled",
+      ).length;
+      const failedResults = results.filter(
+        (result) => result.status === "rejected",
       );
+
+      if (updatedCount > 0) {
+        showSuccess(
+          `${updatedCount} return${updatedCount === 1 ? "" : "s"} ${bulkAction}.`,
+        );
+      }
+      if (failedResults.length > 0) {
+        showError(
+          failedResults[0].reason?.response?.data?.error ||
+            failedResults[0].reason?.response?.data?.message ||
+            `${failedResults.length} return${failedResults.length === 1 ? "" : "s"} could not be updated.`,
+        );
+      }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
       setSelectedReturnIds([]);
+      setTableResetKey((key) => key + 1);
       setBulkAction(null);
-    } catch (error) {
-      showError(
-        error?.response?.data?.message ||
-          "Failed to update the selected returns.",
-      );
     } finally {
       setIsBulkDeciding(false);
     }
   };
 
   // --------------------------------------------------
-  // EXPORT — API 90, downloads the returned blob as a real .csv file
+  // EXPORT — downloads the returned blob as a .csv file
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -860,9 +877,8 @@ const ReturnsManagement = () => {
     }
   };
 
-  // columns — DataTable column config. "Reason" was removed (its full text
-  // now only lives in the detail modal, where there's room to show it
-  // properly) and replaced with a searchable "Customer" column.
+  // columns — DataTable column config. The reason text is not a column: its
+  // full text lives in the detail modal, where there is room to show it.
   const columns = [
     {
       key: "id",
@@ -937,14 +953,12 @@ const ReturnsManagement = () => {
   ];
 
   return (
-    // Vertical spacing between the header, stats cards, toolbar, and table
-    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
-    // already used on Product Management, instead of leaving large empty
-    // bands between each section.
+    // Tight vertical spacing between the header, stats cards, toolbar, and
+    // table, matching the rhythm used on the other admin list pages.
     <div className="flex flex-col gap-2 flex-1 min-h-0">
       {/* ================================================================
-          PAGE HEADER — shared gradient-badge header, same component used
-          on every other admin page, rendered first as requested.
+          PAGE HEADER — shared gradient-badge header, the same component
+          used on every other admin page.
           ================================================================ */}
       <PageHeader icon={<AiOutlineHistory />} title="Returns Management" />
 
@@ -955,13 +969,10 @@ const ReturnsManagement = () => {
           the currently loaded page.
 
           Layout: a flex-wrap row, matching the KPI row on the main
-          Dashboard, instead of a fixed-column grid. StatsCard sizes
-          itself to its own content (title + value), so forcing it into
-          an even grid column leaves a large empty area beside each
-          card on wider screens. A wrapping flex row lets every card
-          keep its natural width, sit close to its neighbour, and drop
-          to the next line on narrower viewports without any manual
-          breakpoint tuning.
+          Dashboard. StatsCard sizes itself to its own content (title +
+          value), so a wrapping flex row lets every card keep its natural
+          width, sit close to its neighbour, and drop to the next line on
+          narrower viewports without any manual breakpoint tuning.
           ================================================================ */}
       <div className="flex flex-wrap gap-2">
         <StatsCard
@@ -997,9 +1008,9 @@ const ReturnsManagement = () => {
       </div>
 
       {/* ================================================================
-          TOOLBAR — status tabs, search, Filters, Export, and (once
-          opened) the Date Range / Sort dropdown chips. Same shared
-          toolbar pattern used on every other admin list page.
+          TOOLBAR — status filter, search, Filters, Export, and (once
+          opened) the Date Range / Sort dropdown chips. Same toolbar
+          pattern used on every other admin list page.
           ================================================================ */}
       <ReturnFilters
         statusTabs={STATUS_TABS}
@@ -1029,14 +1040,10 @@ const ReturnsManagement = () => {
       />
 
       {/* ================================================================
-          RETURNS TABLE — wrapped in its own soft-shadow card so it reads
-          as an elevated surface, matching the rest of the redesigned page.
-          ================================================================ */}
-      {/* ================================================================
           BULK ACTION BAR — appears only while one or more rows are
-          checked. Approve/Reject apply only to the still-pending
-          returns within the selection; the count of any already-
-          decided ones that will be skipped is shown for clarity.
+          checked. Approve/Reject apply only to the returns that can still
+          be decided within the selection; the count of any already-decided
+          ones that will be skipped is shown for clarity.
           ================================================================ */}
       {selectedReturnIds.length > 0 && (
         <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1075,12 +1082,13 @@ const ReturnsManagement = () => {
 
       <div className="rounded-xl shadow-[0_2px_10px_-3px_rgba(16,24,40,0.06)] flex flex-col flex-1 min-h-0">
         <DataTable
+          key={tableResetKey}
           columns={columns}
           data={visibleReturns}
           keyField="id"
           onRowClick={(row) => setDetailTarget(row)}
-          // Opens the same read-only detail modal as the eye icon when any
-          // part of the row is clicked
+          // Opens the same detail modal as the eye icon when any part of
+          // the row is clicked
           selectable
           onSelectionChange={setSelectedReturnIds}
           isLoading={isLoading}
@@ -1097,10 +1105,9 @@ const ReturnsManagement = () => {
       </div>
 
       {/* ================================================================
-          DETAIL MODAL — opened by the eye icon on any row. Shows the full
-          reason text plus the real customer profile (fetched live via
-          API 102). Also exposes Approve/Reject for still-pending returns,
-          and status switching for already-decided ones.
+          DETAIL MODAL — opened by the eye icon or a click on any row. Shows
+          the full reason text plus the customer profile (fetched live), and
+          exposes Approve/Reject for returns that can still be decided.
           ================================================================ */}
       <ReturnDetailModal
         key={detailTarget?.id}
@@ -1110,9 +1117,8 @@ const ReturnsManagement = () => {
       />
 
       {/* ================================================================
-          CONFIRM MODAL — the actual status-change confirmation step,
-          shared by both the table row buttons and the detail modal's
-          buttons.
+          CONFIRM MODAL — the status-change confirmation step for the
+          detail modal's Approve/Reject buttons.
           ================================================================ */}
       <ConfirmModal
         isOpen={!!decisionTarget}
@@ -1134,7 +1140,7 @@ const ReturnsManagement = () => {
             ? "primary"
             : "danger"
         }
-        isLoading={isDeciding}
+        isLoading={decisionMutation.isPending}
       />
 
       {/* ================================================================

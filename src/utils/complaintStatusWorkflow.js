@@ -3,7 +3,7 @@
 // ============================================================
 // Describes which status changes an admin may apply to a complaint.
 // This mirrors the rules enforced by the backend endpoint
-// PUT /api/v1/admin/complaints/{id}/status/ (API 71):
+// PUT /api/v1/admin/complaints/{id}/status/:
 //
 //   open        -> in_progress
 //   in_progress -> open | resolved

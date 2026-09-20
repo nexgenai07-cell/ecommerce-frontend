@@ -36,10 +36,20 @@ const TopProductsRevenueList = ({ products, isLoading }) => {
   // Toggled to true when the admin clicks "View full list" — this is a
   // simple LOCAL expand/collapse, not a page navigation.
 
+  // The backend already returns the products ordered by revenue, highest
+  // first. Sorting again here guarantees that order, so the product with
+  // the most revenue always sits at the top with the longest bar and the
+  // first 4 shown are the 4 highest-earning products, even if a response
+  // ever arrives in a different order. A copy is sorted so the array owned
+  // by the parent page is left untouched.
+  const rankedProducts = [...products].sort(
+    (a, b) => (Number(b.total_revenue) || 0) - (Number(a.total_revenue) || 0),
+  );
+
   // Remaining products from THIS SAME "Top Products by Revenue" ranking
   // appear right here in place, underneath the first 4, once expanded —
   // no navigation away from the page.
-  const visibleProducts = showAll ? products : products.slice(0, 4);
+  const visibleProducts = showAll ? rankedProducts : rankedProducts.slice(0, 4);
 
   const remainingCount = Math.max(products.length - 4, 0);
   // remainingCount -> how many additional fetched products exist beyond

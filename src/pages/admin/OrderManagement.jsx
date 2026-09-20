@@ -3,23 +3,22 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AiOutlineEye, AiOutlineShoppingCart } from "react-icons/ai";
 // react-icons — the icons used by the table's own row actions and the
-// page header. The search/filter/export/status-tab icons now live
-// inside the shared toolbar components used by OrderFilters below.
+// page header. The search/filter/export/status-tab icons live inside
+// the shared toolbar components used by OrderFilters below.
 
 import {
   getAdminOrders,
   filterAdminOrders,
   updateOrderStatus,
 } from "../../api/orders.api";
-// getAdminOrders    — API 47: GET /api/v1/admin/orders/ (no filters active)
-// filterAdminOrders — API 48: GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
-// Both now correctly forward `page`, and `ordering` is confirmed
-// working on the filter endpoint (see the backend fix notes below).
-// updateOrderStatus — API 49: PUT /api/v1/admin/orders/{id}/status/, used
-// below to drive the bulk status-update action bar.
+// getAdminOrders    — GET /api/v1/admin/orders/ (no filters active)
+// filterAdminOrders — GET /api/v1/admin/orders/filter/ (status/date/search/ordering/page)
+// Both forward `page`, and `ordering` works on the filter endpoint.
+// updateOrderStatus — PUT /api/v1/admin/orders/{id}/status/, used below to
+// drive the bulk status-update action bar.
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — `type: "orders"` is now a confirmed accepted value
+// exportReport — `type: "orders"` is an accepted value
 
 import { ROUTES } from "../../constants/routes";
 import { ORDER_STATUS } from "../../constants/statusTypes";
@@ -34,8 +33,8 @@ import Select from "../../components/ui/Select";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already used
-// on every other admin screen (Products, Categories, Dashboard, etc).
+// PageHeader — the shared gradient icon + title header used on every
+// admin screen (Products, Categories, Dashboard, etc).
 import OrderStatsCards from "../../components/admin-orders/OrderStatsCards";
 import OrderFilters from "../../components/admin-orders/OrderFilters";
 
@@ -48,9 +47,9 @@ import OrderFilters from "../../components/admin-orders/OrderFilters";
 const STATUS_TABS = [
   { key: "", label: "All" },
   { key: ORDER_STATUS.PENDING, label: "Pending" },
-  // NEW (Sep 2026, API 61/62 backend fix): on_hold is a real, distinct
-  // ORDER_STATUS value now (a QR retry review after an earlier
-  // rejection), so it gets its own tab like every other real status.
+  // "On Hold" is a legacy status that some existing orders still carry
+  // (the backend does not assign it to new orders), so it keeps its own
+  // tab to keep those orders reachable.
   { key: ORDER_STATUS.ON_HOLD, label: "On Hold" },
   { key: ORDER_STATUS.CONFIRMED, label: "Confirmed" },
   { key: ORDER_STATUS.SHIPPED, label: "Shipped" },
@@ -58,10 +57,8 @@ const STATUS_TABS = [
   { key: ORDER_STATUS.CANCELLED, label: "Cancelled" },
 ];
 
-// Note: the sort option list (Newest/Oldest/Amount/Order Number) now
-// lives inside OrderFilters.jsx, right next to the Sort dropdown chip
-// that renders it, since nothing in this file needs the list directly
-// any more.
+// The sort option list (Newest/Oldest/Amount/Order Number) lives inside
+// OrderFilters.jsx, next to the Sort dropdown chip that renders it.
 
 // --------------------------------------------------
 // BULK STATUS OPTIONS — the subset of ORDER_STATUS values that are
@@ -105,34 +102,32 @@ const OrderManagement = () => {
   });
   // activeStatus — which status pill is currently selected ("" = All).
   // Initialized from the URL when a valid status is present, otherwise
-  // defaults to "All" exactly as before.
+  // defaults to "All".
 
   const [search, setSearch] = useState("");
-  // search — raw text typed into the main search box BEFORE debouncing.
-  // Matches against order number, customer name, AND phone number —
-  // all three are now confirmed to be matched server-side by this one
-  // field.
+  // search — raw text typed into the main search box before debouncing.
+  // Matches against order number, customer name and phone number — all
+  // three are matched server-side by this one field.
 
   const [phoneSearch, setPhoneSearch] = useState("");
   // phoneSearch — the dedicated "Phone Number" advanced-filter field.
-  // The backend confirmed that its ONE generic `search` param now
-  // matches phone number too (there's no separate `phone` param) — so
-  // this field's value is sent through AS the `search` param whenever
-  // it has a value, taking priority over whatever's typed in the main
-  // search box above. The two fields are kept visually separate (this
-  // wasn't asked to change), they both just feed the same backend
-  // parameter under the hood.
+  // The backend's single generic `search` param also matches phone
+  // numbers (there is no separate `phone` param), so this field's value
+  // is sent as the `search` param whenever it has a value, taking
+  // priority over whatever is typed in the main search box above. The
+  // two fields are kept visually separate, but both feed the same
+  // backend parameter.
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  // startDate / endDate — sent straight through to API 48 as
-  // start_date / end_date query params.
+  // startDate / endDate — sent straight through to the filter endpoint as
+  // start_date / end_date query params. The end date can never be earlier
+  // than the start date.
 
-  // NEW (Sep 2026, API 62 backend fix): two additional advanced
-  // filters the backend now accepts on the filter endpoint — partial,
-  // case-insensitive matches against a product's name / its category's
-  // name across any line item in the order. Same debounce-then-send
-  // pattern as phoneSearch above.
+  // Two additional advanced filters accepted by the filter endpoint —
+  // partial, case-insensitive matches against a product's name / its
+  // category's name across any line item in the order. Same
+  // debounce-then-send pattern as phoneSearch above.
   const [productFilter, setProductFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
@@ -178,11 +173,11 @@ const OrderManagement = () => {
     !!debouncedProductFilter ||
     !!debouncedCategoryFilter;
   // hasActiveFilters — true the moment ANY filter is active. Decides
-  // which endpoint gets called (API 47 vs API 48) — the plain list
-  // endpoint is only used when browsing with zero filters.
+  // which endpoint gets called (filter endpoint vs plain list) — the
+  // plain list endpoint is only used when browsing with zero filters.
 
   // --------------------------------------------------
-  // ORDERS LIST — real server-side filtering, search (including phone),
+  // ORDERS LIST — server-side filtering, search (including phone),
   // sorting, and pagination. Only ONE already-filtered, already-sorted
   // page of orders is ever fetched.
   // --------------------------------------------------
@@ -190,6 +185,7 @@ const OrderManagement = () => {
     data: ordersResponse,
     isLoading,
     isError,
+    error: listError,
     refetch,
   } = useQuery({
     queryKey: [
@@ -220,9 +216,8 @@ const OrderManagement = () => {
           search: effectiveSearch || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
-          // NEW (Sep 2026, API 62 backend fix) — partial,
-          // case-insensitive product/category name matching, combinable
-          // with every other filter above.
+          // Partial, case-insensitive product/category name matching,
+          // combinable with every other filter above.
           product: debouncedProductFilter || undefined,
           category: debouncedCategoryFilter || undefined,
           ordering: sortBy,
@@ -238,15 +233,23 @@ const OrderManagement = () => {
   const visibleOrders = extractListData(ordersResponse);
   const totalCount = ordersResponse?.data?.count ?? visibleOrders.length;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
-  // `visibleOrders` is always exactly one real, already-filtered,
-  // already-sorted page straight from the backend, sized according to
-  // the currently selected `pageSize` — no client-side re-filtering,
-  // re-sorting, or re-slicing on top of it.
+  // `visibleOrders` is always exactly one already-filtered, already-sorted
+  // page straight from the backend, sized according to the currently
+  // selected `pageSize` — no client-side re-filtering, re-sorting, or
+  // re-slicing on top of it.
+
+  // If the backend rejects the request (for example an invalid date
+  // range), show the reason it gives instead of only the generic table
+  // error.
+  useEffect(() => {
+    const message = listError?.response?.data?.error;
+    if (message) showError(message);
+  }, [listError]);
 
   const hasAnyFilterActive = hasActiveFilters;
 
   // Whenever any filter, sort, or page size changes, jump back to
-  // page 1 — staying on, say, page 3 of a now-smaller result set would
+  // page 1 — staying on, say, page 3 of a smaller result set would
   // otherwise show an empty page.
   useEffect(() => {
     setCurrentPage(1);
@@ -307,7 +310,7 @@ const OrderManagement = () => {
   };
 
   // --------------------------------------------------
-  // BULK STATUS UPDATE — API 49, called once per selected order (there
+  // BULK STATUS UPDATE — called once per selected order (there
   // is no bulk endpoint on the backend). Uses Promise.allSettled so one
   // failing order doesn't stop the rest of the batch from going
   // through, then reports how many succeeded and how many failed.
@@ -354,8 +357,7 @@ const OrderManagement = () => {
       render: (row) => (
         <div>
           <p className="text-[10px] sm:text-[11px] text-gray-900 leading-tight">
-            {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: same compact
-                stacked-cell shrink as ProductList's Product/Price columns, so this two-line
+            {/* Compact stacked cell (10-11px, tight leading) so this two-line
                 Customer cell fits the DataTable's fixed 36px row without clipping */}
             {row.customer?.name || "—"}
           </p>
@@ -432,10 +434,9 @@ const OrderManagement = () => {
           on every other admin page.
           ================================================================ */}
       <PageHeader icon={<AiOutlineShoppingCart />} title="Orders" />
-      {/* Note: the mockup's "+ Create Order" button is NOT included —
-          there is no documented API for an admin to manually create an
-          order on a customer's behalf; Checkout (API 52) is a
-          customer-only, cart-based flow. */}
+      {/* There is deliberately no "+ Create Order" button: no endpoint lets
+          an admin create an order on a customer's behalf, since checkout is
+          a customer-only, cart-based flow. */}
 
       {/* ================================================================
           STATS CARDS

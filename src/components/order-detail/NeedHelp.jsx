@@ -1,43 +1,32 @@
 import { Link, useNavigate } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload; useNavigate lets the AI button navigate programmatically
 import { BsTruck, BsArrowReturnLeft, BsRobot } from "react-icons/bs"; // Truck for tracking, return arrow for returns, robot for AI chat
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
-import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used to control button visibility and enabled state
+import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used for the return button and the explanatory tooltips
 import cn from "../../utils/cn"; // Merges Tailwind class strings and handles conditional classes cleanly
 
 const NeedHelp = ({
   orderNumber, // string — the order's unique identifier, injected into route paths
-  status, // string — current order status, determines which action buttons are visible
+  status, // string — current order status, used for the return button and the tooltips
+  canCancel, // boolean — backend flag (can_cancel): whether the order can still be cancelled
+  canTrack, // boolean — backend flag (can_track): whether the order can be tracked
   hasReturn, // boolean — true if a return request already exists for this order
   onCancel, // function — callback fired when the customer clicks Cancel Order
 }) => {
   const navigate = useNavigate(); // used by the "Chat with AI" button to navigate programmatically
 
-  // isCancelled — true once the order has been cancelled. A cancelled order
-  // has reached the end of its lifecycle, so both tracking and
-  // cancelling are unavailable for it
-  const isCancelled = status === ORDER_STATUS.CANCELLED;
-
-  // canTrack — tracking is available for every order except a cancelled one
-  const canTrack = !isCancelled;
-
-  // canCancel — true only while the order can still be stopped before it ships.
-  // The backend refuses cancellation once an order is "shipped",
-  // "out_for_delivery" or "delivered". ON_HOLD is included alongside
-  // PENDING/CONFIRMED because it is still a pre-confirmation state (a QR retry
-  // awaiting review), so the customer can back out of it the same way
-  const canCancel = [
-    ORDER_STATUS.PENDING,
-    ORDER_STATUS.ON_HOLD,
-    ORDER_STATUS.CONFIRMED,
-  ].includes(status);
+  // Whether Track Order and Cancel Order are available is decided by the
+  // backend and arrives as the canTrack / canCancel props, so the rules
+  // live in one place. A cancelled order has both set to false, and an
+  // order that has shipped or been delivered has canCancel set to false.
 
   // cancelDisabledReason — tooltip text explaining why the Cancel Order
   // button is disabled for the order's current status
-  const cancelDisabledReason = isCancelled
-    ? "This order has already been cancelled."
-    : status === ORDER_STATUS.DELIVERED
-      ? "A delivered order cannot be cancelled."
-      : "This order has already shipped and can no longer be cancelled.";
+  const cancelDisabledReason =
+    status === ORDER_STATUS.CANCELLED
+      ? "This order has already been cancelled."
+      : status === ORDER_STATUS.DELIVERED
+        ? "A delivered order cannot be cancelled."
+        : "This order has already shipped and can no longer be cancelled.";
 
   // canReturn — true only when the order has been delivered AND no return has been filed
   // Prevents a second return request from being created for the same order
@@ -53,9 +42,9 @@ const NeedHelp = ({
       {/* ── Track Order ───────────────────────────────────────────────────────
           Brand gradient pill that navigates to the tracking page.
           active:scale-[0.98] gives a subtle press-down feel on click.
-          For a cancelled order it is replaced by a disabled, non-clickable
-          element (a span, since a Link cannot be disabled) so the customer
-          cannot open the tracking page from here                              */}
+          When canTrack is false (a cancelled order) it is replaced by a
+          disabled, non-clickable element (a span, since a Link cannot be
+          disabled) so the customer cannot open the tracking page from here    */}
       {canTrack ? (
         <Link
           to={ROUTES.ACCOUNT_ORDER_TRACKING.replace(":id", orderNumber)} // inject this order's id into the tracking route
@@ -106,10 +95,9 @@ const NeedHelp = ({
       )}
 
       {/* ── Cancel Order ──────────────────────────────────────────────────────
-          Always rendered. Enabled only while canCancel is true (Pending,
-          On Hold or Confirmed); for every other status (Shipped, Out for
-          Delivery, Delivered, Cancelled) it is disabled and its tooltip
-          explains why.
+          Always rendered. Enabled only while canCancel is true; otherwise
+          (Shipped, Out for Delivery, Delivered, Cancelled) it is disabled
+          and its tooltip explains why.
           Danger-tinted border and text signals this is a destructive action
           Uses a button (not Link) because cancellation triggers an API call via onCancel */}
       <button

@@ -150,11 +150,9 @@ const CustomerAccountSidebar = () => {
     ).length || 0; // Count how many pending orders there are, default to 0 if data isn't loaded
 
   const unreadNotifications =
-    // API_Documentation_Final.pdf (API 59) documents this endpoint as a
-    // flat array, but the console error confirmed the real response is
-    // NOT a plain array (`.filter is not a function`) — a backend/docs
-    // contract mismatch, same pattern as categories. extractListData()
-    // safely handles either shape.
+    // The notifications response is not always a plain array (it can be a
+    // paginated object), so extractListData() is used to safely handle
+    // either shape before filtering.
     extractListData(notificationsData).filter(
       (notif) => !notif.is_read, // Keep only notifications that haven't been read
     ).length || 0; // Count how many unread notifications there are, default to 0 if data isn't loaded
@@ -220,17 +218,17 @@ const CustomerAccountSidebar = () => {
         {" "}
         {/* Hidden on mobile, shown as a column on medium screens and up, fixed width, sticky full-viewport height, dark background */}
         {/* ===== USER PROFILE TOP ===== */}
-        <div className="p-5 border-b border-white/10">
+        <div className="px-4 py-3 border-b border-white/10">
           {" "}
-          {/* Padded section with a bottom border */}
+          {/* Compact padded section with a bottom border */}
           {/* Avatar + user info */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-2.5 mb-2">
             {" "}
-            {/* Row layout for avatar and text, with bottom margin */}
+            {/* Row layout for avatar and text, with a small bottom margin */}
             <Avatar
               src={user?.profile_picture} // Pass the user's avatar image URL
               name={user?.name} // Pass the user's name (likely used as a fallback for initials)
-              size="lg" // Large avatar size
+              size="md" // Medium avatar size — keeps this section compact
               className="shrink-0" // Prevent the avatar from shrinking in the flex layout
             />
             <div className="min-w-0 flex-1">
@@ -239,16 +237,23 @@ const CustomerAccountSidebar = () => {
               <p className="font-semibold text-white truncate text-sm">
                 {user?.name} {/* Display the user's name */}
               </p>
-              <p className="text-xs text-gray-400 truncate">
+              {/* The email uses a small font with tight letter spacing so a full
+                  address fits on one line inside the fixed-width sidebar.
+                  truncate stays as a safety net for an unusually long address,
+                  and the title attribute shows the full address on hover. */}
+              <p
+                className="text-[10px] tracking-tight text-gray-400 truncate"
+                title={user?.email}
+              >
                 {user?.email} {/* Display the user's email */}
               </p>
             </div>
           </div>
           {/* Verified badge — shown once the profile is fully complete */}
           {profileCompletion === 100 && (
-            <div className="inline-flex w-fit items-center gap-1 px-2.5 py-1 rounded-full border border-primary/40 bg-gradient-to-r from-primary/25 via-primary/10 to-transparent shadow-[0_0_12px_-2px_rgba(16,185,129,0.5)]">
-              <MdVerified className="w-3.5 h-3.5 shrink-0 text-primary drop-shadow-[0_0_4px_rgba(16,185,129,0.8)]" />
-              <span className="text-xs font-bold tracking-wide text-primary truncate">
+            <div className="inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded-full border border-primary/40 bg-gradient-to-r from-primary/25 via-primary/10 to-transparent shadow-[0_0_12px_-2px_rgba(16,185,129,0.5)]">
+              <MdVerified className="w-3 h-3 shrink-0 text-primary drop-shadow-[0_0_4px_rgba(16,185,129,0.8)]" />
+              <span className="text-[11px] font-bold tracking-wide text-primary truncate">
                 Verified Profile
               </span>
             </div>

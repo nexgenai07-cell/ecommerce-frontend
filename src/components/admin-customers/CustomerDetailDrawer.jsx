@@ -39,12 +39,11 @@ import Avatar from "../ui/Avatar";
 import Spinner from "../ui/Spinner";
 import Badge from "../ui/Badge";
 import Input from "../ui/Input";
-import Pagination from "../ui/Pagination";
-import EmptyState from "../ui/EmptyState";
+import DataTable from "../ui/DataTable";
 
 import { getCustomerOrders } from "../../api/orders.api";
-// getCustomerOrders — NEW, wraps the admin orders filter endpoint
-// with customer_id always set to this drawer's customer
+// getCustomerOrders — wraps the admin orders filter endpoint with
+// customer_id always set to this drawer's customer
 
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
@@ -64,9 +63,8 @@ const ORDER_STATUS_OPTIONS = [
 ];
 
 // The custom status dropdown below needs its own explicit "All
-// Statuses" (value: "") entry — the shared Select component used to
-// add that automatically as its built-in placeholder option, but the
-// custom dropdown renders exactly the list it's given.
+// Statuses" (value: "") entry, because it renders exactly the list it is
+// given and adds no placeholder option of its own.
 const ORDER_STATUS_FILTER_OPTIONS = [
   { value: "", label: "All Statuses" },
   ...ORDER_STATUS_OPTIONS,
@@ -83,11 +81,10 @@ const ORDER_STATUS_LABELS = {
 };
 
 // --------------------------------------------------
-// Sort options — sent to the backend as the `ordering` query param
-// (API 62, 16 Sep 2026 Filtering Fix pass) so a customer's order
-// history is sorted server-side across their ENTIRE order history,
-// not just whichever page happens to already be loaded in the
-// browser.
+// Sort options — sent to the backend as the `ordering` query param, so a
+// customer's order history is sorted server-side across their ENTIRE
+// order history, not just whichever page happens to already be loaded in
+// the browser.
 // --------------------------------------------------
 const ORDERS_SORT_OPTIONS = [
   { value: "-created_at", label: "Newest First" },
@@ -96,21 +93,61 @@ const ORDERS_SORT_OPTIONS = [
   { value: "total_amount", label: "Amount: Low to High" },
 ];
 
-// Selectable "rows per page" values shown in the orders sub-table's
-// pagination dropdown, matching the backend's page_size cap of 100.
+// Selectable "rows per page" values shown in the orders table's
+// pagination footer, matching the backend's page_size cap of 100.
 const ORDERS_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_ORDERS_PAGE_SIZE = ORDERS_PAGE_SIZE_OPTIONS[0];
 
 // --------------------------------------------------
+// ORDER_COLUMNS — column config for the shared DataTable that lists this
+// customer's orders. Three compact columns fit the drawer width: the
+// order number with its date underneath, the status badge, and the total.
+// --------------------------------------------------
+const ORDER_COLUMNS = [
+  {
+    key: "order_number",
+    label: "Order",
+    render: (order) => (
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-gray-900 leading-tight">
+          {order.order_number}
+        </p>
+        <p className="text-[9px] text-gray-400 leading-tight">
+          {formatDate(order.created_at)}
+        </p>
+      </div>
+    ),
+  },
+  {
+    key: "status",
+    label: "Status",
+    render: (order) => (
+      <Badge
+        status={order.status}
+        label={ORDER_STATUS_LABELS[order.status] || order.status}
+        size="sm"
+        rounded
+      />
+    ),
+  },
+  {
+    key: "total_amount",
+    label: "Total",
+    render: (order) => (
+      <span className="font-semibold text-gray-900">
+        {formatPrice(order.total_amount)}
+      </span>
+    ),
+  },
+];
+
+// --------------------------------------------------
 // FilterDropdown — a custom-styled dropdown used ONLY for the status
-// and sort filters inside this drawer. The previous version used the
-// shared <Select>, whose OPEN options list is a native browser <select>
-// menu — plain white rows with no way to theme them. This component
-// renders its own themed menu (rounded corners, shadow, emerald
-// highlight + checkmark on the selected row, hover highlight) so the
-// dropdown looks intentional instead of the plain default browser
-// list. It's local to this file only, so no other page's dropdowns
-// are affected.
+// and sort filters inside this drawer. The shared <Select> opens a native
+// browser menu, which cannot be themed, so this component renders its own
+// themed menu (rounded corners, shadow, emerald highlight + checkmark on
+// the selected row, hover highlight). It is local to this file only, so no
+// other page's dropdowns are affected.
 // --------------------------------------------------
 const FilterDropdown = ({ icon, value, options, onChange, ariaLabel }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -213,8 +250,8 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
     DEFAULT_ORDERS_PAGE_SIZE,
   );
   // ordersPageSize — how many of this customer's orders are shown per
-  // page, controlled by the "Rows per page" dropdown under the orders
-  // sub-table. Sent to the backend as `page_size` alongside `page`.
+  // page, controlled by the rows-per-page dropdown in the orders table's
+  // pagination footer. Sent to the backend as `page_size` alongside `page`.
   const [ordersStatusFilter, setOrdersStatusFilter] = useState("");
   const [ordersSearchInput, setOrdersSearchInput] = useState("");
   const [ordersSortBy, setOrdersSortBy] = useState("-created_at");
@@ -241,7 +278,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
   }, [ordersStatusFilter, debouncedOrdersSearch, ordersPageSize]);
 
   // Resets back to page 1 whenever the admin picks a different
-  // rows-per-page value for the orders sub-table.
+  // rows-per-page value for the orders table.
   const handleOrdersPageSizeChange = (size) => {
     setOrdersPageSize(size);
     setOrdersPage(1);
@@ -255,6 +292,7 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
     data: ordersResponse,
     isLoading: isOrdersLoading,
     isError: isOrdersError,
+    refetch: refetchOrders,
   } = useQuery({
     queryKey: [
       "adminCustomers",
@@ -312,8 +350,8 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
       onClose={onClose}
       title="Customer Details"
       size="lg"
-      // size="lg" (480px) instead of "md" — the new Order History
-      // table needs more breathing room than the old profile-only view
+      // size="lg" — full width on phones, 480px from the sm breakpoint up,
+      // which gives the Order History table enough room
     >
       {isLoading ? (
         <div className="py-16 flex items-center justify-center">
@@ -324,7 +362,10 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
           No customer selected.
         </p>
       ) : (
-        <div className="flex flex-col gap-6">
+        // pb-20 leaves clear space below the last section, so the table's
+        // pagination footer can scroll fully above the floating action
+        // buttons in the bottom-right corner instead of sitting under them.
+        <div className="flex flex-col gap-6 pb-20">
           {/* ================= IDENTITY BANNER ================= */}
           {/* Soft gradient backdrop behind the avatar/name — visually
               matches the brand gradient already used in PageHeader,
@@ -367,9 +408,8 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
               <span className="w-7 h-7 rounded-md bg-info-light text-info flex items-center justify-center">
                 <AiOutlineRise className="w-3.5 h-3.5" />
               </span>
-              {/* This is the "Average Order Value" the user asked
-                  about — see the averageOrder calculation above:
-                  total_spent divided by total_orders */}
+              {/* Average Order Value — see the averageOrder calculation
+                  above: total_spent divided by total_orders */}
               <p className="text-xs text-gray-400">Avg. Order Value</p>
               <p className="text-base font-semibold text-gray-900">
                 {formatPrice(averageOrder)}
@@ -411,11 +451,9 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
 
             {/* Filter row — search on its own full-width row (so the
                 placeholder text always has room to show completely),
-                then status + sort as two EQUAL-width, equal-height
-                custom dropdowns below. This fixes the earlier text
-                getting cut off (each control now has enough room for
-                its full label) and replaces the plain native dropdown
-                menu with the themed FilterDropdown menu above. */}
+                then status + sort as two equal-width, equal-height
+                themed dropdowns below (stacked on phones, side by side
+                from the sm breakpoint up). */}
             <div className="flex flex-col gap-2.5">
               <Input
                 placeholder="Search order number..."
@@ -445,78 +483,34 @@ const CustomerDetailDrawer = ({ isOpen, onClose, customer, isLoading }) => {
               </div>
             </div>
 
-            {/* Orders list — loading / error / empty / data states,
-                same pattern as DataTable but built compact for the
-                narrower drawer width */}
-            <div className="rounded-lg border border-gray-100 overflow-hidden">
-              {isOrdersLoading ? (
-                <div className="py-10 flex items-center justify-center">
-                  <Spinner size="md" />
-                </div>
-              ) : isOrdersError ? (
-                <div className="py-10 text-center text-sm text-danger">
-                  Failed to load orders.
-                </div>
-              ) : ordersList.length === 0 ? (
-                <EmptyState
-                  variant={hasOrdersFilterActive ? "noResults" : "noOrders"}
-                  title={
-                    hasOrdersFilterActive
-                      ? "No Matching Orders"
-                      : "No Orders Yet"
-                  }
-                  description={
-                    hasOrdersFilterActive
-                      ? "No orders match these filters. Try clearing them."
-                      : "This customer hasn't placed any orders yet."
-                  }
-                  className="py-10"
-                />
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {ordersList.map((order) => (
-                    <div
-                      key={order.order_number}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {order.order_number}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {formatDate(order.created_at)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge
-                          status={order.status}
-                          label={
-                            ORDER_STATUS_LABELS[order.status] || order.status
-                          }
-                          size="sm"
-                          rounded
-                        />
-                        <span className="text-sm font-semibold text-gray-900 w-20 text-right">
-                          {formatPrice(order.total_amount)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Pagination — only shown once orders have actually loaded */}
-            {!isOrdersLoading && ordersList.length > 0 && (
-              <Pagination
-                currentPage={ordersPage}
-                totalPages={ordersTotalPages}
-                onPageChange={setOrdersPage}
-                pageSize={ordersPageSize}
-                pageSizeOptions={ORDERS_PAGE_SIZE_OPTIONS}
-                onPageSizeChange={handleOrdersPageSizeChange}
-              />
-            )}
+            {/* Orders table — the shared DataTable, so it looks and behaves
+                like every other table in the admin panel: loading skeleton,
+                error state with retry, empty state, horizontal scrolling on
+                narrow screens, and the compact pagination footer with the
+                rows-per-page selector. */}
+            <DataTable
+              columns={ORDER_COLUMNS}
+              data={ordersList}
+              keyField="order_number"
+              isLoading={isOrdersLoading}
+              error={isOrdersError}
+              onRetry={refetchOrders}
+              emptyTitle={
+                hasOrdersFilterActive ? "No Matching Orders" : "No Orders Yet"
+              }
+              emptyDescription={
+                hasOrdersFilterActive
+                  ? "No orders match these filters. Try clearing them."
+                  : "This customer hasn't placed any orders yet."
+              }
+              currentPage={ordersPage}
+              totalPages={ordersTotalPages}
+              totalResults={totalOrdersCount}
+              onPageChange={setOrdersPage}
+              pageSize={ordersPageSize}
+              pageSizeOptions={ORDERS_PAGE_SIZE_OPTIONS}
+              onPageSizeChange={handleOrdersPageSizeChange}
+            />
           </div>
         </div>
       )}

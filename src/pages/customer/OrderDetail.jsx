@@ -11,7 +11,7 @@ import useBreadcrumb from "../../hooks/useBreadcrumb";
 import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized cache key constants — keeps query keys consistent across the app
 import { getOrderDetail, cancelOrder } from "../../api/orders.api"; // API functions: fetch one order by number, cancel an order
 import { getReturns } from "../../api/returns.api"; // API function: fetch all return requests — filtered client-side for this order
-import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the returns endpoint)
+import extractListData from "../../utils/extractListData"; // Normalizes the returns list, which may be a plain array or a paginated object
 import { showSuccess, showError } from "../../components/ui/Toast"; // Toast notification helpers for mutation feedback
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
 import OrderStepper from "../../components/order-detail/OrderStepper"; // 5-step progress stepper showing where the order is in its journey
@@ -80,8 +80,8 @@ const OrderDetail = () => {
   const [hasShownPaidToast, setHasShownPaidToast] = useState(false);
 
   // =============================================
-  // ORDER DETAIL API
-  // API 44 — GET /api/v1/orders/{order_number}/
+  // ORDER DETAIL
+  // GET /api/v1/orders/{order_number}/
   // =============================================
 
   const {
@@ -146,8 +146,8 @@ const OrderDetail = () => {
   ]);
 
   // =============================================
-  // RETURNS API
-  // API 51 — fetch all returns, then filter for this specific order
+  // RETURNS
+  // Fetch all returns, then filter for this specific order
   // =============================================
 
   const { data: returnsData } = useQuery({
@@ -157,18 +157,16 @@ const OrderDetail = () => {
   });
 
   // Find the return that belongs to this specific order, if one exists
-  // orderReturn will be undefined if no return has been filed yet
-  // API_Documentation_Final.pdf (API 51) documents a flat array, but the
-  // real response isn't a plain array — same backend/docs contract drift
-  // as categories/notifications/complaints. extractListData() safely
-  // handles either shape before we .find() on it.
+  // orderReturn will be undefined if no return has been filed yet.
+  // The response may be a plain array or a paginated object;
+  // extractListData() handles either shape before we .find() on it.
   const orderReturn = extractListData(returnsData).find(
     (r) => r.order_number === orderNumber,
   );
 
   // =============================================
   // CANCEL ORDER MUTATION
-  // API 45 — PUT /api/v1/orders/{order_number}/cancel/
+  // PUT /api/v1/orders/{order_number}/cancel/
   // =============================================
 
   const cancelMutation = useMutation({
@@ -187,7 +185,29 @@ const OrderDetail = () => {
       setCancelReason("");
       setCancelReasonOther("");
 
-      // Invalidate the specific order's cached data so the status badge and stepper update immediately
+      // Reflect the cancellation in the cached order right away, so the
+      // status badge and stepper update and the Cancel Order and Track
+      // Order actions are disabled immediately, without waiting for the
+      // refetch below. A cancelled order always has can_cancel and
+      // can_track set to false.
+      queryClient.setQueryData(
+        QUERY_KEYS.ORDER_DETAIL(orderNumber),
+        (cachedResponse) => {
+          if (!cachedResponse?.data) return cachedResponse;
+          return {
+            ...cachedResponse,
+            data: {
+              ...cachedResponse.data,
+              status: ORDER_STATUS.CANCELLED,
+              can_cancel: false,
+              can_track: false,
+            },
+          };
+        },
+      );
+
+      // Then refetch the specific order so every other field (for
+      // example the cancellation reason) is refreshed from the server
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
       });
@@ -203,11 +223,10 @@ const OrderDetail = () => {
 
     onError: (error) => {
       // Show the server's error message if available, otherwise show a
-      // generic fallback. UPDATED (Sep 2026, API 58 backend fix): the
-      // cancel endpoint's 400 responses use an "error" key (e.g. "This
-      // order has already been shipped and can no longer be
-      // cancelled."), not "message" — checking both keeps this working
-      // regardless of which shape a given error response uses.
+      // generic fallback. The cancel endpoint's 400 responses use an
+      // "error" key (e.g. "This order has already been shipped and can no
+      // longer be cancelled."); "message" is checked as a fallback so
+      // either response shape is handled.
       showError(
         error?.response?.data?.error ||
           error?.response?.data?.message ||
@@ -266,8 +285,7 @@ const OrderDetail = () => {
                 waiting for the webhook to flip payment.status away from
                 "pending". Disappears automatically once confirmed (or once the
                 short polling window times out) — never a permanent UI element.
-                FIXED: now uses the "info" design token instead of raw,
-                hardcoded blue-* classes that don't exist in tokens.css.       */}
+                Styled with the "info" design token.                           */}
             <AnimatePresence>
               {isAwaitingWebhook && (
                 <motion.div
@@ -345,6 +363,8 @@ const OrderDetail = () => {
                 <NeedHelp
                   orderNumber={orderNumber}
                   status={order.status}
+                  canCancel={order.can_cancel !== false} // backend flag — Cancel Order is unavailable only when explicitly false
+                  canTrack={order.can_track !== false} // backend flag — Track Order is unavailable only when explicitly false
                   hasReturn={!!orderReturn} // convert to boolean — true if a return exists
                   onCancel={() => setShowCancelModal(true)} // opens the confirmation modal instead of cancelling immediately
                 />
@@ -357,7 +377,7 @@ const OrderDetail = () => {
             Rendered outside the Container so it overlays the full viewport
             Only fires the mutation after the customer explicitly clicks "Yes, Cancel Order".
             The reason dropdown is entirely optional — leaving it unset still
-            cancels the order exactly as before. */}
+            cancels the order. */}
         <Modal
           isOpen={showCancelModal}
           onClose={() => setShowCancelModal(false)}

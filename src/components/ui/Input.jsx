@@ -4,6 +4,7 @@
 // Shows red border in error state
 // Fully responsive
 
+import { useState } from "react";
 import cn from "../../utils/cn";
 // cn utility — merges Tailwind class strings and handles conditional classes cleanly
 
@@ -18,8 +19,21 @@ const Input = ({
   id, // Unique HTML id — connects the <label> htmlFor to the <input> for accessibility
   required = false, // When true, shows a red asterisk (*) next to the label
   disabled = false, // When true, input is visually dimmed and non-interactive
-  ...props // Remaining HTML input attributes — type, placeholder, value, onChange, etc.
+  overlayText = "", // Light gray placeholder-style text, shown only while the field
+  // is empty and not focused. Exists for input types the browser itself
+  // won't apply the real `placeholder` attribute to (type="time" and
+  // type="date" both ignore it) — everywhere else, just use the normal
+  // `placeholder` prop instead, it already comes through via ...props.
+  value, // Read explicitly (rather than only via ...props) so overlayText can
+  // tell an empty field from a filled one even when the field is
+  // otherwise registered as uncontrolled (e.g. react-hook-form's
+  // register(), which never passes a value prop of its own)
+  onFocus, // Read explicitly so internal focus tracking (for overlayText) can
+  onBlur, // run alongside — not instead of — whatever the caller already passed
+  ...props // Remaining HTML input attributes — type, placeholder, onChange, etc.
 }) => {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
     <div className={cn("flex flex-col gap-1.5", fullWidth && "w-full")}>
       {/* Outer wrapper is a flex column with 1.5 unit gap between label, input, and hint/error */}
@@ -62,6 +76,15 @@ const Input = ({
           disabled={disabled}
           // Passes disabled state to the native input element
 
+          value={value}
+          onFocus={(e) => {
+            setIsFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            onBlur?.(e);
+          }}
           className={cn(
             // Base classes — applied to every input instance
             "w-full rounded-lg border bg-white text-gray-900 text-sm transition-all duration-150",
@@ -74,6 +97,15 @@ const Input = ({
 
             "placeholder:text-gray-400",
             // Muted gray placeholder text — distinct from actual input value
+
+            // While overlayText is standing in as this field's fake
+            // placeholder, the real control underneath is made fully
+            // transparent (not hidden — it still receives clicks and
+            // keyboard input normally). Without this, a composite input
+            // like type="time" keeps rendering its own empty-state
+            // markup (its "--:--" segments) in the same spot, doubling
+            // up visually with overlayText on top of it.
+            overlayText && !value && !isFocused && "text-transparent",
 
             leftIcon ? "pl-10 pr-4 py-2.5" : "px-4 py-2.5",
             // If left icon exists: pl-10 creates space so text doesn't overlap the icon
@@ -104,8 +136,25 @@ const Input = ({
             // Merges any extra classes passed from the parent component
           )}
           {...props}
-          // Spreads remaining props — type, placeholder, value, onChange, onBlur, etc.
+          // Spreads remaining props — type, placeholder, onChange, etc.
         />
+
+        {/* overlayText — a fake, lightweight placeholder for input types
+            (time, date) whose real placeholder attribute the browser
+            simply ignores. Sits in the same row as the real input, so it
+            lines up correctly whether or not a leftIcon is present.
+            Disappears the instant the field has a real value OR gains
+            focus, exactly like a normal placeholder would. */}
+        {overlayText && !value && !isFocused && (
+          <span
+            className={cn(
+              "absolute text-sm text-gray-400 pointer-events-none",
+              leftIcon ? "left-10" : "left-4",
+            )}
+          >
+            {overlayText}
+          </span>
+        )}
 
         {/* Right icon — absolutely positioned inside the input on the right */}
         {rightIcon && (

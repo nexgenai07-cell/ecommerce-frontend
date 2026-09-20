@@ -7,20 +7,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineFileText } from "react-icons/ai";
 
 import { getComplaints, updateComplaintStatus } from "../../api/complaints.api";
-// getComplaints — API 55: GET /api/v1/complaints/. Role-based on the
-// backend: an admin calling this gets EVERY complaint from every
-// customer, no separate admin-only endpoint needed.
+// getComplaints — GET /api/v1/complaints/. Role-based on the backend: an
+// admin calling this gets EVERY complaint from every customer, no
+// separate admin-only endpoint is needed.
 //
-// BACKEND FIX CONFIRMED: `status`, `search`, and `page` now all filter
-// and paginate correctly — this page sends them straight through and
-// only ever fetches ONE already-filtered page at a time, rather than
-// downloading the entire complaint list and filtering it in the
-// browser. `priority` is also sent through optimistically but wasn't
-// part of the confirmed fix — see the note on getComplaints() in
+// `status`, `search` and `page` filter and paginate on the server — this
+// page sends them straight through and only ever fetches ONE
+// already-filtered page at a time, rather than downloading the entire
+// complaint list and filtering it in the browser. `priority` is sent
+// through as an additional filter — see the note on getComplaints() in
 // complaints.api.js.
 
 import { exportReport } from "../../api/analytics.api";
-// exportReport — `type: "complaints"` is now a confirmed accepted value
+// exportReport — `type: "complaints"` is an accepted value
 
 import { COMPLAINT_STATUS } from "../../constants/statusTypes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -35,8 +34,8 @@ import Badge from "../../components/ui/Badge";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already
-// used on every other admin screen (Orders, Products, Returns...).
+// PageHeader — the shared gradient icon + title header used on every
+// admin screen (Orders, Products, Returns...).
 import ComplaintStatsCards from "../../components/admin-complaints/ComplaintStatsCards";
 import ComplaintDetailModal from "../../components/admin-complaints/ComplaintDetailModal";
 import ComplaintFilters from "../../components/admin-complaints/ComplaintFilters";
@@ -53,8 +52,8 @@ const STATUS_TABS = [
 ];
 
 // --------------------------------------------------
-// PRIORITY TABS — "normal" and "urgent" are the only two real values
-// API 61's documented request shape defines for this field.
+// PRIORITY TABS — "normal" and "urgent" are the only two priority values
+// a complaint can have.
 // --------------------------------------------------
 const PRIORITY_TABS = [
   { key: "", label: "All Priorities" },
@@ -255,7 +254,7 @@ const ComplaintsManagement = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — API 90, downloads the returned blob as a real .csv file
+  // EXPORT — downloads the returned blob as a .csv file
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -296,7 +295,7 @@ const ComplaintsManagement = () => {
   };
 
   // --------------------------------------------------
-  // BULK STATUS UPDATE — API 71, called once per selected complaint
+  // BULK STATUS UPDATE — called once per selected complaint
   // (there is no bulk endpoint on the backend). Supports the two bulk
   // actions used on a support queue: marking handled tickets Resolved
   // and closing resolved tickets.
@@ -469,10 +468,10 @@ const ComplaintsManagement = () => {
           used on every other admin page.
           ================================================================ */}
       <PageHeader icon={<AiOutlineFileText />} title="Complaints Management" />
-      {/* Note: "+ New Ticket" from the original design is NOT included —
-          API 54 (Submit Complaint) has no field to attribute a new
-          complaint to a DIFFERENT customer; an admin calling it would
-          only ever create a complaint under their own account. */}
+      {/* There is deliberately no "+ New Ticket" action: the submit-complaint
+          endpoint has no field to attribute a new complaint to a different
+          customer, so an admin calling it would only ever create a
+          complaint under their own account. */}
 
       {/* ================================================================
           STAT CARDS — real backend counts, one lightweight request per
