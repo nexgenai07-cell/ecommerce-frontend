@@ -79,7 +79,7 @@ const CategoryManagement = () => {
     search: "",
     startDate: "",
     endDate: "",
-    ordering: "-created_at",
+    ordering: "name",
   });
 
   // Waits 400ms after the admin stops typing before actually filtering —
@@ -203,7 +203,7 @@ const CategoryManagement = () => {
       search: "",
       startDate: "",
       endDate: "",
-      ordering: "-created_at",
+      ordering: "name",
     });
     setCurrentPage(1);
   };

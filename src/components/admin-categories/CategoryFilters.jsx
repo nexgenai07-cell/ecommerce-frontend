@@ -16,7 +16,7 @@ const SORT_OPTIONS = [
   { value: "product_count", label: "Fewest Products" },
 ];
 
-const DEFAULT_ORDERING = "-created_at";
+const DEFAULT_ORDERING = "name";
 
 // NOTE: there is no "Status" (Active/Inactive) dropdown here. It relied
 // on a category's is_active field to distinguish soft-deleted rows from

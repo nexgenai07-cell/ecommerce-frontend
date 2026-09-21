@@ -17,8 +17,8 @@ const PLATFORM_OPTIONS = [
  * PostFilters
  *
  * The toolbar sitting above the posts grid: search box, a "Filters"
- * toggle, and — once opened — the Status and Platform dropdown chips.
- * There is no Export button on this page.
+ * toggle, an "Export" button, and — once opened — the Status and
+ * Platform dropdown chips.
  *
  * Built on the same shared list-toolbar pieces used by every other
  * admin list page. The Post Status filter lives in its own dropdown
@@ -36,6 +36,9 @@ const PLATFORM_OPTIONS = [
  * - onPlatformChange: (value) => void.
  * - onClearFilters:  () => void — resets every field to its default.
  * - hasActiveFilters: Whether the "Clear all" link should be shown.
+ * - onExport:        Optional export handler (API 99, type=social_posts).
+ *                    When omitted, no Export button is rendered.
+ * - isExporting:     Optional loading state for the Export button.
  */
 const PostFilters = ({
   statusTabs,
@@ -47,6 +50,8 @@ const PostFilters = ({
   onPlatformChange,
   onClearFilters,
   hasActiveFilters,
+  onExport,
+  isExporting,
 }) => {
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
 
@@ -66,6 +71,8 @@ const PostFilters = ({
         activeFilterCount={activeFilterCount}
         areFiltersOpen={areFiltersOpen}
         onToggleFilters={() => setAreFiltersOpen((prev) => !prev)}
+        onExport={onExport}
+        isExporting={isExporting}
       />
 
       {areFiltersOpen && (

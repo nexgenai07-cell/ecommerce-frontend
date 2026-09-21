@@ -19,11 +19,19 @@ import {
 } from "../../api/products.api";
 
 import { getCategories } from "../../api/categories.api";
+import { exportReport } from "../../api/analytics.api";
+// exportReport — API 99, type=products. The backend builds the CSV
+// directly for whatever filters are currently applied (q, category_id,
+// in_stock/status, min_price/max_price, ordering) — including the
+// correct "Stock" column definition (available stock = total minus
+// reserved, matching what the table itself shows), so this replaced
+// the old approach of paging through every result in the browser and
+// building the file by hand.
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
-import downloadCsv from "../../utils/downloadCsv";
+import downloadExportCsv from "../../utils/downloadExportCsv";
 import chunkArray from "../../utils/chunkArray";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
@@ -355,129 +363,55 @@ const ProductList = () => {
     }
   };
 
-  // Shared row shape for the CSV, used by both export paths below.
-  const buildExportRow = (product) => {
-    const available = product.available_stock ?? product.total_stock ?? 0;
-    const stockHealth =
-      available === 0
-        ? "Out of Stock"
-        : available <= 5
-          ? "Low Stock"
-          : "In Stock";
-    return {
-      name: product.name,
-      sku: product.sku || "",
-      category: product.category?.name || "",
-      price: product.price,
-      stock: product.total_stock ?? 0,
-      stockHealth,
-      onWebsite: product.is_active ? "Yes" : "No",
-    };
-  };
-
-  // Backend's page_size cap on /api/v1/products/search/ (API 29) — same
-  // cap already used for the on-screen pagination (see PAGE_SIZE_OPTIONS
-  // above), now also used here to pull the export in as few requests as
-  // possible instead of one page at a time.
-  const EXPORT_PAGE_SIZE = 100;
-
   // --------------------------------------------------
-  // EXPORT — pulls EVERY product matching the currently applied filters
-  // from the backend (not just whatever page happens to be on screen
-  // right now), then builds the CSV from that full set. Low Stock now
-  // uses the same page-looping approach as every other view, since
-  // API 38's fuller table mode (16 Sep 2026 Filtering Fix pass) is
-  // itself real, server-side pagination rather than one small complete
-  // list.
+  // EXPORT — API 99, type=products. The backend builds and returns the
+  // CSV file directly for the currently applied filters, so this is one
+  // request instead of looping every page of results and building the
+  // file in the browser by hand.
+  //
+  // Low Stock is sent as `status: "low_stock"` — API 99's products
+  // filter set accepts out_of_stock / low_stock / healthy / in_stock as
+  // a `status` value (this is a different, wider filter than the plain
+  // `in_stock` boolean the on-screen search endpoint uses), so the
+  // export can express the Low Stock view in one request without
+  // needing a second export code path. min_price/max_price aren't sent
+  // for Low Stock since the on-screen Low Stock view has no price
+  // filter for them to mirror.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      let rows;
+      const params = {
+        type: "products",
+        q: debouncedSearch || undefined,
+        category_id: filters.categoryId || undefined,
+        ordering: filters.ordering,
+      };
 
       if (isLowStockView) {
-        const baseParams = {
-          q: debouncedSearch || undefined,
-          category_id: filters.categoryId || undefined,
-          page_size: EXPORT_PAGE_SIZE,
-        };
-
-        const allLowStockProducts = [];
-        let lowStockPage = 1;
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const response = await getLowStockProducts({
-            ...baseParams,
-            page: lowStockPage,
-          });
-          allLowStockProducts.push(...extractListData(response));
-          const totalCount =
-            response?.data?.count ?? allLowStockProducts.length;
-          if (
-            allLowStockProducts.length >= totalCount ||
-            !response?.data?.next
-          ) {
-            break;
-          }
-          lowStockPage += 1;
-        }
-
-        rows = allLowStockProducts.map(buildExportRow);
+        params.status = "low_stock";
       } else {
-        const baseParams = {
-          q: debouncedSearch || undefined,
-          category_id: filters.categoryId || undefined,
-          in_stock:
-            filters.status === "in_stock"
-              ? true
-              : filters.status === "out_of_stock"
-                ? false
-                : undefined,
-          min_price: filters.minPrice || undefined,
-          max_price: filters.maxPrice || undefined,
-          ordering: filters.ordering,
-          page_size: EXPORT_PAGE_SIZE,
-        };
-
-        const allProducts = [];
-        let page = 1;
-        // Keep fetching pages until we've collected every result the
-        // backend says exists for these filters (response.count) —
-        // handles catalogs larger than one page transparently.
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const response = await searchProducts({ ...baseParams, page });
-          allProducts.push(...extractListData(response));
-          const totalCount = response?.data?.count ?? allProducts.length;
-          if (allProducts.length >= totalCount || !response?.data?.next) {
-            break;
-          }
-          page += 1;
-        }
-
-        rows = allProducts.map(buildExportRow);
+        params.in_stock =
+          filters.status === "in_stock"
+            ? true
+            : filters.status === "out_of_stock"
+              ? false
+              : undefined;
+        params.min_price = filters.minPrice || undefined;
+        params.max_price = filters.maxPrice || undefined;
       }
 
-      if (rows.length === 0) {
-        showError("No products match the current filters to export.");
-        return;
-      }
-
-      downloadCsv(
-        rows,
-        [
-          { key: "name", label: "Product Name" },
-          { key: "sku", label: "SKU" },
-          { key: "category", label: "Category" },
-          { key: "price", label: "Price" },
-          { key: "stock", label: "Stock" },
-          { key: "stockHealth", label: "Stock Health" },
-          { key: "onWebsite", label: "On Website" },
-        ],
-        "products",
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        params,
+        `products-export-${new Date().toISOString().slice(0, 10)}`,
       );
-    } catch (error) {
-      showError("Failed to export products. Please try again.");
+
+      if (success) {
+        showSuccess("Products exported.");
+      } else {
+        showError(message || "Failed to export products. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }
