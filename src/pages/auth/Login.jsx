@@ -96,6 +96,14 @@ const Login = () => {
     }
   }, []);
 
+  // The full path of the page that redirected the visitor here, including
+  // its query string and hash, so the customer returns to exactly the same
+  // view (for example a filtered product listing) after signing in.
+  const fromLocation = location.state?.from;
+  const fromPath = fromLocation?.pathname
+    ? `${fromLocation.pathname}${fromLocation.search ?? ""}${fromLocation.hash ?? ""}`
+    : null;
+
   // "from" is normally just wherever router state says redirected here.
   // BUT on the exact hard-reload this backup exists to cover, router
   // state is completely empty — from.pathname included — so relying on
@@ -106,9 +114,7 @@ const Login = () => {
   // ever gets written right before a Buy Now redirect to Login in the
   // first place (see ProductInfo.jsx / Checkout.jsx), so its mere
   // presence already tells us that.
-  const from =
-    location.state?.from?.pathname ||
-    (buyNowFallback ? ROUTES.CHECKOUT : ROUTES.HOME);
+  const from = fromPath || (buyNowFallback ? ROUTES.CHECKOUT : ROUTES.HOME);
 
   // BUY NOW: when Checkout redirects an unauthenticated customer here, it
   // attaches the Buy Now product/quantity as from.state (see the
@@ -129,7 +135,20 @@ const Login = () => {
   // ----------------------------------------------------------------
   // "from" is the page that redirected here (e.g. ProtectedRoute
   // remembers /checkout). Falls back to home if it points to /admin.
-  const safeFrom = from.startsWith("/admin") ? ROUTES.HOME : from;
+  //
+  // A regular cart checkout (no Buy Now payload) is the one exception:
+  // signing in merges the guest cart into the account cart, so the
+  // customer is sent to the Cart page first to review the combined
+  // items, coupon and totals before proceeding to Checkout again. A
+  // Buy Now checkout does not use the cart at all, so it returns
+  // straight to Checkout with its product and quantity.
+  const isCartCheckout =
+    from.split(/[?#]/)[0] === ROUTES.CHECKOUT && !fromState?.buyNow;
+  const safeFrom = isCartCheckout
+    ? ROUTES.CART
+    : from.startsWith("/admin")
+      ? ROUTES.HOME
+      : from;
 
   const { login, isAuthenticated, role } = useAuth();
   const queryClient = useQueryClient();
@@ -432,6 +451,13 @@ const Login = () => {
     }
     verify2FAMutation.mutate();
   };
+
+  // A visitor who is already signed in is redirected away by the effect
+  // above, so nothing is rendered in the meantime. This keeps the sign-in
+  // form from flashing on screen while that redirect completes.
+  if (isAuthenticated) {
+    return null;
+  }
 
   // =============================================
   // STEP — Email verification required (Double Opt-In block)

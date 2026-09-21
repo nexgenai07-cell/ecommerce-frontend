@@ -593,14 +593,20 @@ const AppRoutes = () => {
           SECTION 2: AUTH ROUTES
           ========================================================== */}
 
+        {/* LOGIN — deliberately NOT wrapped in <PublicRoute>. The Login
+            page owns its complete post-login redirect: it sends the
+            customer back to the page that redirected them here (together
+            with that page's router state, e.g. a Buy Now payload), sends
+            admin accounts to the admin dashboard, and redirects a visitor
+            who is already signed in. Wrapping it in <PublicRoute> would
+            send every successful sign-in straight to Home the moment
+            authentication succeeds, before that logic could run. */}
         <Route
           path={ROUTES.LOGIN}
           element={
-            <PublicRoute>
-              <Suspense fallback={<PageLoader />}>
-                <Login />
-              </Suspense>
-            </PublicRoute>
+            <Suspense fallback={<PageLoader />}>
+              <Login />
+            </Suspense>
           }
         />
 

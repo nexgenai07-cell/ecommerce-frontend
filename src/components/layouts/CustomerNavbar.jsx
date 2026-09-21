@@ -608,6 +608,11 @@ const CustomerNavbar = () => {
               {/* Wishlist */}
               <Link
                 to={isAuthenticated ? ROUTES.ACCOUNT_WISHLIST : ROUTES.LOGIN}
+                state={
+                  isAuthenticated
+                    ? undefined
+                    : { from: { pathname: ROUTES.ACCOUNT_WISHLIST } }
+                }
                 className="relative p-2 rounded-full text-gray-600 hover:bg-primary-50 hover:text-primary transition-colors"
                 aria-label="Wishlist"
               >
@@ -688,6 +693,7 @@ const CustomerNavbar = () => {
                 <div className="hidden md:flex items-center gap-2 ml-2">
                   <Link
                     to={ROUTES.LOGIN}
+                    state={{ from: location }}
                     className="text-sm font-medium text-gray-700 hover:text-primary transition-colors px-3 py-2"
                   >
                     Log In
@@ -883,6 +889,7 @@ const CustomerNavbar = () => {
                   <div className="px-5 py-4 border-b border-gray-100 flex gap-3">
                     <Link
                       to={ROUTES.LOGIN}
+                      state={{ from: location }}
                       className="flex-1 text-center py-2.5 text-sm font-medium border border-gray-200 rounded-full text-gray-700 hover:border-primary hover:text-primary transition-colors"
                     >
                       Login

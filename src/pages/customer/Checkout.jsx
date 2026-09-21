@@ -144,6 +144,22 @@ const SHIPPING_COSTS = {
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
 // =============================================
+// BUY NOW PRODUCT IMAGE
+// =============================================
+// The Buy Now product comes from the Product Detail response, which lists
+// its photos in an "images" array and has no "primary_image" field — the
+// field the order summary reads to show each item's thumbnail. Returns the
+// URL to show: an existing primary_image if there is one, otherwise the
+// gallery image flagged as primary, otherwise the first gallery image.
+// Returns null when the product has no image at all, in which case the
+// order summary shows its placeholder.
+const resolveProductImage = (product) =>
+  product?.primary_image ||
+  product?.images?.find((image) => image.is_primary)?.image_url ||
+  product?.images?.[0]?.image_url ||
+  null;
+
+// =============================================
 // CHECKOUT LOADING SKELETON
 // =============================================
 // Shown while the cart request (used to populate both the form defaults
@@ -508,7 +524,10 @@ const Checkout = () => {
         items: [
           {
             id: `buy-now-${buyNowItem.product.id}`,
-            product: buyNowItem.product,
+            product: {
+              ...buyNowItem.product,
+              primary_image: resolveProductImage(buyNowItem.product),
+            },
             quantity: buyNowItem.quantity,
             total_price: buyNowSubtotal.toFixed(2),
           },
@@ -742,7 +761,7 @@ const Checkout = () => {
   const sendOtpMutation = useMutation({
     mutationFn: () => sendCheckoutOtp(),
 
-    onSuccess: (response) => {
+    onSuccess: (response, checkoutData) => {
       // UPDATED (v5.4, Sep 2026): verification is now permanent per
       // customer account instead of single-use/30-minute — once a
       // customer has verified once, ever, this endpoint stops sending a
@@ -751,8 +770,13 @@ const Checkout = () => {
       // screen again — skip straight to placing the order with the
       // details already captured on the previous step, exactly like a
       // successful verify-otp call would.
+      //
+      // The details are read from the variables this mutation was started
+      // with (see onSubmit), because this callback still holds the render
+      // from before setPendingCheckoutData ran and would otherwise see the
+      // initial null instead of the submitted form data.
       if (response.data?.already_verified) {
-        checkoutMutation.mutate(pendingCheckoutData);
+        checkoutMutation.mutate(checkoutData || pendingCheckoutData);
         return;
       }
 
@@ -917,17 +941,25 @@ const Checkout = () => {
       // Displaying the error message to the user via toast notification
       showError(message);
 
-      // COUPON (Buy Now only): the backend re-validates coupon_code at
-      // the moment the order is actually placed, so a code that was
-      // valid when applied a few steps ago (e.g. during the OTP wait)
-      // can still be rejected here if it expired or was deactivated in
-      // the meantime. Clear it and send the customer back to the
-      // details step so they can retry without a coupon that will keep
-      // failing on every attempt, instead of leaving them stuck on the
-      // OTP screen with no way forward.
-      if (isBuyNow && buyNowCoupon && /coupon/i.test(message)) {
-        setBuyNowCoupon(null);
-        setStep("details");
+      // COUPON: the backend re-validates the coupon at the moment the
+      // order is actually placed, so a code that was valid when applied
+      // can still be rejected here — it expired, was deactivated, or the
+      // order no longer meets its minimum amount (for example after an
+      // item was removed from the cart). The coupon controls only exist
+      // on the details step, so the customer is sent back there instead
+      // of being left on the OTP screen with no way to remove the coupon.
+      //   - Buy Now: the coupon lives in local state, so it is cleared.
+      //   - Cart checkout: the coupon lives on the server-side cart, so
+      //     the cart is refetched to show its current coupon state and
+      //     the customer can remove it from the order summary.
+      if (/coupon/i.test(message)) {
+        if (isBuyNow && buyNowCoupon) {
+          setBuyNowCoupon(null);
+          setStep("details");
+        } else if (!isBuyNow) {
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+          setStep("details");
+        }
       }
     },
   });
@@ -1057,7 +1089,7 @@ const Checkout = () => {
     }
     setAddressError("");
     setPendingCheckoutData(data);
-    sendOtpMutation.mutate();
+    sendOtpMutation.mutate(data);
   };
 
   // Called by CheckoutOtpStep's form submit, once 6 digits have been typed.

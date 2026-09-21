@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -30,6 +30,8 @@ import Badge from "../ui/Badge";
 
 const ProductInfo = ({ product, imageRef }) => {
   const navigate = useNavigate();
+  // The current page, handed to Login so the visitor returns here after signing in
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   const { isAuthenticated } = useAuth();
@@ -269,7 +271,7 @@ const ProductInfo = ({ product, imageRef }) => {
 
   const handleWishlistToggle = () => {
     if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
     // Fires immediately, before the network call — the photo is still on

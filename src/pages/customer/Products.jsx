@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-// Reads the ?category_id= query param (used when arriving from a category link)
+import { useState, useEffect, useMemo } from "react";
+// Reads and writes the URL query string, which holds the customer's
+// filter, sort, view and pagination selections
 import { useSearchParams } from "react-router-dom";
 // Framer Motion — smooth fade/slide transitions between filter/sort/view changes
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,62 +34,160 @@ const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
+// Query-string keys that hold the page's state in the URL. The category,
+// price and stock keys use the same names as the backend search endpoint.
+const PARAM = {
+  CATEGORY: "category_id",
+  MIN_PRICE: "min_price",
+  MAX_PRICE: "max_price",
+  IN_STOCK: "in_stock",
+  SORT: "sort",
+  PAGE: "page",
+  PAGE_SIZE: "page_size",
+  VIEW: "view",
+};
+
+// Sort order applied when the URL does not specify one (newest first)
+const DEFAULT_SORT = "-created_at";
+
+// Returns the number for a query-string value made only of digits and
+// greater than zero; returns null for anything else
+const parsePositiveInt = (value) =>
+  /^\d+$/.test(value || "") && Number(value) > 0 ? Number(value) : null;
+
+// Parses a comma-separated category list such as "5,8" into [5, 8],
+// skipping duplicates and any entry that is not a positive whole number
+const parseCategoryIds = (value) => [
+  ...new Set(
+    (value || "")
+      .split(",")
+      .map((part) => parsePositiveInt(part.trim()))
+      .filter((id) => id !== null),
+  ),
+];
+
+// Keeps a price value only when it is made of digits alone
+const parsePrice = (value) => (/^\d+$/.test(value || "") ? value : "");
+
 const Products = () => {
-  // Reads query params from the current URL (e.g. ?category_id=3)
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // If the page was opened via a category link, pre-select that category
-  const categoryFromUrl = searchParams.get("category_id");
-  // If a sort order was passed in the URL, use it; otherwise default to newest first
-  const sortFromUrl = searchParams.get("sort") || "-created_at";
+  // The URL query string is the single source of truth for everything the
+  // customer selects on this page: categories, price range, stock toggle,
+  // sort order, grid/list view, page number and rows per page. Keeping it
+  // there means the selections survive leaving the page (for example a
+  // sign-in redirect) and come back exactly as they were, and a link to a
+  // filtered view opens with those filters applied.
+  const paramsKey = searchParams.toString();
 
-  // Active filters (categories, price range, in-stock toggle)
-  const [filters, setFilters] = useState({
-    ...DEFAULT_FILTERS,
-    categories: categoryFromUrl ? [parseInt(categoryFromUrl)] : [],
-  });
-  // Current sort order (e.g. "-price", "price", "-created_at")
-  const [sortBy, setSortBy] = useState(sortFromUrl);
-  // "grid" or "list" — controls which layout renders the product results
-  const [viewMode, setViewMode] = useState("grid");
-  // Current page number for pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  // How many products are shown per UI page, controlled by the "Rows per
-  // page" dropdown in the Pagination control below
-  const [pageSize, setPageSize] = useState(DEFAULT_UI_PAGE_SIZE);
+  // Parsed once per URL change so the filters object keeps a stable
+  // identity between renders (the filter panel resets its draft whenever
+  // that object changes).
+  const { filters, sortBy, viewMode, currentPage, pageSize } = useMemo(() => {
+    const params = new URLSearchParams(paramsKey);
+    const requestedPageSize = parsePositiveInt(params.get(PARAM.PAGE_SIZE));
+
+    return {
+      filters: {
+        ...DEFAULT_FILTERS,
+        categories: parseCategoryIds(params.get(PARAM.CATEGORY)),
+        minPrice: parsePrice(params.get(PARAM.MIN_PRICE)),
+        maxPrice: parsePrice(params.get(PARAM.MAX_PRICE)),
+        inStock: params.get(PARAM.IN_STOCK) === "true",
+      },
+      // Sort order (e.g. "-price", "price", "-created_at")
+      sortBy: params.get(PARAM.SORT) || DEFAULT_SORT,
+      // "grid" or "list" — controls which layout renders the product results
+      viewMode: params.get(PARAM.VIEW) === "list" ? "list" : "grid",
+      // Current page number for pagination
+      currentPage: parsePositiveInt(params.get(PARAM.PAGE)) || 1,
+      // How many products are shown per UI page, controlled by the "Rows per
+      // page" dropdown in the Pagination control below
+      pageSize: UI_PAGE_SIZE_OPTIONS.includes(requestedPageSize)
+        ? requestedPageSize
+        : DEFAULT_UI_PAGE_SIZE,
+    };
+  }, [paramsKey]);
+
   // Whether the mobile filter drawer is currently open
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  // If the category in the URL changes (e.g. user clicks a different
-  // category link while already on this page), re-apply it as a filter
+  // Writes the page state back to the URL. Any value not passed in
+  // "changes" keeps its current value, defaults are left out of the query
+  // string to keep URLs short, and query parameters this page does not
+  // manage are preserved. The history entry is replaced rather than added,
+  // so the browser Back button leaves the page instead of stepping through
+  // every filter change.
+  const updateUrl = (changes) => {
+    const next = {
+      filters,
+      sortBy,
+      viewMode,
+      currentPage,
+      pageSize,
+      ...changes,
+    };
+    const params = new URLSearchParams(searchParams);
+    Object.values(PARAM).forEach((key) => params.delete(key));
+
+    const categories = next.filters.categories || [];
+    if (categories.length > 0) {
+      params.set(PARAM.CATEGORY, categories.join(","));
+    }
+    if (next.filters.minPrice) {
+      params.set(PARAM.MIN_PRICE, String(next.filters.minPrice));
+    }
+    if (next.filters.maxPrice) {
+      params.set(PARAM.MAX_PRICE, String(next.filters.maxPrice));
+    }
+    if (next.filters.inStock) {
+      params.set(PARAM.IN_STOCK, "true");
+    }
+    if (next.sortBy && next.sortBy !== DEFAULT_SORT) {
+      params.set(PARAM.SORT, next.sortBy);
+    }
+    if (next.viewMode === "list") {
+      params.set(PARAM.VIEW, "list");
+    }
+    if (next.currentPage > 1) {
+      params.set(PARAM.PAGE, String(next.currentPage));
+    }
+    if (next.pageSize !== DEFAULT_UI_PAGE_SIZE) {
+      params.set(PARAM.PAGE_SIZE, String(next.pageSize));
+    }
+
+    setSearchParams(params, { replace: true });
+  };
+
+  // When the page is opened or re-targeted through a category link, bring
+  // the results back into view from the top
+  const categoryParam = searchParams.get(PARAM.CATEGORY);
   useEffect(() => {
-    if (categoryFromUrl) {
-      setFilters((prev) => ({
-        ...prev,
-        categories: [parseInt(categoryFromUrl)],
-      }));
-      setCurrentPage(1); // Reset back to page 1 for the new filter
+    if (categoryParam) {
       scrollToTop();
     }
-  }, [categoryFromUrl]);
+  }, [categoryParam]);
 
   // Called whenever any filter changes (from the sidebar, toolbar chips, etc.)
   const handleFiltersChange = (newFilters) => {
-    setFilters(newFilters);
-    setCurrentPage(1); // New filters mean a new result set — start from page 1
+    updateUrl({ filters: newFilters, currentPage: 1 }); // New filters mean a new result set — start from page 1
     scrollToTop();
   };
 
   // Called when the sort dropdown changes
   const handleSortChange = (sort) => {
-    setSortBy(sort);
-    setCurrentPage(1);
+    updateUrl({ sortBy: sort, currentPage: 1 });
     scrollToTop();
+  };
+
+  // Called when the grid/list toggle changes
+  const handleViewModeChange = (mode) => {
+    updateUrl({ viewMode: mode });
   };
 
   // Called when a pagination button is clicked
   const handlePageChange = (page) => {
-    setCurrentPage(page);
+    updateUrl({ currentPage: page });
     scrollToTop();
   };
 
@@ -96,8 +195,7 @@ const Products = () => {
   // Resets back to page 1 as well, since staying on a deep page number
   // could land past the end of the newly-sized result set.
   const handlePageSizeChange = (size) => {
-    setPageSize(size);
-    setCurrentPage(1);
+    updateUrl({ pageSize: size, currentPage: 1 });
     scrollToTop();
   };
 
@@ -118,6 +216,17 @@ const Products = () => {
   const totalResults = productsData?.count || 0;
   // Total number of pages, derived from the total result count
   const totalPages = Math.ceil(totalResults / pageSize);
+
+  // A page number in the URL can point past the end of the results (an
+  // edited link, or a filter that now matches fewer products). Once the
+  // results have loaded, move back to the last page that exists.
+  const lastPage = Math.max(totalPages, 1);
+  useEffect(() => {
+    if (productsData && currentPage > lastPage) {
+      updateUrl({ currentPage: lastPage });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productsData, currentPage, lastPage]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -194,7 +303,7 @@ const Products = () => {
                   sortBy={sortBy}
                   onSortChange={handleSortChange}
                   viewMode={viewMode}
-                  onViewModeChange={setViewMode}
+                  onViewModeChange={handleViewModeChange}
                   currentPage={currentPage}
                   perPage={pageSize}
                 />

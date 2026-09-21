@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 // Link (for navigating to the product page) + navigate (for redirecting to
 // login when an unauthenticated user tries to act on a product)
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 // React Query — runs the add-to-cart / wishlist-toggle network calls
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 // App route path constants (avoids hardcoding URL strings)
@@ -44,6 +44,8 @@ const FALLBACK_IMAGE = "/placeholder-product.svg";
 const ProductListItem = ({ product }) => {
   // Used to redirect unauthenticated users to the login page
   const navigate = useNavigate();
+  // The current page, handed to Login so the visitor returns here after signing in
+  const location = useLocation();
   // Used to invalidate cached cart/wishlist queries after a successful mutation
   const queryClient = useQueryClient();
   // Whether the current visitor is logged in
@@ -213,7 +215,11 @@ const ProductListItem = ({ product }) => {
   // Handles the heart/wishlist button click
   const handleWishlist = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
-    if (!isAuthenticated) return navigate(ROUTES.LOGIN); // Guests must log in first
+    if (!isAuthenticated) {
+      // Guests must log in first; the current page is passed along so Login
+      // can return them here afterwards.
+      return navigate(ROUTES.LOGIN, { state: { from: location } });
+    }
 
     // Fires immediately, before the network call — this row stays on
     // screen either way, so the item either flies up into the bag

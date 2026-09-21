@@ -7,7 +7,7 @@
 // own review card.
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineEdit, AiOutlineDelete, AiFillStar } from "react-icons/ai";
 import { BsPatchCheckFill } from "react-icons/bs";
@@ -79,6 +79,8 @@ const StarRatingInput = ({ value, onChange, disabled }) => {
 
 const ProductReviews = ({ productId }) => {
   const navigate = useNavigate();
+  // The current page, handed to Login so the visitor returns here after signing in
+  const location = useLocation();
   const queryClient = useQueryClient();
   // "user" is read here so a review card can be matched against the
   // currently logged-in customer by display name — see myReviewOnThisPage
@@ -250,7 +252,7 @@ const ProductReviews = ({ productId }) => {
   // POST that the backend would reject with its "already reviewed" 400.
   const openWriteForm = () => {
     if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
     if (myReviewOnThisPage) {

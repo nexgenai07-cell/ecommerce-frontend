@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineClose } from "react-icons/ai";
 import cn from "../../utils/cn";
@@ -33,6 +33,8 @@ const ProductCard = ({
   // card at once — most callers don't pass this at all.
 }) => {
   const navigate = useNavigate();
+  // The current page, handed to Login so the visitor returns here after signing in
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   const { isAuthenticated } = useAuth();
@@ -230,7 +232,7 @@ const ProductCard = ({
     e.stopPropagation(); // Prevent the click from also triggering card navigation
 
     if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
