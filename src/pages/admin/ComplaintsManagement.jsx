@@ -263,12 +263,22 @@ const ComplaintsManagement = () => {
   // of the blob on a validation failure, so the real reason reaches
   // this toast instead of a generic message.
   // --------------------------------------------------
+  // EXPORT — API 99, type=complaints. Every filter currently applied to
+  // the on-screen table (status, priority, and search) is forwarded, so
+  // the downloaded file always matches what the admin is looking at.
+  // This export type has no `ordering` parameter and no on-screen date
+  // filter, so neither is sent.
   const handleExport = async () => {
     setIsExporting(true);
     try {
       const { success, message } = await downloadExportCsv(
         exportReport,
-        { type: "complaints" },
+        {
+          type: "complaints",
+          status: activeStatus || undefined,
+          priority: activePriority || undefined,
+          search: debouncedSearch || undefined,
+        },
         `complaints-export-${new Date().toISOString().slice(0, 10)}`,
       );
 

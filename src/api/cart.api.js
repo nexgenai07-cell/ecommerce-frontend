@@ -22,6 +22,16 @@ import axiosInstance from "../lib/axiosInstance";
 // Fetches everything about the logged-in user's cart: the list of
 // items, subtotal (before discount), discount amount, final total,
 // and any applied coupon. Typically called when the cart page loads.
+//
+// Before the response is built, the backend re-checks the coupon on
+// the cart against the same rules used when a coupon is applied: it
+// must still be active, be inside its start/end dates, and the cart
+// subtotal must still reach its minimum order amount. A coupon that no
+// longer qualifies is removed from the cart on the spot, so the returned
+// coupon is null and discount_amount is "0.00". The optional response
+// key coupon_removed_message holds the reason and is present ONLY on the
+// single response that performed the removal. It is turned into a
+// one-time notice for the customer in axiosInstance.js.
 export const getCart = (signal) => {
   return axiosInstance.get("/api/v1/cart/", { signal });
 };
@@ -48,6 +58,13 @@ export const addToCart = (data, signal) => {
 // IMPORTANT BEHAVIOR: if "quantity" is sent as 0, the backend will
 // treat this as a removal request and delete the item from the cart
 // entirely, instead of leaving a cart item with zero quantity.
+//
+// The response only carries a short message and the line total, not the
+// new cart totals, so the cart query must be refetched after every
+// update. When the new quantity leaves the subtotal below the applied
+// coupon's minimum order amount, the backend removes the coupon and adds
+// the optional key coupon_removed_message to this response (handled
+// centrally in axiosInstance.js).
 export const updateCartItem = (itemId, data, signal) => {
   return axiosInstance.put(`/api/v1/cart/update/${itemId}/`, data, { signal });
 };
@@ -58,6 +75,13 @@ export const updateCartItem = (itemId, data, signal) => {
 // Used when the customer clicks the trash/delete icon next to a
 // specific cart item, explicitly removing it from the cart —
 // regardless of its quantity.
+//
+// The response only carries a short message, so the cart query must be
+// refetched afterwards to obtain the new totals. When the remaining
+// items no longer reach the applied coupon's minimum order amount (or
+// the cart is now empty), the backend removes the coupon and adds the
+// optional key coupon_removed_message to this response (handled
+// centrally in axiosInstance.js).
 export const removeCartItem = (itemId, signal) => {
   return axiosInstance.delete(`/api/v1/cart/remove/${itemId}/`, { signal });
 };

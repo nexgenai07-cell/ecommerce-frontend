@@ -28,7 +28,7 @@ const DEFAULT_ORDERING = "-created_at";
  *
  * The toolbar sitting above the orders table: search box, a "Filters"
  * toggle, an "Export" button, and — once "Filters" is opened — the
- * Status, Date Range, Phone Number, and Sort dropdown chips.
+ * Status, Date Range, Product, Category, and Sort dropdown chips.
  *
  * Built on the same shared list-toolbar pieces used by every other
  * admin list page. The Order Status filter lives in its own dropdown
@@ -40,10 +40,9 @@ const DEFAULT_ORDERING = "-created_at";
  *                     (key: "" is the "All Statuses" option).
  * - activeStatus:     Currently selected status key.
  * - onStatusChange:   (key) => void.
- * - search:           Main search box value (order number / customer name).
+ * - search:           Main search box value (order number / customer name —
+ *                     this endpoint does not match phone number).
  * - onSearchChange:   (value) => void.
- * - phoneSearch:      Dedicated "Phone Number" filter value.
- * - onPhoneSearchChange: (value) => void.
  * - productFilter:    Dedicated "Product" filter value (NEW, Sep 2026, API 62).
  * - onProductFilterChange: (value) => void.
  * - categoryFilter:   Dedicated "Category" filter value (NEW, Sep 2026, API 62).
@@ -63,8 +62,6 @@ const OrderFilters = ({
   onStatusChange,
   search,
   onSearchChange,
-  phoneSearch,
-  onPhoneSearchChange,
   productFilter,
   onProductFilterChange,
   categoryFilter,
@@ -98,7 +95,6 @@ const OrderFilters = ({
   const activeFilterCount = [
     activeStatus,
     startDate || endDate,
-    phoneSearch,
     productFilter,
     categoryFilter,
     sortBy && sortBy !== DEFAULT_ORDERING,
@@ -160,15 +156,6 @@ const OrderFilters = ({
               onStartDateChange("");
               onEndDateChange("");
             }}
-          />
-
-          <TextFilterChip
-            label="Phone"
-            heading="Phone Number"
-            placeholder="03XX-XXXXXXX"
-            value={phoneSearch}
-            onChange={onPhoneSearchChange}
-            onClear={() => onPhoneSearchChange("")}
           />
 
           {/* NEW (Sep 2026, API 62 backend fix) — the backend now

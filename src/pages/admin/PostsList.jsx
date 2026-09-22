@@ -154,12 +154,20 @@ const PostsList = () => {
   // JSON error back out of the blob on a validation failure, so the
   // real reason reaches this toast instead of a generic message.
   // --------------------------------------------------
+  // EXPORT — API 99, type=social_posts. Every filter currently applied
+  // to the on-screen grid (status, platform, and search) is forwarded,
+  // so the downloaded file always matches what the admin is looking at.
   const handleExport = async () => {
     setIsExporting(true);
     try {
       const { success, message } = await downloadExportCsv(
         exportReport,
-        { type: "social_posts" },
+        {
+          type: "social_posts",
+          status: activeStatus || undefined,
+          platform: platform || undefined,
+          search: debouncedSearch || undefined,
+        },
         `social-posts-${new Date().toISOString().slice(0, 10)}`,
       );
 

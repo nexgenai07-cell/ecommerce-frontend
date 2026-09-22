@@ -9,6 +9,13 @@
 // 2. SELECTABLE MODE — used on the Checkout page's address picker.
 //    Pass "selectable" so the whole card becomes clickable and shows
 //    a radio-style selected state instead of the management actions.
+//    When an onEdit callback is also provided, a single Edit action is
+//    shown so the customer can correct the address without leaving
+//    the picker (the Edit click never changes the selection).
+//
+// In both modes, an address that has no city shows a short warning,
+// because such an address cannot be used for delivery until a city is
+// added to it.
 
 import {
   HiOutlinePencil,
@@ -74,6 +81,31 @@ const AddressCard = ({
       <p className="text-sm text-gray-600 leading-relaxed">{addressLines}</p>
       {address.phone && (
         <p className="text-xs text-gray-400">{address.phone}</p>
+      )}
+
+      {/* Warning shown only when the saved address has no city */}
+      {!address.city?.trim() && (
+        <p className="text-xs font-medium text-warning">
+          City is missing — add it before using this address for delivery.
+        </p>
+      )}
+
+      {/* Selectable mode: optional Edit action. stopPropagation keeps the
+          click from also selecting the card. */}
+      {selectable && onEdit && (
+        <div className="flex items-center pt-2 mt-1 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-primary transition-colors"
+          >
+            <HiOutlinePencil className="w-3.5 h-3.5" />
+            Edit
+          </button>
+        </div>
       )}
 
       {/* Management actions — hidden entirely in selectable mode */}

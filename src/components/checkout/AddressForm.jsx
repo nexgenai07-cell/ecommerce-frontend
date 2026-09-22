@@ -9,8 +9,14 @@
 // addresses — or add a new one on the spot without leaving checkout.
 // Whichever address is selected is passed back up to the Checkout
 // page as an id, to be sent as "address_id" in the checkout request.
+//
+// The list always shows the default address first and selects it
+// automatically. Every card offers an Edit action that opens the shared
+// address modal, and a selected address that has no city (for example an
+// address saved at registration where no city could be detected) is
+// flagged, because checkout cannot ship to an address without a city.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HiOutlinePlus } from "react-icons/hi2";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -27,13 +33,42 @@ import { Skeleton } from "../ui/Skeleton";
 const AddressForm = ({ selectedAddressId, onSelectAddress, error }) => {
   const [addModalOpen, setAddModalOpen] = useState(false);
 
+  // Edit modal state. The address being edited is stored separately from
+  // the open flag, so the modal keeps its "Edit Address" content while it
+  // plays its closing transition.
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [addressBeingEdited, setAddressBeingEdited] = useState(null);
+
   const { data, isLoading } = useQuery({
     queryKey: QUERY_KEYS.ADDRESSES,
     queryFn: ({ signal }) => getAddresses(signal),
     staleTime: 1000 * 60 * 2,
   });
 
-  const addresses = extractListData(data);
+  // The saved addresses with the default one first; every other address
+  // keeps the order returned by the backend (Array.prototype.sort is
+  // stable).
+  const addresses = useMemo(
+    () =>
+      [...extractListData(data)].sort(
+        (a, b) => Number(!!b.is_default) - Number(!!a.is_default),
+      ),
+    [data],
+  );
+
+  // The currently selected address object, and whether it lacks a city.
+  // An address without a city cannot be used for checkout until the
+  // customer adds one.
+  const selectedAddress =
+    addresses.find((address) => address.id === selectedAddressId) || null;
+  const isSelectedCityMissing =
+    !!selectedAddress && !selectedAddress.city?.trim();
+
+  // Opens the shared address modal in edit mode for one saved address.
+  const handleEditAddress = (address) => {
+    setAddressBeingEdited(address);
+    setEditModalOpen(true);
+  };
 
   // The moment the saved addresses load, default to whichever one is
   // marked is_default — matching the same fallback rule the backend
@@ -88,8 +123,30 @@ const AddressForm = ({ selectedAddressId, onSelectAddress, error }) => {
               selectable
               selected={selectedAddressId === address.id}
               onSelect={() => onSelectAddress(address.id)}
+              onEdit={() => handleEditAddress(address)}
             />
           ))}
+        </div>
+      )}
+
+      {/* The selected address has no city, so checkout cannot use it yet.
+          The Add City button opens the edit modal for that address. */}
+      {isSelectedCityMissing && (
+        <div
+          role="alert"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-warning/30 bg-warning-light px-4 py-3"
+        >
+          <p className="text-sm text-gray-700">
+            The selected address has no city. Add the city to this address
+            before placing your order.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleEditAddress(selectedAddress)}
+            className="shrink-0 text-sm font-semibold text-primary hover:underline"
+          >
+            Add City
+          </button>
         </div>
       )}
 
@@ -102,6 +159,15 @@ const AddressForm = ({ selectedAddressId, onSelectAddress, error }) => {
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onSaved={(newAddress) => onSelectAddress(newAddress.id)}
+      />
+
+      {/* Edits one saved address through the same modal. The selection is
+          left unchanged; the address list refreshes automatically once the
+          change is saved. */}
+      <AddressFormModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        addressToEdit={addressBeingEdited}
       />
     </div>
   );

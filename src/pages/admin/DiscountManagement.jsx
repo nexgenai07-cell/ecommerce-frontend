@@ -284,12 +284,25 @@ const DiscountManagement = () => {
   // back out of the blob on a validation failure, so the real reason
   // reaches this toast instead of a generic message.
   // --------------------------------------------------
+  // EXPORT — API 99, type=discounts. Every filter currently applied to
+  // the on-screen table (search, the type filter, status, and sort
+  // order) is forwarded, so the downloaded file always matches what the
+  // admin is looking at. The type filter is sent as `discount_type` —
+  // NOT `type`, which this endpoint already uses to select the report
+  // itself (`type=discounts`); sending the type filter as `type` would
+  // overwrite that and fail the request.
   const handleExport = async () => {
     setIsExporting(true);
     try {
       const { success, message } = await downloadExportCsv(
         exportReport,
-        { type: "discounts" },
+        {
+          type: "discounts",
+          search: debouncedSearch || undefined,
+          discount_type: typeFilter || undefined,
+          status: activeTab || undefined,
+          ordering,
+        },
         `discounts-export-${new Date().toISOString().slice(0, 10)}`,
       );
 

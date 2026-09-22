@@ -5,6 +5,7 @@
 // When the token expires, it is silently refreshed in the background without logging the user out
 
 import axios from "axios"; // axios library — used to create a configurable HTTP client instance
+import { showWarning } from "../components/ui/Toast"; // shared toast helper — used to tell the customer when the backend removes a coupon from their cart
 
 // Create a single shared axios instance used across the whole app
 // baseURL comes from Vite's environment variable so it can differ between dev/staging/production
@@ -40,6 +41,41 @@ const axiosInstance = axios.create({
 // cart, instead of racing each other into separate ones.
 let sessionBootstrapInFlight = null; // Promise that resolves once the in-flight bootstrap request has settled; null when no bootstrap is currently underway
 let releaseSessionBootstrap = null; // resolve() for the promise above — called from the response interceptor (success or error) once that request settles
+
+// =============================================
+// CART COUPON REMOVAL NOTICE
+// =============================================
+// The cart endpoints (Get Cart, Update Cart Item and Remove Cart Item)
+// re-check the coupon attached to the cart on every call. When that
+// check fails — the cart subtotal no longer reaches the coupon's minimum
+// order amount, the coupon has expired, or it was deactivated — the
+// backend removes the coupon from the cart and adds the optional key
+// "coupon_removed_message" to THAT ONE response. The key is absent from
+// every later response, because the coupon is already gone by then.
+//
+// Because the key is present on exactly one response, it is read here,
+// in the single place every cart response passes through. This way the
+// customer is told exactly once, regardless of which part of the app
+// happened to send the request (the navbar cart badge, the Cart page, the
+// Checkout page, a cart row's quantity stepper or its remove button).
+const CART_ENDPOINT_PATH = "/api/v1/cart/"; // every cart endpoint URL contains this path segment
+
+const notifyCouponRemovedIfPresent = (response) => {
+  const message = response?.data?.coupon_removed_message;
+
+  // Nothing to show unless the key holds a non-empty text.
+  if (typeof message !== "string" || !message.trim()) {
+    return;
+  }
+
+  // Only cart endpoints ever carry this key; ignore any other URL.
+  const requestUrl = response.config?.url || "";
+  if (!requestUrl.includes(CART_ENDPOINT_PATH)) {
+    return;
+  }
+
+  showWarning(`Coupon removed: ${message}`);
+};
 
 // =============================================
 // REQUEST INTERCEPTOR
@@ -129,6 +165,10 @@ const processQueue = (error, token = null) => {
 // =============================================
 axiosInstance.interceptors.response.use(
   (response) => {
+    // Cart coupon re-check: surface the one-time "coupon removed" message
+    // (if this response carries it) as a toast — see the helper above.
+    notifyCouponRemovedIfPresent(response);
+
     // Guest cart support (backend v3.0): the very first guest cart call
     // (no Authorization header, no X-Cart-Session sent yet) gets back a
     // fresh session_key from the backend. Persist it so every request

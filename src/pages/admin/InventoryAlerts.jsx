@@ -234,12 +234,26 @@ const InventoryAlerts = () => {
     setCurrentPage(1);
   }, [debouncedSearch, categoryId, activeTabs, pageSize]);
 
+  // EXPORT — API 99, type=inventory. Every filter currently applied to
+  // the on-screen table (the status tabs, the category filter, and
+  // search) is forwarded, so the downloaded file always matches what
+  // the admin is looking at. The search box filters this table through
+  // Search Products (API 29), whose query parameter is `q` — but the
+  // export endpoint's matching parameter for the same search is named
+  // `search`, not `q`. Sending `q` here would be silently ignored by
+  // the export (no error, just an unfiltered file), so this must stay
+  // `search` even though the on-screen query above uses `q`.
   const handleExport = async () => {
     setIsExporting(true);
     try {
       const { success, message } = await downloadExportCsv(
         exportReport,
-        { type: "inventory" },
+        {
+          type: "inventory",
+          status: statusParam,
+          category_id: categoryId || undefined,
+          search: debouncedSearch || undefined,
+        },
         `inventory-report-${new Date().toISOString().slice(0, 10)}`,
       );
 

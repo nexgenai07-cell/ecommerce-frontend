@@ -57,12 +57,36 @@ const registerSchema = z
         /^(\+92|0)[0-9]{10}$/,
         "Please enter a valid Pakistani phone number",
       ),
+    // The address typed here is saved as the customer's default entry in
+    // the Address Book, so it follows the same content rules the Address
+    // Book form enforces (allowed characters, at least one letter, no
+    // long runs of one repeated character). This guarantees that the
+    // saved address can always be opened and edited later there.
     address: z
       .string()
       .trim()
       .min(1, "Address is required")
       .min(10, "Please enter a complete address")
-      .max(150, "Address is too long"),
+      .max(150, "Address is too long")
+      .regex(
+        /^[A-Za-z0-9\s,.#/'-]+$/,
+        "Address can only contain letters, numbers, and , . # / ' -",
+      )
+      .refine((val) => /[A-Za-z]/.test(val), "Please enter a complete address")
+      .refine((val) => !/(.)\1{3,}/.test(val), "Please enter a valid address"),
+    // Optional city for the saved address — letters and spaces only, at
+    // most 30 characters (the backend limit). When left empty the backend
+    // tries to detect a known city name inside the address text.
+    city: z
+      .string()
+      .trim()
+      .max(30, "City name must be 30 characters or less")
+      .regex(/^[A-Za-z ]*$/, "City name can only contain letters and spaces"),
+    // Optional postal code for the saved address — 4 to 6 digits.
+    postal_code: z
+      .string()
+      .trim()
+      .regex(/^(\d{4,6})?$/, "Postal code must be 4 to 6 digits"),
     // NOTE: no .trim() on password fields — a leading/trailing space is a
     // valid password character, and stripping it here would send a
     // different value than what the user actually typed.
@@ -87,6 +111,20 @@ const registerSchema = z
     message: "Passwords do not match",
     path: ["confirm_password"],
   });
+
+// Registration fields whose validation errors are returned by the backend
+// keyed by field name (for example { "city": ["..."] }). Each of these
+// errors is shown directly under its own input instead of in a toast.
+const SERVER_ADDRESS_FIELDS = ["address", "city", "postal_code"];
+
+// Reads the first error message the backend returned for one field.
+// Field errors normally arrive as an array of strings; a plain string is
+// accepted as well. Returns null when the field has no usable message.
+const getFirstServerFieldError = (responseData, fieldName) => {
+  const value = responseData?.[fieldName];
+  const firstMessage = Array.isArray(value) ? value[0] : value;
+  return typeof firstMessage === "string" && firstMessage ? firstMessage : null;
+};
 
 const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -141,6 +179,7 @@ const Register = () => {
     register,
     handleSubmit,
     setValue,
+    setError,
     watch,
     formState: { errors },
   } = useForm({
@@ -161,6 +200,8 @@ const Register = () => {
       email: "",
       phone: "",
       address: "",
+      city: "",
+      postal_code: "",
       password: "",
       confirm_password: "",
       agreeToTerms: false,
@@ -221,6 +262,29 @@ const Register = () => {
         return;
       }
 
+      // Address, city and postal code errors come back keyed by field
+      // name. Each message is attached to its own input so the customer
+      // sees exactly which field to correct, and the first invalid field
+      // receives focus.
+      const responseData = error?.response?.data;
+      const invalidAddressFields = SERVER_ADDRESS_FIELDS.filter((fieldName) =>
+        getFirstServerFieldError(responseData, fieldName),
+      );
+
+      if (invalidAddressFields.length > 0) {
+        invalidAddressFields.forEach((fieldName, index) => {
+          setError(
+            fieldName,
+            {
+              type: "server",
+              message: getFirstServerFieldError(responseData, fieldName),
+            },
+            { shouldFocus: index === 0 },
+          );
+        });
+        return;
+      }
+
       // Every other kind of registration failure (validation errors on
       // other fields, network issues, server errors, etc.) keeps the
       // existing toast behavior, unchanged.
@@ -254,11 +318,19 @@ const Register = () => {
     },
   });
 
+  // Builds the registration request. The address is sent under the
+  // recommended "address" key and is saved by the backend as the new
+  // customer's default Address Book entry. City and postal code are
+  // optional, so they are only included when the customer filled them in;
+  // an empty optional field is never sent.
   const onSubmit = (data) => {
     registerMutation.mutate({
       name: data.name,
       email: data.email,
       phone: data.phone,
+      address: data.address,
+      ...(data.city && { city: data.city }),
+      ...(data.postal_code && { postal_code: data.postal_code }),
       password: data.password,
       confirm_password: data.confirm_password,
     });
@@ -492,6 +564,75 @@ const Register = () => {
                 {errors.address && (
                   <p className="text-xs text-danger">
                     {errors.address.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* City + Postal Code row — both optional. They complete the
+                address saved for checkout: without a city the backend can
+                only guess one from the address text. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="city"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  City{" "}
+                  <span className="text-xs font-normal text-gray-400">
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  id="city"
+                  type="text"
+                  maxLength={30}
+                  placeholder="Gujranwala"
+                  autoComplete="address-level2"
+                  {...register("city")}
+                  onChange={(e) => {
+                    // Block digits and symbols as they are typed or
+                    // pasted, so only letters and spaces can ever
+                    // reach the field.
+                    e.target.value = e.target.value.replace(/[^A-Za-z ]/g, "");
+                    register("city").onChange(e);
+                  }}
+                  className={`w-full px-4 py-2.5 text-sm rounded-lg border bg-white placeholder:text-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-150 ${errors.city ? "border-danger focus:ring-danger" : "border-gray-200"}`}
+                />
+                {errors.city && (
+                  <p className="text-xs text-danger">{errors.city.message}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="postal_code"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  Postal Code{" "}
+                  <span className="text-xs font-normal text-gray-400">
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  id="postal_code"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="52250"
+                  autoComplete="postal-code"
+                  {...register("postal_code")}
+                  onChange={(e) => {
+                    // Postal codes are digits only — anything else is
+                    // stripped the moment it is typed or pasted.
+                    e.target.value = e.target.value.replace(/\D/g, "");
+                    register("postal_code").onChange(e);
+                  }}
+                  className={`w-full px-4 py-2.5 text-sm rounded-lg border bg-white placeholder:text-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-150 ${errors.postal_code ? "border-danger focus:ring-danger" : "border-gray-200"}`}
+                />
+                {errors.postal_code && (
+                  <p className="text-xs text-danger">
+                    {errors.postal_code.message}
                   </p>
                 )}
               </div>

@@ -32,10 +32,11 @@ const AccountDashboard = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  // Order stats — the accurate, backend-computed total_orders
-  // and total_spent for this customer, using the same "only a
-  // confirmed/shipped/out_for_delivery/delivered order counts" rule
-  // used everywhere else in the app. staleTime 2 min, same as orders.
+  // Order stats — the backend-computed total_orders and total_spent for
+  // this customer. total_orders counts every order the customer has
+  // placed, whatever its status; total_spent adds up only the orders that
+  // are confirmed, shipped, out for delivery or delivered.
+  // staleTime 2 min, same as orders.
   const { data: orderStatsData } = useQuery({
     queryKey: QUERY_KEYS.MY_ORDER_STATS,
     queryFn: ({ signal }) => getMyOrderStats(signal),
@@ -78,13 +79,13 @@ const AccountDashboard = () => {
   // Only the 3 most recent orders are shown in the RecentOrdersTable preview
   const recentOrders = orders.slice(0, 3);
 
-  // Total Orders / Total Spent — sourced from getMyOrderStats, NOT computed
-  // by summing/counting the orders array above. That list includes every
-  // order regardless of status (pending_payment, on_hold, cancelled, etc.),
-  // which would give a number that does not match what the backend and
-  // admin panel consider a real, paid order. total_spent is always returned
-  // as a string, so it's parsed with parseFloat here; both fall back to 0
-  // while the query is loading.
+  // Total Orders / Total Spent — sourced directly from getMyOrderStats and
+  // never counted or summed from the orders array above; the backend owns
+  // the counting rules. Total Orders includes pending and cancelled orders
+  // while Total Spent only includes paid ones, so the two cards are
+  // intentionally not derived from the same set of orders. total_spent is
+  // always returned as a string, so it's parsed with parseFloat here; both
+  // fall back to 0 while the query is loading.
   const orderStats = orderStatsData?.data;
   const totalOrdersCount = orderStats?.total_orders || 0;
   const totalSpent = parseFloat(orderStats?.total_spent || 0);
@@ -234,8 +235,8 @@ const AccountDashboard = () => {
             {/* ── Stats cards ──────────────────────────────────────────────────────
                 4-card grid showing key metrics derived from the API responses above */}
             <DashboardStats
-              totalOrders={totalOrdersCount} // accurate paid-order count from getMyOrderStats
-              totalSpent={totalSpent} // accurate spend total from getMyOrderStats
+              totalOrders={totalOrdersCount} // count of every order the customer has placed, from getMyOrderStats
+              totalSpent={totalSpent} // total of the paid orders only, from getMyOrderStats
               wishlistCount={wishlistItems.length} // total number of saved wishlist products
               pendingReturns={pendingReturns} // count of returns still awaiting review
             />

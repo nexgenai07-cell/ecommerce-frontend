@@ -18,7 +18,7 @@ const getStatsConfig = (
 ) => [
   {
     title: "Total Orders",
-    value: totalOrders, // accurate paid-order count from API 56.1 (getMyOrderStats) — NOT every order the customer has ever placed, only ones whose payment has been confirmed
+    value: totalOrders, // count of every order the customer has placed, whatever its status, from API 56.1 (getMyOrderStats)
     icon: <AiOutlineShoppingCart />,
     iconBg: "bg-info-light", // token-based light blue background
     iconColor: "text-info", // token-based blue icon color
@@ -26,7 +26,7 @@ const getStatsConfig = (
   },
   {
     title: "Total Spent",
-    value: formatPrice(totalSpent), // formatted sum of all completed order totals
+    value: formatPrice(totalSpent), // formatted sum of the paid order totals (confirmed, shipped, out for delivery and delivered orders only)
     icon: <BsBoxSeam />,
     iconBg: "bg-primary-50", // brand-tinted background, matching the primary metric on the admin Dashboard
     iconColor: "text-primary",

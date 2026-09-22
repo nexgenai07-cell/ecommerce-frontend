@@ -108,17 +108,13 @@ const OrderManagement = () => {
 
   const [search, setSearch] = useState("");
   // search — raw text typed into the main search box before debouncing.
-  // Matches against order number, customer name and phone number — all
-  // three are matched server-side by this one field.
-
-  const [phoneSearch, setPhoneSearch] = useState("");
-  // phoneSearch — the dedicated "Phone Number" advanced-filter field.
-  // The backend's single generic `search` param also matches phone
-  // numbers (there is no separate `phone` param), so this field's value
-  // is sent as the `search` param whenever it has a value, taking
-  // priority over whatever is typed in the main search box above. The
-  // two fields are kept visually separate, but both feed the same
-  // backend parameter.
+  // Matches against order number and customer name — server-side, via
+  // Admin — Filter Orders (API 62). It does NOT match phone number;
+  // there is no phone-matching filter on this endpoint. A dedicated
+  // "Phone Number" field used to sit next to this box sending its value
+  // through this same param, but it never actually filtered by phone —
+  // it was removed for that reason (Sep 2026). Add it back only once
+  // the backend adds real phone matching to this endpoint.
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -129,7 +125,7 @@ const OrderManagement = () => {
   // Two additional advanced filters accepted by the filter endpoint —
   // partial, case-insensitive matches against a product's name / its
   // category's name across any line item in the order. Same
-  // debounce-then-send pattern as phoneSearch above.
+  // debounce-then-send pattern as search above.
   const [productFilter, setProductFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
@@ -156,20 +152,14 @@ const OrderManagement = () => {
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
-  const debouncedPhoneSearch = useDebounce(phoneSearch, 400);
   // Waits 400ms after the admin stops typing before actually firing a
   // network request — prevents a new API call on every keystroke.
   const debouncedProductFilter = useDebounce(productFilter, 400);
   const debouncedCategoryFilter = useDebounce(categoryFilter, 400);
 
-  // The dedicated phone field takes priority over the main search box
-  // when both happen to have a value, since it's the more specific,
-  // intentional filter.
-  const effectiveSearch = debouncedPhoneSearch || debouncedSearch;
-
   const hasActiveFilters =
     !!activeStatus ||
-    !!effectiveSearch ||
+    !!debouncedSearch ||
     !!startDate ||
     !!endDate ||
     !!debouncedProductFilter ||
@@ -195,7 +185,7 @@ const OrderManagement = () => {
       "list",
       {
         activeStatus,
-        search: effectiveSearch,
+        search: debouncedSearch,
         startDate,
         endDate,
         sortBy,
@@ -215,7 +205,7 @@ const OrderManagement = () => {
       return filterAdminOrders(
         {
           status: activeStatus || undefined,
-          search: effectiveSearch || undefined,
+          search: debouncedSearch || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
           // Partial, case-insensitive product/category name matching,
@@ -257,7 +247,7 @@ const OrderManagement = () => {
     setCurrentPage(1);
   }, [
     activeStatus,
-    effectiveSearch,
+    debouncedSearch,
     startDate,
     endDate,
     sortBy,
@@ -273,7 +263,6 @@ const OrderManagement = () => {
   const handleClearFilters = () => {
     setActiveStatus("");
     setSearch("");
-    setPhoneSearch("");
     setStartDate("");
     setEndDate("");
     setProductFilter("");
@@ -283,10 +272,15 @@ const OrderManagement = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — API 99. downloadExportCsv() downloads the returned blob as
-  // a real .csv file, and — on a validation failure — reads the JSON
-  // error back out of the blob so the real reason reaches this toast
-  // instead of a generic message.
+  // EXPORT — API 99, type=orders. downloadExportCsv() downloads the
+  // returned blob as a real .csv file, and — on a validation failure —
+  // reads the JSON error back out of the blob so the real reason
+  // reaches this toast instead of a generic message.
+  //
+  // Every filter currently applied to the on-screen table is forwarded
+  // to the export, so the downloaded file always matches what the
+  // admin is looking at: status, search, the date range, the product
+  // and category filters, and the sort order.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -295,8 +289,13 @@ const OrderManagement = () => {
         exportReport,
         {
           type: "orders",
+          status: activeStatus || undefined,
+          search: debouncedSearch || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
+          product: debouncedProductFilter || undefined,
+          category: debouncedCategoryFilter || undefined,
+          ordering: sortBy,
         },
         `orders-export-${new Date().toISOString().slice(0, 10)}`,
       );
@@ -467,9 +466,9 @@ const OrderManagement = () => {
 
       {/* ================================================================
           TOOLBAR — status tabs, search, Filters, Export, and (once
-          opened) the Date Range / Phone Number / Sort dropdown chips.
-          Same shared toolbar pattern used on every other admin list
-          page (see src/components/shared/list-toolbar).
+          opened) the Date Range / Product / Category / Sort dropdown
+          chips. Same shared toolbar pattern used on every other admin
+          list page (see src/components/shared/list-toolbar).
           ================================================================ */}
       <OrderFilters
         statusTabs={STATUS_TABS}
@@ -477,8 +476,6 @@ const OrderManagement = () => {
         onStatusChange={handleTabChange}
         search={search}
         onSearchChange={setSearch}
-        phoneSearch={phoneSearch}
-        onPhoneSearchChange={setPhoneSearch}
         productFilter={productFilter}
         onProductFilterChange={setProductFilter}
         categoryFilter={categoryFilter}

@@ -867,7 +867,10 @@ const ReturnsManagement = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — API 99. downloadExportCsv() reads the JSON error back out
+  // EXPORT — API 99, type=returns. Every filter currently applied to the
+  // on-screen table (status, search, the date range, and the sort
+  // order) is forwarded, so the downloaded file always matches what the
+  // admin is looking at. downloadExportCsv() reads the JSON error back out
   // of the blob on a validation failure, so the real reason reaches
   // this toast instead of a generic message.
   // --------------------------------------------------
@@ -878,8 +881,11 @@ const ReturnsManagement = () => {
         exportReport,
         {
           type: "returns",
+          status: activeStatus || undefined,
+          search: debouncedSearch || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
+          ordering: sortBy,
         },
         `returns-export-${new Date().toISOString().slice(0, 10)}`,
       );

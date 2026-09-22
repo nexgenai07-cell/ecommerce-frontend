@@ -49,22 +49,41 @@ import axiosInstance from "../lib/axiosInstance";
 //
 // On success, the cart is cleared server-side automatically, so we
 // also clear it from Redux state on the frontend.
+//
+// Address resolution order: address_id first, then the address fields
+// typed on this request, then the customer's default saved address.
+// When address_id is sent, the backend uses that saved address exactly
+// as it is stored (address, city, postal code and phone) and ignores any
+// address or phone typed on the same request.
+//
+// Coupon re-check: a coupon already attached to the cart is validated
+// again when the order is placed (still active, inside its dates, and
+// the subtotal still reaches its minimum order amount). If it is no
+// longer valid, no order is created; the coupon is removed from the cart
+// and the request fails with 400 and a body of the form
+// { error: "<reason>", coupon_removed: true }. The caller must show the
+// error, refetch the cart to display the real total and let the
+// customer place the order again — never retry automatically.
 export const checkout = (data, signal) => {
   return axiosInstance.post("/api/v1/orders/checkout/", data, { signal });
 };
 
 // ----------------------------
-// Request a checkout verification code
+// Request the Order Confirmation OTP
 // ----------------------------
-// Sends a 6-digit one-time code to the logged-in customer's account
-// email. Every checkout() call must be immediately preceded by this
-// call and a successful verifyCheckoutOtp() call, in that exact
-// order — each code is single-use, so a customer placing more than
-// one order needs a fresh code each time.
+// Sends a 6-digit Order Confirmation OTP to the logged-in customer's
+// registered account email (never to an address typed on the checkout
+// page). The OTP is valid for 10 minutes and can be requested again at
+// most once every 60 seconds. Verification is permanent per account:
+// once a customer has confirmed an OTP successfully, this endpoint
+// sends no email and answers { already_verified: true }, and checkout()
+// no longer needs a fresh OTP for any later order.
 //
 // No request body. Success response includes a masked confirmation
-// message (e.g. "A verification code has been sent to ab***@gmail.com.")
-// and expires_in_minutes — how long the code itself stays valid.
+// message (e.g. "An order confirmation OTP has been sent to
+// ab***@gmail.com.") and expires_in_minutes — how long the OTP itself
+// stays valid. Decide what to do from already_verified and the HTTP
+// status, never from the wording of the message.
 //
 // Possible errors:
 // - 400: the account has no email on file to send the code to
@@ -79,17 +98,18 @@ export const sendCheckoutOtp = (signal) => {
 };
 
 // ----------------------------
-// Verify a checkout verification code
+// Verify the Order Confirmation OTP
 // ----------------------------
-// Confirms the code sent by sendCheckoutOtp() above. On success, the
-// customer has valid_for_minutes (returned in the response) to
-// complete checkout() before a new code is required again.
+// Confirms the OTP sent by sendCheckoutOtp() above. On success, the
+// customer is verified permanently for this account: the response
+// carries already_verified: true, and checkout() can be called for this
+// order and for every later order without asking for another OTP.
 //
 // data: { otp: "123456" }
 //
 // Every failure comes back as 400 Bad Request, with the reason under
-// an "error" key: the code is missing from the request, no code was
-// ever requested, the code has expired, or it doesn't match.
+// an "error" key: the OTP is missing from the request, none was ever
+// requested, it has expired, or it doesn't match.
 export const verifyCheckoutOtp = (data, signal) => {
   return axiosInstance.post("/api/v1/orders/checkout/verify-otp/", data, {
     signal,
@@ -122,11 +142,17 @@ export const getMyOrders = (params, signal) => {
 // Get the logged-in customer's own order stats
 // ----------------------------
 // Returns exactly two numbers for the current customer: total_orders
-// and total_spent. Both are computed using the same locked counting
-// rule used everywhere else in the app — only an order whose status
-// is confirmed, shipped, out_for_delivery, or delivered counts;
-// pending_payment, on_hold, and cancelled orders never count, even a
-// cancelled order that was paid and later refunded.
+// and total_spent.
+// - total_orders counts EVERY order the customer has placed, whatever
+//   its status (pending_payment, on_hold, confirmed, shipped,
+//   out_for_delivery, delivered and cancelled).
+// - total_spent adds up only the orders whose status is confirmed,
+//   shipped, out_for_delivery or delivered; pending_payment, on_hold
+//   and cancelled orders never count, even a cancelled order that was
+//   paid and later refunded.
+// Both numbers are summed across all of the customer's own store
+// profiles, so total_orders can legitimately be higher than the number
+// of orders that make up total_spent.
 //
 // No request body/params. Response shape:
 //   { total_orders: number, total_spent: string }
@@ -136,11 +162,10 @@ export const getMyOrders = (params, signal) => {
 //
 // This is the ONLY correct source for the customer account
 // dashboard's "Total Orders" / "Total Spent" cards — see
-// AccountDashboard.jsx. Do NOT rebuild these numbers by summing
-// getMyOrders() above on the frontend: that list includes every
-// order regardless of status, which produces an inflated total that
-// doesn't match what the backend (and the admin panel) consider a
-// real, paid order.
+// AccountDashboard.jsx. Do NOT rebuild these numbers on the frontend
+// by counting or summing getMyOrders() above: the backend owns the
+// counting rules, and a client-side sum of that list would apply
+// different ones.
 export const getMyOrderStats = (signal) => {
   return axiosInstance.get("/api/v1/orders/stats/", { signal });
 };

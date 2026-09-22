@@ -1,22 +1,26 @@
 // ============================================================
-// CHECKOUT OTP VERIFICATION STEP
+// CHECKOUT ORDER CONFIRMATION OTP STEP
 // ============================================================
 // Sits between the "details" step and order placement. Before the
-// order is actually created, the customer has to confirm a 6-digit
-// code emailed to their account — this component only handles that
-// confirmation UI; the actual send/verify API calls and the resend
-// cooldown timer are owned by Checkout.jsx, exactly like every other
-// mutation used on this page (checkoutMutation, createIntentMutation,
-// cancelMutation), and passed down here as props.
+// order is actually created, the customer has to enter the 6-digit
+// Order Confirmation OTP emailed to their registered account address —
+// this component only handles that confirmation UI; the actual
+// send/verify API calls and the resend cooldown timer are owned by
+// Checkout.jsx, exactly like every other mutation used on this page
+// (checkoutMutation, createIntentMutation, cancelMutation), and passed
+// down here as props.
 
 import { AiOutlineArrowRight, AiOutlineMail } from "react-icons/ai";
 import Button from "../ui/Button";
 
 const CheckoutOtpStep = ({
-  // Masked confirmation message from the backend, e.g. "A verification
-  // code has been sent to ab***@gmail.com." Falls back to a generic
-  // line if the send call hasn't resolved with a message yet.
+  // Masked confirmation message from the backend, e.g. "An order
+  // confirmation OTP has been sent to ab***@gmail.com." Falls back to a
+  // generic line if the send call hasn't resolved with a message yet.
   confirmationMessage,
+  // The customer's registered account email, shown read-only as the
+  // address the OTP is sent to. The OTP is never sent anywhere else.
+  registeredEmail,
   // Current value of the 6-digit code input, and its setter.
   otp,
   onOtpChange,
@@ -33,7 +37,7 @@ const CheckoutOtpStep = ({
   isResending,
   cooldownSeconds,
   // Takes the customer back to the details step to fix their
-  // address/shipping method — a fresh code is requested automatically
+  // address/shipping method — the OTP is requested again automatically
   // the next time they submit that form.
   onEditDetails,
 }) => {
@@ -50,21 +54,46 @@ const CheckoutOtpStep = ({
           <AiOutlineMail className="w-6 h-6 text-primary" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Verify Your Email</h2>
+          <h2 className="text-lg font-bold text-gray-900">
+            Order Confirmation OTP
+          </h2>
           <p className="text-sm text-gray-500 mt-1 max-w-sm">
             {confirmationMessage ||
-              "Enter the 6-digit verification code we just sent to your registered email."}
+              "Enter the 6-digit Order Confirmation OTP we just sent to your registered email."}
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        {/* Read-only display of the address the OTP was sent to */}
+        {registeredEmail && (
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="checkout-otp-email"
+              className="text-sm font-medium text-gray-700 text-center"
+            >
+              OTP sent to
+            </label>
+            <input
+              id="checkout-otp-email"
+              type="email"
+              value={registeredEmail}
+              readOnly
+              aria-readonly="true"
+              className="
+                w-full px-4 py-2.5 text-sm text-center rounded-lg border border-gray-200
+                bg-gray-50 text-gray-500 cursor-not-allowed focus:outline-none
+              "
+            />
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="checkout-otp"
             className="text-sm font-medium text-gray-700 text-center"
           >
-            Verification Code
+            Order Confirmation OTP
           </label>
           <input
             id="checkout-otp"
@@ -88,7 +117,7 @@ const CheckoutOtpStep = ({
           />
           {error && <p className="text-xs text-danger text-center">{error}</p>}
           <p className="text-xs text-gray-400 text-center mt-1">
-            This code expires 10 minutes after it's sent.
+            This OTP expires 10 minutes after it's sent.
           </p>
         </div>
 
@@ -101,7 +130,7 @@ const CheckoutOtpStep = ({
             !isVerifying && <AiOutlineArrowRight className="w-4 h-4" />
           }
         >
-          Verify &amp; Place Order
+          Confirm OTP &amp; Place Order
         </Button>
 
         <div className="flex items-center justify-between text-sm">
@@ -123,8 +152,8 @@ const CheckoutOtpStep = ({
             {isResending
               ? "Sending..."
               : cooldownSeconds > 0
-                ? `Resend code in ${cooldownSeconds}s`
-                : "Resend code"}
+                ? `Resend OTP in ${cooldownSeconds}s`
+                : "Resend OTP"}
           </button>
         </div>
       </form>

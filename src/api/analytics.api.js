@@ -206,8 +206,39 @@ export const getInventoryAlerts = (signal) => {
 //   downloaded file matches what's on screen.
 //
 // Extra filters accepted per type, on top of start_date/end_date
-// (send only the ones the on-screen page currently has selected):
-//   products              — q, category_id, min_price, max_price,
+// (send only the ones the on-screen page currently has selected — an
+// unset filter should be omitted, not sent empty):
+//   orders                 — status ("pending" is accepted as an alias
+//                            for pending_payment), search (order number
+//                            or customer name ONLY — never matches
+//                            phone, same as Admin — Filter Orders),
+//                            product (product name, partial match),
+//                            category (category name, partial match),
+//                            ordering
+//   returns                — status ("requested" is accepted as an
+//                            alias for pending), search (order number,
+//                            reason text, or customer name), ordering
+//   complaints              — status, priority, search (message text or
+//                            the "CMP-{id}" reference). No ordering
+//                            parameter exists for this type.
+//   discounts              — search (coupon code), discount_type (NOT
+//                            "type" — that key already selects this as
+//                            the discounts report; sending the coupon
+//                            type filter as "type" instead overwrites
+//                            it and the request 400s), status, ordering
+//   inventory              — status (out_of_stock / low_stock / healthy,
+//                            comma-separated or repeated for multiple),
+//                            category_id, search (name, description,
+//                            SKU or category name — sent as "search",
+//                            NOT "q"; the on-screen Inventory search box
+//                            itself queries Search Products (API 29)
+//                            with "q", but the export parameter for the
+//                            identical match is named "search")
+//   customers              — search (name, email or phone), ordering.
+//                            No status filter exists for this type yet.
+//   social_posts            — status, platform, search (caption or
+//                            hashtags)
+//   products               — q, category_id, min_price, max_price,
 //                            in_stock, status, ordering (same accepted
 //                            values as searchProducts() in
 //                            products.api.js)
@@ -219,6 +250,11 @@ export const getInventoryAlerts = (signal) => {
 //   whatsapp_conversation  — phone_number (REQUIRED — a 400 is
 //                            returned without it), start_date/end_date
 //                            filter that number's messages
+//
+// A non-numeric category_id sent to type=inventory (or type=products)
+// now returns a clean 400 { "error": "category_id must contain only
+// valid ids." } instead of a raw 500, so a stray/corrupted value can be
+// shown to the admin as a normal toast.
 //
 // The "customers" export's Phone column, and the "whatsapp_numbers" /
 // "whatsapp_conversation" exports' name/message columns, are formatted

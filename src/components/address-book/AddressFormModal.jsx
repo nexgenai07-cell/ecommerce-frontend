@@ -47,8 +47,13 @@ const PROVINCE_OPTIONS = PROVINCES.map((p) => ({ value: p, label: p }));
 // ultimately validate against.
 const LABEL_MAX_LENGTH = 30;
 const ADDRESS_MAX_LENGTH = 150;
-const CITY_MAX_LENGTH = 35;
-const POSTAL_CODE_LENGTH = 5;
+// City names are limited to 30 characters and to letters and spaces, the
+// same rule the backend applies on every address endpoint.
+const CITY_MAX_LENGTH = 30;
+// Postal codes follow the Pakistan Post format the backend accepts:
+// between 4 and 6 digits.
+const POSTAL_CODE_MIN_LENGTH = 4;
+const POSTAL_CODE_MAX_LENGTH = 6;
 const PHONE_MAX_LENGTH = 13;
 
 // Validation schema — matches the exact fields the backend accepts on
@@ -78,18 +83,22 @@ const addressSchema = z.object({
     .trim()
     .min(1, "City is required")
     .max(CITY_MAX_LENGTH, "City name is too long")
-    .regex(/^[A-Za-z\s'-]+$/, "City name can only contain letters")
+    .regex(/^[A-Za-z ]+$/, "City name can only contain letters and spaces")
     .refine((val) => !/(.)\1{3,}/.test(val), "Please enter a valid city name"),
   province: z.string().trim().optional(),
   // Optional on the backend — but if the customer does type something,
-  // it should still look like a real Pakistani postal code.
+  // it should still look like a real Pakistani postal code: 4 to 6 digits.
   postal_code: z
     .string()
     .trim()
     .optional()
     .refine(
-      (val) => !val || new RegExp(`^\\d{${POSTAL_CODE_LENGTH}}$`).test(val),
-      `Postal code must be exactly ${POSTAL_CODE_LENGTH} digits`,
+      (val) =>
+        !val ||
+        new RegExp(
+          `^\\d{${POSTAL_CODE_MIN_LENGTH},${POSTAL_CODE_MAX_LENGTH}}$`,
+        ).test(val),
+      `Postal code must be ${POSTAL_CODE_MIN_LENGTH} to ${POSTAL_CODE_MAX_LENGTH} digits`,
     ),
   // Optional on the backend — validated only when non-empty. Anchored
   // regex already rejects letters/symbols outright since the whole
@@ -288,15 +297,15 @@ const AddressFormModal = ({
               maxLength={CITY_MAX_LENGTH}
               {...register("city")}
               onChange={(e) => {
-                // City names are letters only — strip digits, symbols,
-                // and any other disallowed character the instant it's
-                // typed or pasted, so the field itself enforces the
+                // City names are letters and spaces only — strip digits,
+                // symbols, and any other disallowed character the instant
+                // it's typed or pasted, so the field itself enforces the
                 // same rule the schema's regex checks on submit,
                 // rather than only complaining after the fact.
                 // maxLength above stops the character count once it
                 // reaches CITY_MAX_LENGTH, so nothing beyond that
                 // limit can be entered either.
-                e.target.value = e.target.value.replace(/[^A-Za-z\s'-]/g, "");
+                e.target.value = e.target.value.replace(/[^A-Za-z ]/g, "");
                 register("city").onChange(e);
               }}
               className={inputClasses(errors.city)}
@@ -334,7 +343,7 @@ const AddressFormModal = ({
             <input
               type="text"
               inputMode="numeric"
-              maxLength={POSTAL_CODE_LENGTH}
+              maxLength={POSTAL_CODE_MAX_LENGTH}
               placeholder="54000 (optional)"
               autoComplete="postal-code"
               {...register("postal_code")}
@@ -342,8 +351,8 @@ const AddressFormModal = ({
                 // Postal codes are digits only — the same "block it at
                 // the keystroke, don't just flag it afterwards"
                 // approach used for phone below. maxLength caps the
-                // count at POSTAL_CODE_LENGTH once the digits themselves
-                // are already clean.
+                // count at POSTAL_CODE_MAX_LENGTH once the digits
+                // themselves are already clean.
                 e.target.value = e.target.value.replace(/\D/g, "");
                 register("postal_code").onChange(e);
               }}

@@ -30,6 +30,11 @@ import formatPrice from "../../utils/formatPrice";
 //                         payment step (that step has its own "Pay Now" button)
 // placeOrderLabel -> lets the parent change the button text ("Place Order" vs
 //                    "Continue to Payment") depending on which step we're on
+// placeOrderBlockedReason -> optional text explaining why the order cannot be placed yet
+//                    (for example, the selected delivery address has no city). While it
+//                    is a non-empty string the button is disabled and the text is shown
+//                    directly under it; when it is empty or omitted the button is
+//                    controlled by isPlacingOrder alone.
 // isBuyNow -> API 55 (Buy Now, Sep 2026): true when this sidebar is showing
 //             a Buy Now order instead of a normal cart checkout. The coupon
 //             input still renders in this mode, but it works differently
@@ -53,6 +58,7 @@ const CheckoutOrderSummary = ({
   isPlacingOrder,
   showPlaceOrderButton = true,
   placeOrderLabel = "Place Order",
+  placeOrderBlockedReason = "",
   isBuyNow = false,
   buyNowOrderAmount = 0,
   onBuyNowCouponApplied,
@@ -412,8 +418,9 @@ const CheckoutOrderSummary = ({
       {showPlaceOrderButton && (
         <button
           onClick={onPlaceOrder} // Calls the parent-provided function to actually place the order when clicked
-          disabled={isPlacingOrder}
-          // Disables the button while the order placement request is in progress, preventing duplicate submissions
+          disabled={isPlacingOrder || !!placeOrderBlockedReason}
+          // Disables the button while the order placement request is in progress, preventing duplicate submissions,
+          // and while the parent reports a reason why the order cannot be placed yet
           className="
             w-full flex items-center justify-center gap-2
             py-3.5 px-6 rounded-xl
@@ -432,6 +439,13 @@ const CheckoutOrderSummary = ({
             `${placeOrderLabel} — ${formatPrice(total)}`
           )}
         </button>
+      )}
+
+      {/* Explains why the Place Order button is disabled, when the parent gives a reason */}
+      {showPlaceOrderButton && placeOrderBlockedReason && (
+        <p className="text-xs text-center text-warning -mt-2">
+          {placeOrderBlockedReason}
+        </p>
       )}
 
       {/* Trust icons row */}

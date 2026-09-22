@@ -1,5 +1,5 @@
 // React hooks — useState for local state, useEffect for side effects like redirect-on-load checks
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // React Router hooks — useNavigate to redirect programmatically, useSearchParams
 // to read the "resume" query param used by the failed-payment retry flow
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
@@ -11,10 +11,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 // Zod library used to define and validate the shape/rules of form data
 import { z } from "zod";
-import {
-  EMAIL_REGEX,
-  EMAIL_INVALID_MESSAGE,
-} from "../../utils/emailValidation";
 // Framer Motion's "motion" component used to animate sections sliding/fading in
 import { motion, AnimatePresence } from "framer-motion";
 // Stripe.js loader — dynamically loads Stripe using the publishable_key returned
@@ -42,6 +38,16 @@ import {
 } from "../../api/orders.api";
 // API function to create a Stripe Payment Intent for an existing order (API 69)
 import { createPaymentIntent } from "../../api/payments.api";
+// API 7 — the customer's own profile. Its email is shown read-only on this page
+// (the Order Confirmation OTP and order emails always go to it), and its phone
+// is used to prefill the phone field.
+import { getMyProfile } from "../../api/auth.api";
+// API 55.1 / 55.2 — the customer's saved addresses (Address Book), and the
+// update call used to keep the phone of the selected address in step with the
+// phone typed on this page
+import { getAddresses, updateAddress } from "../../api/addresses.api";
+// Normalizes a list response that may be a plain array or a paginated object
+import extractListData from "../../utils/extractListData";
 // Custom hook providing authentication state (isAuthenticated flag and logged-in user info)
 import useAuth from "../../hooks/useAuth";
 // Custom hook providing cart-related actions, here specifically used to clear cart from Redux store
@@ -94,15 +100,9 @@ import formatPrice from "../../utils/formatPrice";
 // =============================================
 const checkoutSchema = z.object({
   // Contact
-  // Email field — must not be empty and must match a valid email format.
-  // .trim() strips accidental leading/trailing spaces (very common from
-  // copy-paste) before the format check runs.
-  email: z
-    .string()
-    .trim()
-    .min(1, "Email required")
-    .regex(EMAIL_REGEX, EMAIL_INVALID_MESSAGE)
-    .max(255, "Email is too long"),
+  // The email is intentionally not part of this schema: it is the
+  // customer's registered account email, shown read-only, and the checkout
+  // request has no email field at all.
   // Phone field — must not be empty and must match Pakistani phone number pattern (+92 or 0 followed by 10 digits)
   phone: z
     .string()
@@ -142,6 +142,30 @@ const SHIPPING_COSTS = {
 // the meantime, and is overridden by the server's value if it ever
 // disagrees.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
+
+// =============================================
+// PHONE HELPERS
+// =============================================
+// Reduces a phone number to a comparable form: keeps digits and a leading
+// "+", and rewrites the +92 country prefix as the local leading 0, so
+// "+923001234567" and "03001234567" compare as the same number.
+const normalizePhone = (phone) => {
+  const compact = (phone || "").replace(/[^\d+]/g, "");
+  return compact.startsWith("+92") ? `0${compact.slice(3)}` : compact;
+};
+
+// Builds the request body for updating a saved address (API 55.2) with a
+// new phone number while keeping every other field exactly as it is
+// stored. The optional postal code is only included when the address has
+// one.
+const buildAddressUpdatePayload = (address, phone) => ({
+  label: address.label,
+  shipping_address: address.shipping_address,
+  city: address.city,
+  ...(address.postal_code && { postal_code: address.postal_code }),
+  phone,
+  is_default: !!address.is_default,
+});
 
 // =============================================
 // BUY NOW PRODUCT IMAGE
@@ -382,6 +406,11 @@ const Checkout = () => {
   // Shown under the address picker if the customer tries to continue
   // to payment without having selected (or added) an address.
   const [addressError, setAddressError] = useState("");
+  // Becomes true the first time the customer types in the phone field.
+  // Until then the phone is filled in automatically (see the phone
+  // prefill effect below); afterwards the customer's own number is never
+  // overwritten by an automatic prefill.
+  const phoneEditedByCustomerRef = useRef(false);
   // The order created by the Checkout API — needed to build the redirect URL
   // and to display on the payment step
   const [orderNumber, setOrderNumber] = useState(null);
@@ -416,9 +445,9 @@ const Checkout = () => {
   // Inline error shown under the code input (invalid/expired code, etc.)
   const [otpError, setOtpError] = useState("");
   // The masked confirmation message from the send-otp response, e.g.
-  // "A verification code has been sent to ab***@gmail.com."
+  // "An order confirmation OTP has been sent to ab***@gmail.com."
   const [otpConfirmationMessage, setOtpConfirmationMessage] = useState("");
-  // Seconds remaining before "Resend code" becomes clickable again.
+  // Seconds remaining before "Resend OTP" becomes clickable again.
   const [otpCooldown, setOtpCooldown] = useState(0);
 
   // Ticks otpCooldown down to 0 once a second while it's active.
@@ -500,6 +529,45 @@ const Checkout = () => {
   });
 
   // =============================================
+  // REGISTERED PROFILE — API 7 — GET /api/v1/auth/me/
+  // =============================================
+  // Supplies the registered account email (shown read-only, since the
+  // Order Confirmation OTP and every order email always go to it) and the
+  // profile phone used to prefill the phone field. The locally stored user
+  // is used while this request is still loading.
+  const { data: profileData } = useQuery({
+    queryKey: QUERY_KEYS.MY_PROFILE,
+    queryFn: ({ signal }) => getMyProfile(signal),
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60 * 5,
+  });
+  const registeredEmail = profileData?.data?.email || user?.email || "";
+  const profilePhone = profileData?.data?.phone || user?.phone || "";
+
+  // =============================================
+  // SAVED ADDRESSES — API 55.1 — GET /api/v1/addresses/
+  // =============================================
+  // Same query and cache entry the address picker (AddressForm.jsx) uses.
+  // It is read here as well because this page needs the selected address
+  // itself, not just its id: to prefill the phone, to keep that phone in
+  // step with the number typed on this page, and to block ordering while
+  // the address has no city.
+  const { data: addressesData } = useQuery({
+    queryKey: QUERY_KEYS.ADDRESSES,
+    queryFn: ({ signal }) => getAddresses(signal),
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60 * 2,
+  });
+  const savedAddresses = extractListData(addressesData);
+  const selectedAddress =
+    savedAddresses.find((address) => address.id === selectedAddressId) || null;
+  // An address without a city cannot be used for checkout: the backend
+  // answers 400 "Missing: city". The customer has to add the city (through
+  // the Edit action in the address picker) before the order can be placed.
+  const isSelectedAddressMissingCity =
+    !!selectedAddress && !selectedAddress.city?.trim();
+
+  // =============================================
   // BUY NOW — API 55 (further change, Sep 2026)
   // =============================================
   // Builds a cart-SHAPED object out of just the one product + quantity
@@ -554,6 +622,7 @@ const Checkout = () => {
     handleSubmit, // Wraps the submit handler, runs validation before calling it
     watch, // Function to subscribe to and read live values of specific form fields
     setValue, // Function to manually update a form field's value programmatically
+    getValues, // Function to read a field's current value without subscribing to it
     formState: { errors }, // Object containing validation error messages for each field
   } = useForm({
     resolver: zodResolver(checkoutSchema), // Connects the Zod schema defined above as the validation logic for this form
@@ -570,7 +639,6 @@ const Checkout = () => {
     mode: "onTouched",
     defaultValues: {
       // Pre-filling form fields with existing user data where available, otherwise empty strings/defaults
-      email: user?.email || "",
       phone: user?.phone || "",
       shippingMethod: "standard", // Default shipping method pre-selected as standard delivery
     },
@@ -604,6 +672,31 @@ const Checkout = () => {
   const displaySubtotal = parseFloat(displayCart?.subtotal || 0);
   const displayDiscount = parseFloat(displayCart?.discount_amount || 0);
   const displayTotal = displaySubtotal - displayDiscount + shippingCost;
+
+  // =============================================
+  // PHONE PREFILL
+  // =============================================
+  // The phone field starts from the phone saved on the selected delivery
+  // address (the number the order will actually use) and falls back to the
+  // phone on the customer's profile. It follows the selected address and
+  // the loaded profile only until the customer types in the field; after
+  // that, the customer's own number is never overwritten.
+  const selectedAddressPhone = selectedAddress?.phone || "";
+
+  useEffect(() => {
+    if (phoneEditedByCustomerRef.current) return;
+
+    const prefillPhone = selectedAddressPhone || profilePhone;
+    if (prefillPhone && prefillPhone !== getValues("phone")) {
+      setValue("phone", prefillPhone);
+    }
+  }, [selectedAddressPhone, profilePhone, getValues, setValue]);
+
+  // Marks the phone as chosen by the customer. Passed to ContactForm and
+  // called whenever the customer types in the phone field.
+  const handlePhoneEdited = () => {
+    phoneEditedByCustomerRef.current = true;
+  };
 
   // =============================================
   // STEP 1 — CREATE PAYMENT INTENT (API 69)
@@ -801,7 +894,7 @@ const Checkout = () => {
 
       showError(
         error?.response?.data?.error ||
-          "Failed to send verification code. Please try again.",
+          "Failed to send the Order Confirmation OTP. Please try again.",
       );
     },
   });
@@ -823,7 +916,7 @@ const Checkout = () => {
     },
 
     onError: (error) => {
-      setOtpError(error?.response?.data?.error || "Invalid or expired code.");
+      setOtpError(error?.response?.data?.error || "Invalid or expired OTP.");
     },
   });
 
@@ -860,8 +953,26 @@ const Checkout = () => {
     // to be sent explicitly on this request instead — the backend
     // validates it again against this product's price × quantity and
     // uses it for this order only, never writing it to the cart.
-    mutationFn: (data) =>
-      checkout({
+    mutationFn: async (data) => {
+      // The backend ships an order sent with address_id to that saved
+      // address exactly as it is stored — including its phone — and
+      // ignores any phone sent on the same request. So when the customer
+      // typed a number that differs from the one saved on the selected
+      // address, the address is updated first (API 55.2); the order is
+      // then placed with address_id and uses the number the customer
+      // entered.
+      if (
+        selectedAddress &&
+        normalizePhone(data.phone) !== normalizePhone(selectedAddress.phone)
+      ) {
+        await updateAddress(
+          selectedAddress.id,
+          buildAddressUpdatePayload(selectedAddress, data.phone),
+        );
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ADDRESSES });
+      }
+
+      return checkout({
         address_id: selectedAddressId,
         payment_method: paymentMethod,
         // The shipping method the customer picked on this page (standard/
@@ -879,12 +990,19 @@ const Checkout = () => {
           buyNowCoupon && {
             coupon_code: buyNowCoupon.code,
           }),
-      }),
+      });
+    },
 
     // Runs when the checkout API call succeeds — order now exists with status "pending_payment"
     onSuccess: (response) => {
       const newOrderNumber = response.data.order_number;
       setOrderNumber(newOrderNumber);
+
+      // A new order now exists. The customer's order lists and the
+      // dashboard order totals (which count every order, whatever its
+      // status) are refreshed so they include it straight away.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDER_STATS });
 
       // Freeze the order summary numbers NOW, before the cart gets cleared
       // and refetched below — see the orderSnapshot comment above.
@@ -940,6 +1058,23 @@ const Checkout = () => {
         "Failed to place order. Please try again.";
       // Displaying the error message to the user via toast notification
       showError(message);
+
+      // COUPON REMOVED: the coupon already on the cart was no longer valid
+      // (minimum order amount no longer met, expired or deactivated). No
+      // order was created and the backend has already removed the coupon
+      // from the cart. The cart is fetched again so the total shown is the
+      // real one, without the discount, and the customer is returned to the
+      // details step. The order is deliberately NOT retried automatically:
+      // the customer must see the changed total first and then place the
+      // order again knowingly, or apply a different coupon.
+      if (
+        error?.response?.status === 400 &&
+        error?.response?.data?.coupon_removed === true
+      ) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+        setStep("details");
+        return;
+      }
 
       // COUPON: the backend re-validates the coupon at the moment the
       // order is actually placed, so a code that was valid when applied
@@ -1083,8 +1218,14 @@ const Checkout = () => {
   // only created once the code sent here is confirmed (see
   // verifyOtpMutation above).
   const onSubmit = (data) => {
-    if (!selectedAddressId) {
+    if (!selectedAddress) {
       setAddressError("Please select or add a delivery address.");
+      return;
+    }
+    if (isSelectedAddressMissingCity) {
+      setAddressError(
+        "Please add the city to the selected address before continuing.",
+      );
       return;
     }
     setAddressError("");
@@ -1095,7 +1236,7 @@ const Checkout = () => {
   // Called by CheckoutOtpStep's form submit, once 6 digits have been typed.
   const handleVerifyOtp = () => {
     if (otp.length !== 6) {
-      setOtpError("Please enter the full 6-digit code.");
+      setOtpError("Please enter the full 6-digit OTP.");
       return;
     }
     verifyOtpMutation.mutate();
@@ -1110,8 +1251,9 @@ const Checkout = () => {
   };
 
   // "Edit order details" link on the OTP step — takes the customer
-  // back to the details form. A fresh code is requested automatically
-  // the next time they submit it, since each code is single-use.
+  // back to the details form. The Order Confirmation OTP is requested
+  // again the next time they submit it (unless the account is already
+  // verified, in which case no OTP is needed at all).
   const handleEditDetails = () => {
     setStep("details");
     setOtp("");
@@ -1231,7 +1373,12 @@ const Checkout = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <ContactForm register={register} errors={errors} />
+                    <ContactForm
+                      register={register}
+                      errors={errors}
+                      email={registeredEmail}
+                      onPhoneEdited={handlePhoneEdited}
+                    />
                   </motion.div>
 
                   {/* Delivery Address */}
@@ -1279,7 +1426,7 @@ const Checkout = () => {
                   <div className="lg:hidden">
                     <button
                       type="submit"
-                      disabled={isPlacingOrder}
+                      disabled={isPlacingOrder || isSelectedAddressMissingCity}
                       className="
                         w-full py-3.5 px-6 rounded-xl
                         bg-primary text-white text-sm font-bold
@@ -1307,6 +1454,7 @@ const Checkout = () => {
                 >
                   <CheckoutOtpStep
                     confirmationMessage={otpConfirmationMessage}
+                    registeredEmail={registeredEmail}
                     otp={otp}
                     onOtpChange={(value) => {
                       setOtp(value);
@@ -1424,6 +1572,11 @@ const Checkout = () => {
               isPlacingOrder={isPlacingOrder}
               showPlaceOrderButton={step === "details"}
               placeOrderLabel="Continue to Payment"
+              placeOrderBlockedReason={
+                isSelectedAddressMissingCity
+                  ? "Add a city to the selected delivery address to continue."
+                  : ""
+              }
               isBuyNow={isBuyNow}
               buyNowOrderAmount={buyNowSubtotal}
               onBuyNowCouponApplied={setBuyNowCoupon}

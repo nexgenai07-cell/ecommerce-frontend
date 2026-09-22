@@ -8,6 +8,21 @@ import axiosInstance from "../lib/axiosInstance";
 // ----------------------------
 // API  - Register a new customer account
 // ----------------------------
+// The request body carries name, email, phone, password and
+// confirm_password, plus the "Primary Address" typed on the registration
+// form. The address fields are:
+// - address: the street address (at least 8 characters, at most 500)
+// - city: optional — letters and spaces only, at most 30 characters
+// - postal_code: optional — 4 to 6 digits
+// When address is sent, the backend saves it as the new customer's
+// default saved address (label "Primary") in the Address Book, using the
+// registration phone as the address phone. If city is omitted the
+// backend tries to detect a known Pakistani city inside the address text;
+// when none is found the address is saved with an empty city, which the
+// customer must complete before checking out with that address.
+//
+// A 400 response can carry field-keyed errors under "address", "city" or
+// "postal_code" in addition to the errors of the other fields.
 export const registerUser = (data, signal) => {
   return axiosInstance.post("/api/v1/auth/register/", data, { signal });
 };

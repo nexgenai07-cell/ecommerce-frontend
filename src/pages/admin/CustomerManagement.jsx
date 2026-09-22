@@ -161,9 +161,19 @@ const CustomerManagement = () => {
     setIsExporting(true);
     // Shows the loading spinner on the Export button immediately
     try {
+      // Both filters currently applied to the on-screen table (search
+      // and the sort order) are forwarded, so the downloaded file
+      // always matches what the admin is looking at. This export type
+      // has no status filter yet — List Customers itself (API 110)
+      // supports one, but the Customers page has no on-screen status
+      // control today, so there is nothing to forward.
       const { success, message } = await downloadExportCsv(
         exportReport,
-        { type: "customers" },
+        {
+          type: "customers",
+          search: debouncedSearch || undefined,
+          ordering: sortBy,
+        },
         `customers-export-${new Date().toISOString().slice(0, 10)}`,
       );
       // downloadExportCsv() requests the CSV blob, saves it as a real
