@@ -36,10 +36,6 @@ import useCart from "../../hooks/useCart";
 // Custom hook exposing handleSyncCart() (writes fetched cart data into Redux)
 // and clearCart() (empties the Redux cart slice after the API call succeeds).
 
-import useFlyToIcon from "../../hooks/useFlyToIcon";
-// dismissAllFromCart — plays the "every item pops out of the cart at once"
-// animation when the whole cart is cleared.
-
 import { showSuccess, showError } from "../../components/ui/Toast";
 // Helper functions that display green (success) / red (error) toast popups.
 
@@ -98,9 +94,6 @@ const Cart = () => {
   // handleClearCart empties the Redux cart slice after a successful
   // "clear cart" API call.
   const { handleSyncCart, handleClearCart } = useCart();
-
-  // Fly-to-icon trigger for the "Clear Cart" animation.
-  const { dismissAllFromCart } = useFlyToIcon();
 
   // Boolean state controlling whether the "Clear Cart?" confirmation modal
   // is currently open on screen.
@@ -597,6 +590,7 @@ const Cart = () => {
                 isLoading={recommendedLoading}
                 skeletonCount={4}
                 cols={{ default: 2, sm: 2, md: 4, lg: 4 }}
+                disableAddToCartAnimation
               />
             </section>
           )}
@@ -608,12 +602,8 @@ const Cart = () => {
         isOpen={showClearModal}
         onClose={() => setShowClearModal(false)}
         onConfirm={() => {
-          // Fires immediately, before the network call — every item's
-          // photo pops out of the cart graphic and fans out at once.
-          const imageUrls = cartItems.map(
-            (item) => item.product.primary_image || "/placeholder-product.png",
-          );
-          dismissAllFromCart(imageUrls);
+          // Clears the cart — animation removed; this now just fires the
+          // actual removal request straight away.
           clearCartMutation.mutate();
         }}
         title="Clear Cart?"

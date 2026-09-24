@@ -31,6 +31,10 @@ const ProductCard = ({
   // this card's image element mounts/unmounts. Used only by the Wishlist
   // page, so its "Add All to Cart" button can trigger a flight for every
   // card at once — most callers don't pass this at all.
+  disableAddToCartAnimation = false, // optional — skips the "fly into the
+  // cart graphic" animation on Add to Cart. Used by the Cart page's own
+  // "You Might Also Like" section, since the customer is already looking
+  // at the cart and the fly-in has nowhere meaningful to fly to.
 }) => {
   const navigate = useNavigate();
   // The current page, handed to Login so the visitor returns here after signing in
@@ -280,8 +284,11 @@ const ProductCard = ({
 
     // Fly the image immediately, regardless of which mode this card is
     // in — the animation is purely visual feedback and doesn't need to
-    // wait for the network request to resolve.
-    flyToCart(imageRef.current, imageSrc);
+    // wait for the network request to resolve. Skipped entirely when the
+    // caller has opted out (see disableAddToCartAnimation above).
+    if (!disableAddToCartAnimation) {
+      flyToCart(imageRef.current, imageSrc);
+    }
 
     if (isControlledAddToCart) {
       onAddToCartProp(product.id); // let the parent's own mutation handle it

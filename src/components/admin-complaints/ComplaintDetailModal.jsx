@@ -133,7 +133,10 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
   // detail modal (soft drop shadow instead of a flat border) so both
   // modals read as the same visual family. Padding kept compact so
   // the modal doesn't need excessive scrolling to see the thread.
-  const cardClass = "rounded-2xl bg-white shadow-lg shadow-gray-200/70 p-4";
+  // min-w-0 lets the card shrink inside the flex column instead of being
+  // stretched by long unbroken content.
+  const cardClass =
+    "min-w-0 rounded-2xl bg-white shadow-lg shadow-gray-200/70 p-3 sm:p-4";
 
   return (
     <Modal
@@ -196,17 +199,17 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
                   than a form. Email always present; phone/address
                   only shown when the backend actually returned them. */}
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100">
-                  <AiOutlineMail className="w-3.5 h-3.5 text-primary" />
+                <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100 [overflow-wrap:anywhere]">
+                  <AiOutlineMail className="w-3.5 h-3.5 shrink-0 text-primary" />
                   {customer.email}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100">
-                  <AiOutlinePhone className="w-3.5 h-3.5 text-primary" />
+                <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100 [overflow-wrap:anywhere]">
+                  <AiOutlinePhone className="w-3.5 h-3.5 shrink-0 text-primary" />
                   {customer.phone || "—"}
                 </span>
                 {customer.address && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100">
-                    <AiOutlineEnvironment className="w-3.5 h-3.5 text-primary" />
+                  <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs text-gray-600 bg-white rounded-full px-3 py-1.5 border border-gray-100 [overflow-wrap:anywhere]">
+                    <AiOutlineEnvironment className="w-3.5 h-3.5 shrink-0 text-primary" />
                     {customer.address}
                   </span>
                 )}
@@ -217,8 +220,8 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
                   already show, so an admin reviewing a complaint can
                   immediately see whether this is a first-time buyer
                   or a repeat customer. */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-xl p-3 border border-gray-100">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
+                <div className="min-w-0 bg-white rounded-xl p-3 border border-gray-100">
                   <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">
                     Total Orders
                   </p>
@@ -226,11 +229,11 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
                     {customer.total_orders}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                <div className="min-w-0 bg-white rounded-xl p-3 border border-gray-100">
                   <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">
                     Lifetime Value
                   </p>
-                  <p className="text-lg font-bold text-gray-900 mt-0.5">
+                  <p className="text-lg font-bold text-gray-900 mt-0.5 [overflow-wrap:anywhere]">
                     {formatPrice(customer.total_spent)}
                   </p>
                 </div>
@@ -244,16 +247,17 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
             into one glanceable card right under the customer.
             ================================================================ */}
         <div className={cardClass}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <AiOutlineTag className="w-4 h-4 text-gray-400" />
-              Complaint #CMP-{complaint.id}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="min-w-0 text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <AiOutlineTag className="w-4 h-4 shrink-0 text-gray-400" />
+              <span className="truncate">Complaint #CMP-{complaint.id}</span>
             </h3>
             <Badge
               label={currentStatus}
               status={currentStatus}
               size="md"
               rounded
+              className="shrink-0"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -305,7 +309,11 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
           <h3 className="text-sm font-semibold text-gray-900 mb-2">
             Customer's Original Message
           </h3>
-          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3">
+          {/* whitespace-pre-wrap keeps the customer's own line breaks, and
+              [overflow-wrap:anywhere] breaks a very long unbroken word
+              (or URL) onto the next line instead of pushing the modal
+              sideways, so no horizontal scrolling is ever needed. */}
+          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] bg-gray-50 rounded-lg p-3">
             {complaint.message}
           </p>
           {complaint.attachment && (
@@ -329,8 +337,10 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
             allow are shown disabled.
             ================================================================ */}
         <div className={cardClass}>
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
+          {/* Stacked on phones (select above, full-width button below),
+              side by side from the sm breakpoint upward. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
               {/* The select is disabled once the complaint is closed,
                   since a closed complaint can no longer be updated. */}
               <Select
@@ -353,6 +363,7 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
               onClick={() => statusMutation.mutate(status)}
               isLoading={statusMutation.isPending}
               disabled={!canTransitionComplaintStatus(currentStatus, status)}
+              className="w-full sm:w-auto"
             >
               Update
             </Button>

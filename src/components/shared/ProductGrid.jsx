@@ -25,6 +25,9 @@ const ProductGrid = ({
     lg: 4, // Number of columns on large screens
   },
   className = "", // Any extra CSS classes passed in from the parent component
+  disableAddToCartAnimation = false, // Passed straight through to every
+  // ProductCard — see ProductCard.jsx for what it does. Used by the Cart
+  // page's "You Might Also Like" grid to turn off the fly-to-cart animation.
 }) => {
   // Build the Tailwind grid-column classes dynamically based on the "cols" config passed in from outside
   const gridCols = cn(
@@ -80,6 +83,7 @@ const ProductGrid = ({
         <ProductCard
           key={product.id} // Unique key for each product, required by React for list rendering
           product={product} // Pass the full product data down to the card
+          disableAddToCartAnimation={disableAddToCartAnimation} // Forwarded straight through — see prop comment above
         />
       ))}
     </div>

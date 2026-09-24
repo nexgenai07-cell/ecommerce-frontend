@@ -104,32 +104,96 @@
 }
 
 /* ================================================================ */
-/* CUSTOM SCROLLBAR UTILITIES */
-/* Tailwind v4 core has NO built-in "scrollbar-hide" utility.        */
-/* The class was already being used in 6+ components across the app */
-/* (CategoryPills, OrderStepper, TrackingStepper, AdminSidebar,      */
-/* ProductImageGallery, OrderFilters) but was never actually defined */
-/* anywhere — meaning scrollbars were NOT being hidden anywhere.     */
-/* Defining it here fixes all of those usages project-wide, for free.*/
+/* SCROLLBAR THEME                                                   */
+/* A slim, brand-colored scrollbar is applied to every scrollable    */
+/* area in the app (page, modals, drawers, tables, lists and         */
+/* horizontal strips) so users can tell when a region can be         */
+/* scrolled. It is defined once here and needs no per-component      */
+/* classes.                                                          */
 /* ================================================================ */
 
-/* Fully invisible scrollbar — scrolling still works, just not visible */
-.scrollbar-hide {
-  -ms-overflow-style: none; /* IE and old Edge */
+/* Scrollbar design values — adjust the look of every scrollbar from here */
+:root {
+  --scrollbar-size: 8px; /* Full width of the scroll lane; the visible thumb is thinner at rest */
+  --scrollbar-track: color-mix(in srgb, var(--color-primary) 10%, transparent); /* Faint emerald lane that is always visible */
+  --scrollbar-track-active: color-mix(in srgb, var(--color-primary) 18%, transparent); /* Slightly stronger lane while hovering */
+  --scrollbar-stripes: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.45) 0,
+    rgba(255, 255, 255, 0.45) 2px,
+    transparent 2px,
+    transparent 6px
+  ); /* Thin diagonal white lines layered over the gradient */
+}
+
+/* Chromium browsers (Chrome, Edge, Opera) and Safari */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size); /* Vertical scrollbar thickness */
+  height: var(--scrollbar-size); /* Horizontal scrollbar thickness */
+}
+*::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-track); /* Always-visible lane so users can see where the scrollbar lives */
+  border-radius: var(--radius-full); /* Rounded lane that matches the thumb shape */
+  transition: background-color 0.2s ease; /* Smooth fade of the lane tint on hover */
+}
+*::-webkit-scrollbar-track:hover {
+  background-color: var(--scrollbar-track-active); /* Lane becomes a little more prominent on hover */
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent; /* Transparent border shrinks the visible thumb to 4px while keeping an 8px grab area */
+  background-clip: padding-box; /* Keeps the gradient inside the border so the border stays invisible */
+  border-radius: var(--radius-full); /* Fully rounded ends for a soft, minimal look */
+}
+*::-webkit-scrollbar-thumb:vertical {
+  background-image:
+    var(--scrollbar-stripes),
+    linear-gradient(180deg, var(--color-primary-light), var(--color-primary-dark)); /* Stripes over a top-to-bottom emerald gradient */
+}
+*::-webkit-scrollbar-thumb:horizontal {
+  background-image:
+    var(--scrollbar-stripes),
+    linear-gradient(90deg, var(--color-primary-light), var(--color-primary-dark)); /* Stripes over a left-to-right emerald gradient */
+}
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+  border-width: 0; /* Removes the transparent border so the thumb grows to the full 8px */
+}
+*::-webkit-scrollbar-corner {
+  background: transparent; /* Hides the square where a vertical and horizontal scrollbar meet */
+}
+
+/* Firefox does not support the ::-webkit-scrollbar selector, so it   */
+/* falls back to the standard scrollbar properties. The browser picks */
+/* its own "thin" width, which is the closest match available.        */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin; /* Standard thin scrollbar */
+    scrollbar-color: var(--color-primary) var(--scrollbar-track); /* Thumb color followed by track color */
+  }
+}
+
+/* Page-level scrollbar (the one on the far right edge of the browser  */
+/* window) is hidden; the page still scrolls with wheel, touch and     */
+/* keyboard. These element selectors are more specific than the        */
+/* universal scrollbar rules above, so they take precedence.           */
+html,
+body {
+  -ms-overflow-style: none; /* IE and legacy Edge */
   scrollbar-width: none; /* Firefox */
 }
-.scrollbar-hide::-webkit-scrollbar {
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 
-/* scrollbar-thin: ab yeh bhi fully invisible hai (scrollbar-hide jaisa), */
-/* taake category pills row par bhi koi scrollbar bilkul nazar na aaye,   */
-/* lekin scrolling normal kaam karti rahe. */
-.scrollbar-thin {
-  -ms-overflow-style: none; /* IE and old Edge */
+/* Opt-out utility: completely hides the scrollbar on an element while */
+/* keeping it scrollable. Use it only where a visible scrollbar would  */
+/* clash with the design.                                              */
+.scrollbar-none {
+  -ms-overflow-style: none; /* IE and legacy Edge */
   scrollbar-width: none; /* Firefox */
 }
-.scrollbar-thin::-webkit-scrollbar {
+.scrollbar-none::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 

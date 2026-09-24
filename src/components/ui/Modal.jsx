@@ -171,22 +171,20 @@ const Modal = ({
         )}
 
         {/* Modal body — renders whatever JSX is passed as children from the parent */}
-        <div className="p-5 overflow-y-auto scrollbar-hide">
+        <div className="p-5 overflow-y-auto overflow-x-hidden">
           {children}
           {/* p-5: consistent padding around the body content matching the header padding */}
-          {/* overflow-y-auto: THIS is what actually fixes the "modal not fully
-              visible" bug — when the children (e.g. a long detail view) are
+          {/* overflow-y-auto: when the children (e.g. a long detail view) are
               taller than the space left after the header, this div scrolls
               internally instead of pushing the modal box past the viewport
               edge. Combined with max-h-[90vh] + flex flex-col on the outer
               box above, the header always stays pinned in view and only the
               body content scrolls. */}
-          {/* scrollbar-hide: the shared utility already defined in index.css,
-              used the same way across the rest of the app. Scrolling inside
-              the body stays fully functional — only the visible scrollbar
-              track/thumb is removed, so a tall form (like Add/Edit Address)
-              doesn't show a distracting scroll track next to its rounded
-              corners. */}
+          {/* overflow-x-hidden: the body never scrolls sideways. Content
+              inside is expected to wrap; this is a safety net so an
+              unexpectedly wide child can never introduce a horizontal
+              scrollbar. The vertical scrollbar uses the app-wide themed
+              style defined in index.css. */}
         </div>
       </div>
     </div>

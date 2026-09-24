@@ -366,9 +366,12 @@ const AdminSidebar = () => {
   // isMobile controls small behavioral differences: mobile always
   // shows full labels (no collapsed icon-only state) and closes the
   // drawer after navigating.
+  // The nav list scrolls internally when it is taller than the sidebar;
+  // `scrollbar-none` hides its scrollbar so no line appears along the
+  // sidebar's right edge.
   // =============================================
   const renderNavGroups = ({ isMobile }) => (
-    <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-5 scrollbar-hide">
+    <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-5 scrollbar-none">
       {NAV_ITEMS.map((group) => (
         <div key={group.group}>
           {/* Group label — hidden entirely when the desktop sidebar is

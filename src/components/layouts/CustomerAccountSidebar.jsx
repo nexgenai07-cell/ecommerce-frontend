@@ -208,13 +208,14 @@ const CustomerAccountSidebar = () => {
           viewport instead of stretching to match the (often much taller)
           right-side page content — so only the page content scrolls,
           the sidebar visually stays put.
-          overflow-y-auto + scrollbar-hide: if the sidebar's own content
-          (profile card + nav + support card + logout) is ever taller than
-          a short viewport, it scrolls internally instead of breaking the
-          layout — but no scrollbar line is visible (existing project-wide
-          utility from src/index.css), scrolling still works fine.
+          overflow-y-auto + scrollbar-none: if the sidebar's own content
+          (profile card + nav + support card + logout) is taller than a
+          short viewport, it scrolls internally instead of breaking the
+          layout. The scrollbar is intentionally hidden here (opt-out
+          utility from src/index.css) so no line appears on the dark
+          sidebar's edge; scrolling itself still works normally.
           ============================================= */}
-      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 self-start overflow-y-auto scrollbar-hide bg-[#0d1b2a] shrink-0">
+      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 self-start overflow-y-auto scrollbar-none bg-[#0d1b2a] shrink-0">
         {" "}
         {/* Hidden on mobile, shown as a column on medium screens and up, fixed width, sticky full-viewport height, dark background */}
         {/* ===== USER PROFILE TOP ===== */}

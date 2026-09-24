@@ -1,11 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 // useState is used to hold the quantity value locally, so the UI can update
 // instantly ("optimistically") before the server confirms the change.
 // useEffect keeps that local value in sync when the server-side quantity
 // changes from somewhere else (e.g. re-adding the product from its
 // Product Detail page).
-// useRef holds a reference to the actual <img> element below — the exact
-// on-screen starting point for the "fly out of the cart" animation.
 
 import { Link } from "react-router-dom";
 // Link creates a client-side navigation link — used on the product image and
@@ -44,16 +42,6 @@ import useCart from "../../hooks/useCart";
 // update the local Redux cart slice so other components (like the navbar
 // cart icon) reflect changes immediately without waiting for a network refetch.
 
-import useFlyToIcon from "../../hooks/useFlyToIcon";
-// flyToCart       — plays the "fly into the cart graphic" animation when
-//                   the quantity is increased.
-// flyBackFromCart — plays the "pop out of the cart and return to this
-// row" animation when the quantity is decreased — the row is still on
-// screen, so it makes sense for the photo to land back on it.
-// dismissFromCart — plays the "pop out of the cart graphic and fade
-// off-screen" animation only when the row is deleted entirely (trash
-// button), since then it's actually leaving the page for good.
-
 import { showSuccess, showError } from "../ui/Toast";
 // Helper functions that display a green (success) or red (error) toast popup.
 
@@ -78,13 +66,6 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
 
   // Pulls the two Redux-sync helper functions out of the useCart hook.
   const { handleUpdateQuantity, handleRemoveItem } = useCart();
-
-  // Fly-to-icon triggers for this row's add/remove animations.
-  const { flyToCart, flyBackFromCart, dismissFromCart } = useFlyToIcon();
-
-  // Ref to the actual <img> element rendered below — the flight's exact
-  // starting point (its on-screen position + the real product photo).
-  const imageRef = useRef(null);
 
   // Local state holding the quantity currently shown on screen.
   // Initialized from the item's quantity as it exists in the API response.
@@ -179,6 +160,8 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
       // optimistic update above, so this refetch corrects silently rather
       // than being something the customer has to wait on.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+      // Shows a green success toast confirming the quantity change.
+      showSuccess("Cart updated");
     },
 
     // Runs when the update fails (e.g. network error, out of stock, etc.).
@@ -283,30 +266,14 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
   // Fired whenever the QuantitySelector's + or - button is clicked.
   // Updates the local quantity immediately for a snappy feel, then sends the
   // actual API request in the background via the mutation above.
-  //
-  // Increasing flies the photo into the cart graphic. Decreasing flies it
-  // back OUT of the cart graphic and returns it to this exact row — the
-  // row is still right here on screen (only the trash button below
-  // actually removes it for good), so returning to it reads more
-  // naturally than dismissing off-screen.
   const handleQuantityChange = (newQty) => {
-    const imageUrl = item.product.primary_image || "/placeholder-product.png";
-
-    if (newQty > quantity) {
-      flyToCart(imageRef.current, imageUrl);
-    } else if (newQty < quantity) {
-      flyBackFromCart(imageRef.current, imageUrl);
-    }
-
     setQuantity(newQty);
     updateMutation.mutate(newQty);
   };
 
-  // Fired when the trash icon is clicked. Fires the "pop out of the cart"
-  // animation immediately — before the network call — since this row is
-  // leaving the Cart page for good, then triggers the actual removal.
+  // Fired when the trash icon is clicked. Triggers the actual removal —
+  // animation removed, so this just fires the mutation directly.
   const handleRemoveClick = () => {
-    dismissFromCart(item.product.primary_image || "/placeholder-product.png");
     removeMutation.mutate();
   };
 
@@ -350,7 +317,6 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
         className="shrink-0"
       >
         <img
-          ref={imageRef}
           src={item.product.primary_image || "/placeholder-product.png"}
           alt={item.product.name}
           className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-xl border border-gray-100"

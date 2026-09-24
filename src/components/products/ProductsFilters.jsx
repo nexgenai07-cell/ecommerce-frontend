@@ -251,12 +251,13 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
 
   return (
     // Outer panel card. On desktop this sits inside a `sticky` sidebar, so
-    // `max-h-[calc(100vh-6.5rem)]` + `overflow-y-auto` makes the PANEL itself
-    // scroll internally if it's ever taller than the screen, instead of
-    // stretching the whole page. On mobile the parent drawer (Products.jsx)
-    // now sizes itself to this panel's actual height, so no leftover empty
-    // space is left below it.
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto scrollbar-hide">
+    // `max-h-[calc(100vh-6.5rem)]` + `overflow-y-auto` lets the panel scroll
+    // internally when it is taller than the screen, instead of stretching
+    // the whole page. `scrollbar-none` hides the panel's own scrollbar so no
+    // line appears along the card's right edge. On mobile the parent drawer
+    // (Products.jsx) sizes itself to this panel's height, so no empty space
+    // is left below it.
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto scrollbar-none">
       {/* ===== Panel header ===== */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
@@ -310,11 +311,10 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
           <p className="text-xs text-gray-400">Loading categories…</p>
         ) : (
           // Scrollable list — capped at ~11rem tall (roughly 6 rows) so a
-          // store with many categories never pushes the sidebar (and the
-          // page) taller than necessary. "scrollbar-hide" keeps the scroll
-          // functional while making the scrollbar itself invisible, so no
-          // scroll track/thumb is ever visible to the user.
-          <div className="flex flex-col gap-1 max-h-44 overflow-y-auto pr-1 scrollbar-hide">
+          // store with many categories never makes the sidebar (and the
+          // page) taller than necessary. It uses the app-wide themed
+          // scrollbar so users can see that more categories are available.
+          <div className="flex flex-col gap-1 max-h-44 overflow-y-auto pr-1">
             {categories.map((cat) => (
               <CheckRow
                 key={cat.id}
