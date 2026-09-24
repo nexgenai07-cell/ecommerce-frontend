@@ -216,13 +216,19 @@ const ProductList = () => {
   const lowStockCount = extractListData(lowStockCountResponse).length;
 
   // --------------------------------------------------
-  // LOW STOCK TABLE QUERY — real server-side search, category
-  // filtering, and pagination (API 38, 16 Sep 2026 Filtering Fix
-  // pass), used as the actual table data source whenever the "Low
-  // Stock" status filter is selected. `page` is explicitly sent here,
-  // so the backend switches into its paginated
+  // LOW STOCK TABLE QUERY — real server-side search, category, price
+  // range, and sort filtering, plus pagination (API 38, 16 Sep 2026
+  // Filtering Fix pass), used as the actual table data source whenever
+  // the "Low Stock" status filter is selected. `page` is explicitly
+  // sent here, so the backend switches into its paginated
   // { count, next, previous, results } shape for this request only —
   // the count query above never sends `page`, so it is unaffected.
+  //
+  // UPDATED (24 Sep 2026): min_price, max_price, and ordering were
+  // previously dropped on this request, so switching to Low Stock
+  // silently ignored any price range or sort the admin had selected —
+  // the backend never received them, so it had nothing to filter on.
+  // Now forwarded exactly like the main search query above.
   // --------------------------------------------------
   const {
     data: lowStockTableResponse,
@@ -235,6 +241,9 @@ const ProductList = () => {
       "lowStockTable",
       debouncedSearch,
       filters.categoryId,
+      filters.minPrice,
+      filters.maxPrice,
+      filters.ordering,
       currentPage,
       pageSize,
     ],
@@ -243,6 +252,9 @@ const ProductList = () => {
         {
           q: debouncedSearch || undefined,
           category_id: filters.categoryId || undefined,
+          min_price: filters.minPrice || undefined,
+          max_price: filters.maxPrice || undefined,
+          ordering: filters.ordering,
           page: currentPage,
           page_size: pageSize,
         },
@@ -369,14 +381,20 @@ const ProductList = () => {
   // request instead of looping every page of results and building the
   // file in the browser by hand.
   //
-  // Low Stock is sent as `status: "low_stock"` — API 99's products
-  // filter set accepts out_of_stock / low_stock / healthy / in_stock as
-  // a `status` value (this is a different, wider filter than the plain
-  // `in_stock` boolean the on-screen search endpoint uses), so the
-  // export can express the Low Stock view in one request without
-  // needing a second export code path. min_price/max_price aren't sent
-  // for Low Stock since the on-screen Low Stock view has no price
-  // filter for them to mirror.
+  // Low Stock is sent as `status: "low_stock,out_of_stock"` — NOT just
+  // "low_stock" alone. The on-screen Low Stock table (dedicated
+  // /products/low-stock/ endpoint, API 38) defines "low stock" as
+  // available_stock < low_stock_threshold, which also catches products
+  // sitting at 0 available stock (fully reserved). The export's status
+  // filter (API 29's classification, used by API 99) treats those same
+  // 0-available products as "out_of_stock" instead, a separate bucket
+  // from "low_stock" — so sending status=low_stock alone silently
+  // dropped every 0-available product from the export even though it
+  // was visible on screen. Sending both statuses together reproduces
+  // the same available_stock < threshold set the on-screen table uses.
+  // min_price/max_price are now sent for Low Stock too, since the
+  // on-screen Low Stock view supports a price filter (previously it
+  // didn't, which is why these were left out before).
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -385,11 +403,13 @@ const ProductList = () => {
         type: "products",
         q: debouncedSearch || undefined,
         category_id: filters.categoryId || undefined,
+        min_price: filters.minPrice || undefined,
+        max_price: filters.maxPrice || undefined,
         ordering: filters.ordering,
       };
 
       if (isLowStockView) {
-        params.status = "low_stock";
+        params.status = "low_stock,out_of_stock";
       } else {
         params.in_stock =
           filters.status === "in_stock"
@@ -397,8 +417,6 @@ const ProductList = () => {
             : filters.status === "out_of_stock"
               ? false
               : undefined;
-        params.min_price = filters.minPrice || undefined;
-        params.max_price = filters.maxPrice || undefined;
       }
 
       const { success, message } = await downloadExportCsv(

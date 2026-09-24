@@ -17,8 +17,8 @@ const SORT_OPTIONS = [
   { value: "created_at", label: "Oldest First" },
   { value: "-total_amount", label: "Amount: High to Low" },
   { value: "total_amount", label: "Amount: Low to High" },
-  { value: "order_number", label: "Order Number: A-Z" },
-  { value: "-order_number", label: "Order Number: Z-A" },
+  { value: "customer_name", label: "Customer Name: A-Z" }, // Sorts orders by customer name ascending; sent as ordering=customer_name to both the filter and export endpoints
+  { value: "-customer_name", label: "Customer Name: Z-A" }, // Sorts orders by customer name descending; sent as ordering=-customer_name to both the filter and export endpoints
 ];
 
 const DEFAULT_ORDERING = "-created_at";
