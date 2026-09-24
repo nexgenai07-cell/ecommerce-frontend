@@ -51,6 +51,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // here so the Order Detail screen finally matches the rest of the panel.
 import OrderStatusBadge from "../../components/shared/OrderStatusBadge";
 import OrderStatusStepper from "../../components/shared/OrderStatusStepper";
+import OrderStatusTimeline from "../../components/order-detail/OrderStatusTimeline";
 
 // Every real, admin-settable ORDER_STATUS value, in the exact forward
 // sequence the backend enforces: pending_payment -> confirmed ->
@@ -103,10 +104,17 @@ const getStatusOptions = (order) => {
 
   const isPaid = order?.payment?.status === PAYMENT_STATUS.PAID;
 
-  // ON_HOLD behaves like PENDING for sequence purposes — both are
-  // "not yet confirmed" positions, so the same forward options apply.
+  // ON_HOLD and ORDER_PLACED both behave like PENDING for sequence
+  // purposes — all three are "not yet confirmed, payment not settled"
+  // positions, so the same forward options and payment gate apply.
+  // Without this, ORDER_PLACED (a status FORWARD_STATUS_SEQUENCE
+  // itself doesn't include, since it isn't manually selectable) would
+  // fall through to the "unknown status" branch below and incorrectly
+  // allow jumping straight to Confirmed/Shipped/etc. before any
+  // payment proof even exists.
   const effectiveStatus =
-    currentStatus === ORDER_STATUS.ON_HOLD
+    currentStatus === ORDER_STATUS.ON_HOLD ||
+    currentStatus === ORDER_STATUS.ORDER_PLACED
       ? ORDER_STATUS.PENDING
       : currentStatus;
 
@@ -420,6 +428,8 @@ const AdminOrderDetail = () => {
             </div>
             <p className="text-sm text-gray-400 mt-1">
               Placed on {formatDate(order.created_at)}
+              {order.expected_delivery &&
+                ` · Estimated delivery: ${order.expected_delivery}`}
             </p>
             {/* Cancellation Reason — only shown once the order is actually
                 cancelled AND a reason exists on it. Covers both cases: the
@@ -559,6 +569,14 @@ const AdminOrderDetail = () => {
               history={trackingHistory}
             />
           </div>
+
+          {/* Status History — the detailed, note-carrying log (same
+              status_history array the customer's own Order Detail page
+              shows), distinct from the stepper above: this one keeps
+              every change with its own timestamp and the exact note
+              recorded against it (e.g. "QR payment proof approved by
+              admin"), which the stepper's simplified view doesn't show. */}
+          <OrderStatusTimeline history={order.status_history} />
 
           {/* Shipping Address */}
           <div className={CARD_CLASS}>

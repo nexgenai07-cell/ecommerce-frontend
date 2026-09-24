@@ -37,6 +37,10 @@ const ORDER_STEPS = [
 // Returns 0 as the default so cancelled or unknown statuses don't break the stepper
 const getStepIndex = (status) => {
   switch (status) {
+    case ORDER_STATUS.ORDER_PLACED:
+      // QR order still inside its 10-minute proof-upload window — the
+      // very first stage, same as PENDING below.
+      return 0;
     case ORDER_STATUS.PENDING:
       return 0; // Order placed but not yet confirmed by the seller
     case ORDER_STATUS.ON_HOLD:

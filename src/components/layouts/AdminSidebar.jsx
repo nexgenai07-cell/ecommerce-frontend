@@ -31,6 +31,7 @@ import {
   AiOutlineComment, // Comment icon (Bot Conversations)
   AiOutlinePhone, // Phone icon (WhatsApp Numbers)
   AiOutlineQrcode, // QR code icon (QR Payment Queue)
+  AiOutlineSend, // Paper-plane icon (Send Notification) — swapped in so it no longer shares AiOutlineBell with the new "Notifications" inbox item below
 } from "react-icons/ai";
 import { BsBoxSeam } from "react-icons/bs"; // Box icon (Products)
 import cn from "../../utils/cn"; // Import utility function to conditionally combine class names
@@ -214,8 +215,13 @@ const NAV_ITEMS = [
         route: ROUTES.ADMIN_AUDIT_LOGS, // Route this item navigates to
       },
       {
-        label: "Send Notification", // Text shown for this nav item — matches the page's real, honest capability (see NotificationTemplates.jsx notes)
+        label: "Notifications", // The admin's own notification inbox — bell dropdown + full history page
         icon: <AiOutlineBell className="w-4.5 h-4.5" />, // Icon for this nav item
+        route: ROUTES.ADMIN_NOTIFICATIONS, // Route this item navigates to
+      },
+      {
+        label: "Send Notification", // Text shown for this nav item — matches the page's real, honest capability (see NotificationTemplates.jsx notes)
+        icon: <AiOutlineSend className="w-4.5 h-4.5" />, // Icon for this nav item — distinct from the "Notifications" inbox item's bell icon above
         route: ROUTES.ADMIN_NOTIFICATION_TEMPLATES, // Route this item navigates to
       },
     ],

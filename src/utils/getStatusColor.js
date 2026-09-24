@@ -29,6 +29,12 @@ const getStatusColor = (status) => {
     // ==================================================
     // ORDER STATUSES
     // ==================================================
+    case ORDER_STATUS.ORDER_PLACED:
+      // Brand-new QR order, still inside its 10-minute upload window —
+      // same warning (amber) token as PENDING below, since this is
+      // also a "waiting on the customer" state, just one step earlier.
+      return "bg-warning-light text-warning";
+
     case ORDER_STATUS.PENDING:
       // Order placed, awaiting Stripe payment confirmation — warning
       // (amber) token signals "waiting on the customer/system"

@@ -20,12 +20,15 @@ import { ROUTES } from "../../constants/routes";
 import Popover from "../ui/Popover";
 import Avatar from "../ui/Avatar";
 import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confirmation dialog, shown before logout actually runs
-// Badge is no longer used here — the role now renders as a pill inside
-// the gradient header itself (same treatment as the customer navbar's
+import AdminNotificationBell from "../notifications/AdminNotificationBell";
+// AdminNotificationBell — the admin's own notification bell + dropdown,
+// reinstated here as a dedicated, self-contained component (real API
+// data, unread badge, mark-as-read, mark-all-read, deep links, "View
+// all" link to ROUTES.ADMIN_NOTIFICATIONS) rather than the inline bell
+// that used to live directly in this file and was removed. Badge is no
+// longer used here — the role now renders as a pill inside the
+// gradient header itself (same treatment as the customer navbar's
 // "Admin"/"Customer" pill), so the separate Badge-based role row is gone.
-// Spinner, showError, extractListData, formatDate, QUERY_KEYS, and the
-// notifications API functions are NOT imported anymore — they were only
-// ever used by the notification bell that has now been removed
 
 const TopHeader = () => {
   const { user } = useAuth();
@@ -68,9 +71,12 @@ const TopHeader = () => {
         </div>
 
         {/* ============================================
-          RIGHT SIDE — profile menu only (notification bell removed)
+          RIGHT SIDE — notification bell + profile menu
           ============================================ */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          {/* ---------- ADMIN NOTIFICATION BELL ---------- */}
+          <AdminNotificationBell />
+
           {/* ---------- ADMIN PROFILE MENU ---------- */}
           <Popover
             align="right"

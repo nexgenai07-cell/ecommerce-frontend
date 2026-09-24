@@ -165,6 +165,7 @@ const Register = lazy(() => import("./pages/auth/Register"));
 const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
 const VerifyEmail = lazy(() => import("./pages/auth/VerifyEmail"));
+const VerifyPhone = lazy(() => import("./pages/auth/VerifyPhone"));
 const ReactivateAccount = lazy(() => import("./pages/auth/ReactivateAccount"));
 // ReactivateAccount — brand new page, handles BOTH steps of the
 // account reactivation flow (request form + token confirm) at a
@@ -211,6 +212,9 @@ const Accounts = lazy(() => import("./pages/admin/Accounts"));
 const BotLogs = lazy(() => import("./pages/admin/BotLogs"));
 const NumbersManagement = lazy(() => import("./pages/admin/NumbersManagement"));
 const AuditLogs = lazy(() => import("./pages/admin/AuditLogs"));
+const AdminNotifications = lazy(
+  () => import("./pages/admin/AdminNotifications"),
+);
 const NotificationTemplates = lazy(
   () => import("./pages/admin/NotificationTemplates"),
 );
@@ -650,6 +654,19 @@ const AppRoutes = () => {
           }
         />
 
+        {/* VERIFY_PHONE — deliberately NOT wrapped in <PublicRoute>, same
+            reasoning as VERIFY_EMAIL above: reached from an emailed link
+            carrying a one-time token, so it must render regardless of
+            the visitor's current auth state. */}
+        <Route
+          path={ROUTES.VERIFY_PHONE}
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <VerifyPhone />
+            </Suspense>
+          }
+        />
+
         {/* REACTIVATE_ACCOUNT — deliberately NOT wrapped in <PublicRoute>,
             same reasoning as RESET_PASSWORD/VERIFY_EMAIL above: this page
             is reached from an emailed link carrying a one-time token, so
@@ -962,6 +979,17 @@ const AppRoutes = () => {
               <AdminProtectedRoute>
                 <Suspense fallback={<PageLoader />}>
                   <AuditLogs />
+                </Suspense>
+              </AdminProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ADMIN_NOTIFICATIONS}
+            element={
+              <AdminProtectedRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <AdminNotifications />
                 </Suspense>
               </AdminProtectedRoute>
             }

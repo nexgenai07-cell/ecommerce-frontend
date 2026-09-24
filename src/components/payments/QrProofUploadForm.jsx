@@ -31,7 +31,14 @@ import { showError } from "../ui/Toast";
 // reopened_after_rejection (true when the upload is a retry after an
 // earlier rejection), which lets callers tell a first upload from a
 // retry.
-const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
+// onWindowExpired() — optional. Called instead of just showing the
+// error toast when the upload is refused because the order's payment
+// window has already passed and it was cancelled server-side as a
+// safety net. Lets a parent that shows a live countdown (QrPaymentPanel
+// on Checkout) switch straight to its own "order cancelled" state,
+// rather than leaving the customer looking at an upload form for an
+// order that no longer accepts one.
+const QrProofUploadForm = ({ orderNumber, onUploaded, onWindowExpired }) => {
   const queryClient = useQueryClient();
   const [screenshot, setScreenshot] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -78,11 +85,24 @@ const QrProofUploadForm = ({ orderNumber, onUploaded }) => {
       // "error" key (e.g. "Maximum re-upload attempts (3) reached for
       // this order..."); "message" is checked as a fallback so every
       // error message from this endpoint stays visible to the customer.
-      showError(
+      const message =
         error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to upload payment proof. Please try again.",
-      );
+        error?.response?.data?.message ||
+        "Failed to upload payment proof. Please try again.";
+      showError(message);
+
+      // The upload window (plus its one-time extension) had already
+      // passed and the order was cancelled server-side the moment this
+      // upload was attempted — treat it exactly like any other
+      // "cancelled" state rather than leaving a stale upload form on
+      // screen. Matched on wording since the backend returns this as a
+      // plain error string, not a dedicated error code.
+      if (/expired.*cancelled/i.test(message)) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.ORDER_DETAIL(orderNumber),
+        });
+        onWindowExpired?.();
+      }
     },
   });
 

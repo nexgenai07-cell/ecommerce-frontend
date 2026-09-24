@@ -17,6 +17,11 @@ const OrderStatusBadge = ({
   // The backend usually sends lowercase status strings — this makes them readable
   const getLabel = (status) => {
     switch (status) {
+      case ORDER_STATUS.ORDER_PLACED:
+        // QR order, still inside its 10-minute payment-proof upload
+        // window — distinct wording from "Pending Payment" so it's
+        // clear proof hasn't been uploaded yet at all
+        return "Awaiting Payment Proof";
       case ORDER_STATUS.PENDING:
         return "Pending Payment"; // Order created, awaiting Stripe payment confirmation
       case ORDER_STATUS.ON_HOLD:

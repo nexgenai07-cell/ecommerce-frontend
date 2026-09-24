@@ -127,7 +127,18 @@ const getRelativeTime = (timestamp) => {
 };
 
 // Define the NotificationItem functional component, receiving a single "notification" object as a prop
-const NotificationItem = ({ notification }) => {
+// NEW: an optional "resolveLink" function prop, defaulting to the
+// customer-side resolveNotificationLink imported above. This lets the
+// SAME component be reused as-is on the admin notification page/bell —
+// the admin simply passes resolveAdminNotificationLink instead, which
+// maps the identical reference_type/reference_id fields to the admin
+// management routes rather than the customer account routes. No
+// existing caller that omits this prop is affected — behavior is
+// 100% unchanged for the customer Notification History page.
+const NotificationItem = ({
+  notification,
+  resolveLink = resolveNotificationLink,
+}) => {
   // Get access to the React Query client instance so we can manually invalidate/refresh cached queries later
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -159,10 +170,11 @@ const NotificationItem = ({ notification }) => {
       markReadMutation.mutate();
     }
 
-    // Deep link — takes the customer straight to the order/return/
-    // complaint this notification is actually about, instead of just
-    // marking it read and leaving them on the notifications list.
-    const link = resolveNotificationLink(notification);
+    // Deep link — takes the customer (or, via the resolveLink prop, the
+    // admin) straight to the order/return/complaint this notification is
+    // actually about, instead of just marking it read and leaving them
+    // on the notifications list.
+    const link = resolveLink(notification);
     if (link) {
       navigate(link);
     }

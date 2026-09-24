@@ -7,6 +7,11 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password/:uid/:token",
   VERIFY_EMAIL: "/verify-email/:token",
+  // Reached from the link sendPhoneVerification() emails to the
+  // account's address when a customer needs to verify a new phone
+  // number (most commonly triggered from Checkout). Same pattern as
+  // VERIFY_EMAIL above — a one-time token in the URL path.
+  VERIFY_PHONE: "/verify-phone/:token",
   // REACTIVATE_ACCOUNT — a single page that serves BOTH steps of the
   // reactivation flow, matching the exact URL shape from the backend
   // spec ("/reactivate-account?token=xxxx"):
@@ -115,6 +120,15 @@ export const ROUTES = {
 
   // System-level admin tools
   ADMIN_AUDIT_LOGS: "/admin/audit-logs",
+  // ADMIN_NOTIFICATIONS — the admin's own notification inbox (bell
+  // dropdown + full history page), reusing the exact same List My
+  // Notifications / Mark as Read / Mark All as Read endpoints (API
+  // 75-77.1) the customer side already uses, since those endpoints
+  // return whatever is visible to the currently logged-in user —
+  // admin included. Kept distinct from ADMIN_NOTIFICATION_TEMPLATES
+  // below, which is for composing and sending a notification OUT to
+  // customers, not for reading notifications addressed TO the admin.
+  ADMIN_NOTIFICATIONS: "/admin/notifications",
   ADMIN_NOTIFICATION_TEMPLATES: "/admin/notification-templates",
   // ADMIN_PROFILE — the admin's own profile page (API 7 / API 8), reached
   // from the "Profile" link in the TopHeader account dropdown. Reuses the

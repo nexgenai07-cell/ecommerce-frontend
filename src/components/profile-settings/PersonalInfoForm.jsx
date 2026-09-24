@@ -16,6 +16,7 @@ import useAuth from "../../hooks/useAuth";
 import { showSuccess, showError } from "../ui/Toast";
 import Avatar from "../ui/Avatar";
 import ChangeEmailModal from "./ChangeEmailModal";
+import PhoneVerifyModal from "./PhoneVerifyModal";
 import CameraCaptureModal from "./CameraCaptureModal";
 
 const personalInfoSchema = z.object({
@@ -50,7 +51,8 @@ const PersonalInfoForm = ({ user }) => {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
+    setValue,
+    formState: { errors, isDirty, dirtyFields },
   } = useForm({
     resolver: zodResolver(personalInfoSchema),
     // Live validation (industry-standard pattern, same one Gmail/Amazon/
@@ -235,20 +237,65 @@ const PersonalInfoForm = ({ user }) => {
     },
   });
 
+  // =============================================
+  // PHONE VERIFY MODAL STATE
+  // =============================================
+  // A new phone number is never saved directly from this form — it
+  // has to be confirmed with a code emailed to the account first (see
+  // PhoneVerifyModal). "pendingPhone" holds the number currently
+  // awaiting that confirmation.
+  const [pendingPhone, setPendingPhone] = useState(null);
+
   const onSubmit = (data) => {
-    updateMutation.mutate({
-      name: data.name,
-      phone: data.phone,
-      // A new file takes priority over a pending removal (picking a
-      // photo after tapping Remove simply replaces it). Sending
-      // profile_picture explicitly as null tells the backend to
-      // clear the existing picture rather than leave it untouched.
-      ...(selectedFile
-        ? { profile_picture: selectedFile }
-        : isAvatarRemoved
-          ? { profile_picture: null }
-          : {}),
-    });
+    const trimmedPhone = data.phone.trim();
+    const phoneChanged = trimmedPhone !== (user?.phone || "");
+    const avatarFields = selectedFile
+      ? { profile_picture: selectedFile }
+      : isAvatarRemoved
+        ? { profile_picture: null }
+        : {};
+
+    if (!phoneChanged) {
+      // Phone is untouched — save exactly as before, name/avatar and
+      // the existing phone together in one request.
+      updateMutation.mutate({
+        name: data.name,
+        phone: data.phone,
+        ...avatarFields,
+      });
+      return;
+    }
+
+    // The phone changed — name and/or avatar changes (if any) are not
+    // gated behind verification, so they're saved right away, keeping
+    // the account's current phone untouched for this request. The new
+    // phone itself only gets applied once PhoneVerifyModal confirms it.
+    if (dirtyFields.name || selectedFile || isAvatarRemoved) {
+      updateMutation.mutate({
+        name: data.name,
+        phone: user?.phone || "",
+        ...avatarFields,
+      });
+    }
+
+    setPendingPhone(trimmedPhone);
+  };
+
+  // Called by PhoneVerifyModal once the code is confirmed — mirrors
+  // handleEmailChanged below, refreshing both the query cache and the
+  // Redux auth state with the account's new, now-verified phone.
+  const handlePhoneVerified = (updatedUser) => {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
+    if (updatedUser) updateProfile(updatedUser);
+    setPendingPhone(null);
+  };
+
+  // Called when the customer closes PhoneVerifyModal without
+  // completing verification — the typed number is discarded and the
+  // field snaps back to the account's actual saved phone.
+  const handlePhoneVerifyCancel = () => {
+    setValue("phone", user?.phone || "", { shouldDirty: false });
+    setPendingPhone(null);
   };
 
   // =============================================
@@ -428,27 +475,55 @@ const PersonalInfoForm = ({ user }) => {
                 )}
               </div>
 
-              {/* Phone Number */}
+              {/* Phone Number — the verified checkmark mirrors the one on
+                  the read-only Email field below, and this field stays
+                  fully editable, unlike email. The account's phone is
+                  verified together with the account's email at signup;
+                  changing it here goes through PhoneVerifyModal — a
+                  code emailed to the account confirms the new number
+                  before it's actually saved (see onSubmit above). */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Phone Number
                 </label>
-                <input
-                  type="tel"
-                  placeholder="03001234567"
-                  autoComplete="tel"
-                  {...register("phone")}
-                  className={`
-                    w-full px-4 py-3 text-sm rounded-xl border bg-gray-50/50
-                    placeholder:text-gray-300 text-gray-900
-                    focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-white
-                    transition-all duration-200
-                    ${errors.phone ? "border-danger" : "border-gray-200"}
-                  `}
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    placeholder="03001234567"
+                    autoComplete="tel"
+                    {...register("phone")}
+                    className={`
+                      w-full pl-4 pr-10 py-3 text-sm rounded-xl border bg-gray-50/50
+                      placeholder:text-gray-300 text-gray-900
+                      focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-white
+                      transition-all duration-200
+                      ${errors.phone ? "border-danger" : "border-gray-200"}
+                    `}
+                  />
+                  {user?.phone_verified && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-success">
+                      <AiOutlineCheckCircle className="w-4 h-4" />
+                    </span>
+                  )}
+                </div>
                 {errors.phone && (
                   <p className="text-xs text-danger">{errors.phone.message}</p>
                 )}
+                {!errors.phone && dirtyFields.phone && (
+                  <p className="text-xs text-gray-400">
+                    You'll need to confirm this number with a code emailed to
+                    you before it's saved.
+                  </p>
+                )}
+                {!errors.phone &&
+                  !dirtyFields.phone &&
+                  user?.phone &&
+                  !user?.phone_verified && (
+                    <p className="text-xs text-gray-400">
+                      Not verified yet — save this field again to confirm it by
+                      email.
+                    </p>
+                  )}
               </div>
 
               {/* Email — read only with verified checkmark; changing it
@@ -543,6 +618,13 @@ const PersonalInfoForm = ({ user }) => {
         isOpen={isChangeEmailOpen}
         onClose={() => setIsChangeEmailOpen(false)}
         onSuccess={handleEmailChanged}
+      />
+
+      <PhoneVerifyModal
+        isOpen={Boolean(pendingPhone)}
+        phone={pendingPhone}
+        onCancel={handlePhoneVerifyCancel}
+        onSuccess={handlePhoneVerified}
       />
 
       <CameraCaptureModal

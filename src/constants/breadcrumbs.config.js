@@ -330,6 +330,10 @@ export const BREADCRUMB_ROUTES = [
     trail: [{ label: "Audit Logs" }],
   },
   {
+    pattern: ROUTES.ADMIN_NOTIFICATIONS,
+    trail: [{ label: "Notifications" }],
+  },
+  {
     pattern: ROUTES.ADMIN_NOTIFICATION_TEMPLATES,
     trail: [{ label: "Send Notification" }],
   },

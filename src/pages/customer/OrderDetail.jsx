@@ -20,8 +20,10 @@ import PaymentInfo from "../../components/order-detail/PaymentInfo"; // Payment 
 import DeliveryAddress from "../../components/order-detail/DeliveryAddress"; // Recipient name, address, and phone number
 import ReturnStatus from "../../components/order-detail/ReturnStatus"; // Return request card — only renders when a return exists
 import NeedHelp from "../../components/order-detail/NeedHelp"; // Contextual action buttons: track, return, cancel, AI chat
+import OrderStatusTimeline from "../../components/order-detail/OrderStatusTimeline"; // Chronological status_history timeline
 import OrderStatusBadge from "../../components/shared/OrderStatusBadge"; // Colored status pill shown in the page heading row
-import { ORDER_STATUS } from "../../constants/statusTypes"; // Used to check for the "cancelled" status below
+import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes"; // Used to check for the "cancelled"/"order_placed" statuses below
+import QrPaymentPanel from "../../components/checkout/QrPaymentPanel"; // Same countdown + upload + extend panel Checkout.jsx uses, reused as-is for a QR order still "order_placed" when the customer lands on (or returns to) this page directly
 import { SkeletonOrderDetail } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the order data is loading — mirrors this exact page's header, stepper, and 2/3+1/3 grid
 import ErrorState from "../../components/ui/ErrorState"; // Error UI with a retry button shown when the API call fails
 import Modal from "../../components/ui/Modal"; // Base modal used to build the cancel dialog (with its own reason dropdown) below
@@ -337,9 +339,35 @@ const OrderDetail = () => {
                 </p>
               )}
 
+            {/* Expected delivery — a simple text line rather than the full
+                date range, since the range's exact start/end matters less
+                to a customer than a quick sense of how long to expect. */}
+            {order.expected_delivery && (
+              <p className="text-sm text-gray-500">
+                Estimated delivery: {order.expected_delivery}
+              </p>
+            )}
+
             {/* ── Order progress stepper ─────────────────────────────────────────
                 Shows the 5-stage delivery journey with the current stage highlighted */}
             <OrderStepper status={order.status} />
+
+            {/* QR payment window — only ever renders for a QR order still
+                inside its 10-minute (or extended) proof-upload window,
+                the exact same countdown + upload + extend panel Checkout
+                shows right after placing the order, so a customer who
+                navigates here directly (or reloads mid-checkout) sees
+                the identical live experience instead of a dead end. */}
+            {order.status === ORDER_STATUS.ORDER_PLACED &&
+              order.payment?.method === PAYMENT_METHOD.QR && (
+                <QrPaymentPanel
+                  orderNumber={order.order_number}
+                  qrImageUrl={order.payment?.qr_image_url}
+                  paymentReference={order.order_number}
+                  qrUploadDeadline={order.payment?.qr_upload_deadline}
+                  qrExtensionUsed={order.payment?.qr_extension_used}
+                />
+              )}
 
             {/* ── Main content grid ──────────────────────────────────────────────
                 Single column on mobile; 3-column grid on lg+ screens
@@ -352,6 +380,8 @@ const OrderDetail = () => {
                 {/* Product thumbnails, names, quantities, and price breakdown */}
                 <PaymentInfo order={order} />{" "}
                 {/* Payment method icon, transaction ID, and paid badge */}
+                <OrderStatusTimeline history={order.status_history} />{" "}
+                {/* Chronological status timeline — renders nothing if empty */}
               </div>
 
               {/* ── Right column — contextual sidebar ────────────────────────── */}

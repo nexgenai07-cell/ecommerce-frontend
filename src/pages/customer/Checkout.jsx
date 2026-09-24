@@ -1,5 +1,5 @@
 // React hooks — useState for local state, useEffect for side effects like redirect-on-load checks
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 // React Router hooks — useNavigate to redirect programmatically, useSearchParams
 // to read the "resume" query param used by the failed-payment retry flow
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
@@ -40,12 +40,12 @@ import {
 import { createPaymentIntent } from "../../api/payments.api";
 // API 7 — the customer's own profile. Its email is shown read-only on this page
 // (the Order Confirmation OTP and order emails always go to it), and its phone
-// is used to prefill the phone field.
+// is the ONLY source for the read-only phone field on this page (see the
+// PHONE PREFILL effect below) — it is never taken from the selected delivery
+// address. phone_verified drives the phone re-verification banner below.
 import { getMyProfile } from "../../api/auth.api";
-// API 55.1 / 55.2 — the customer's saved addresses (Address Book), and the
-// update call used to keep the phone of the selected address in step with the
-// phone typed on this page
-import { getAddresses, updateAddress } from "../../api/addresses.api";
+// API 55.1 — the customer's saved addresses (Address Book)
+import { getAddresses } from "../../api/addresses.api";
 // Normalizes a list response that may be a plain array or a paginated object
 import extractListData from "../../utils/extractListData";
 // Custom hook providing authentication state (isAuthenticated flag and logged-in user info)
@@ -142,30 +142,6 @@ const SHIPPING_COSTS = {
 // the meantime, and is overridden by the server's value if it ever
 // disagrees.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
-
-// =============================================
-// PHONE HELPERS
-// =============================================
-// Reduces a phone number to a comparable form: keeps digits and a leading
-// "+", and rewrites the +92 country prefix as the local leading 0, so
-// "+923001234567" and "03001234567" compare as the same number.
-const normalizePhone = (phone) => {
-  const compact = (phone || "").replace(/[^\d+]/g, "");
-  return compact.startsWith("+92") ? `0${compact.slice(3)}` : compact;
-};
-
-// Builds the request body for updating a saved address (API 55.2) with a
-// new phone number while keeping every other field exactly as it is
-// stored. The optional postal code is only included when the address has
-// one.
-const buildAddressUpdatePayload = (address, phone) => ({
-  label: address.label,
-  shipping_address: address.shipping_address,
-  city: address.city,
-  ...(address.postal_code && { postal_code: address.postal_code }),
-  phone,
-  is_default: !!address.is_default,
-});
 
 // =============================================
 // BUY NOW PRODUCT IMAGE
@@ -393,9 +369,9 @@ const Checkout = () => {
   // as "payment_method" on the Checkout request, and decides whether
   // "payment" (Stripe) or "qr" (QR) step is shown next.
   const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHOD.STRIPE);
-  // qr_image_url / payment_reference — only present in the Checkout
-  // response when payment_method: "qr" was sent; passed straight into
-  // QrPaymentPanel on the "qr" step.
+  // qr_image_url / payment_reference / qr_upload_deadline — only
+  // present in the Checkout response when payment_method: "qr" was
+  // sent; passed straight into QrPaymentPanel on the "qr" step.
   const [qrPaymentDetails, setQrPaymentDetails] = useState(null);
   // Which saved Address Book entry the customer has picked for this
   // order — sent to the backend as "address_id" on checkout. Kept as
@@ -406,11 +382,6 @@ const Checkout = () => {
   // Shown under the address picker if the customer tries to continue
   // to payment without having selected (or added) an address.
   const [addressError, setAddressError] = useState("");
-  // Becomes true the first time the customer types in the phone field.
-  // Until then the phone is filled in automatically (see the phone
-  // prefill effect below); afterwards the customer's own number is never
-  // overwritten by an automatic prefill.
-  const phoneEditedByCustomerRef = useRef(false);
   // The order created by the Checkout API — needed to build the redirect URL
   // and to display on the payment step
   const [orderNumber, setOrderNumber] = useState(null);
@@ -549,9 +520,11 @@ const Checkout = () => {
   // =============================================
   // Same query and cache entry the address picker (AddressForm.jsx) uses.
   // It is read here as well because this page needs the selected address
-  // itself, not just its id: to prefill the phone, to keep that phone in
-  // step with the number typed on this page, and to block ordering while
-  // the address has no city.
+  // itself, not just its id: to block ordering while the address has no
+  // city. Note the address's own "phone" field is intentionally NOT read
+  // for anything on this page — the read-only Contact Information phone
+  // field always comes from the account's profile instead (see PHONE
+  // PREFILL below).
   const { data: addressesData } = useQuery({
     queryKey: QUERY_KEYS.ADDRESSES,
     queryFn: ({ signal }) => getAddresses(signal),
@@ -676,27 +649,22 @@ const Checkout = () => {
   // =============================================
   // PHONE PREFILL
   // =============================================
-  // The phone field starts from the phone saved on the selected delivery
-  // address (the number the order will actually use) and falls back to the
-  // phone on the customer's profile. It follows the selected address and
-  // the loaded profile only until the customer types in the field; after
-  // that, the customer's own number is never overwritten.
-  const selectedAddressPhone = selectedAddress?.phone || "";
-
+  // UPDATED (Sep 2026): the phone field is always read-only on this page
+  // and is now driven ONLY by the customer's registered account phone —
+  // the same number verified at registration (or re-verified via API
+  // 20.1/20.2), shown read-only on Profile too. It deliberately no
+  // longer follows the selected delivery address's own saved phone: a
+  // delivery address can carry its own, completely different phone
+  // (e.g. ordering as a gift for someone else), and that number is for
+  // the courier only — it must never leak into or override this
+  // account-level contact field. To change the number shown here, the
+  // customer has to go to Profile and update/re-verify it there; editing
+  // a delivery address's phone has no effect on this field at all.
   useEffect(() => {
-    if (phoneEditedByCustomerRef.current) return;
-
-    const prefillPhone = selectedAddressPhone || profilePhone;
-    if (prefillPhone && prefillPhone !== getValues("phone")) {
-      setValue("phone", prefillPhone);
+    if (profilePhone && profilePhone !== getValues("phone")) {
+      setValue("phone", profilePhone);
     }
-  }, [selectedAddressPhone, profilePhone, getValues, setValue]);
-
-  // Marks the phone as chosen by the customer. Passed to ContactForm and
-  // called whenever the customer types in the phone field.
-  const handlePhoneEdited = () => {
-    phoneEditedByCustomerRef.current = true;
-  };
+  }, [profilePhone, getValues, setValue]);
 
   // =============================================
   // STEP 1 — CREATE PAYMENT INTENT (API 69)
@@ -954,24 +922,16 @@ const Checkout = () => {
     // validates it again against this product's price × quantity and
     // uses it for this order only, never writing it to the cart.
     mutationFn: async (data) => {
-      // The backend ships an order sent with address_id to that saved
-      // address exactly as it is stored — including its phone — and
-      // ignores any phone sent on the same request. So when the customer
-      // typed a number that differs from the one saved on the selected
-      // address, the address is updated first (API 55.2); the order is
-      // then placed with address_id and uses the number the customer
-      // entered.
-      if (
-        selectedAddress &&
-        normalizePhone(data.phone) !== normalizePhone(selectedAddress.phone)
-      ) {
-        await updateAddress(
-          selectedAddress.id,
-          buildAddressUpdatePayload(selectedAddress, data.phone),
-        );
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ADDRESSES });
-      }
-
+      // UPDATED (Sep 2026): the phone field is never something the
+      // customer edits on this page — it is always read-only and always
+      // holds the account's registered/verified phone (see the PHONE
+      // PREFILL effect above), regardless of what phone is saved on the
+      // selected delivery address. address_id still resolves the order's
+      // actual delivery contact from that saved address on the backend
+      // side; the "phone" field below is sent for backward compatibility
+      // and is exempt from the backend's verified-number check whenever
+      // address_id is present. To change the number shown here, the
+      // customer updates it from Profile.
       return checkout({
         address_id: selectedAddressId,
         payment_method: paymentMethod,
@@ -1018,7 +978,18 @@ const Checkout = () => {
       // cleared" by a Buy Now order, so this page mirrors that exactly:
       // no Redux cart clear and no CART query invalidation, since
       // nothing about the real cart changed as a result of this order.
-      if (!isBuyNow) {
+      //
+      // QR — the cart is deliberately kept exactly as it is here too,
+      // for a different reason: a QR order starts life as
+      // "order_placed" with nothing paid yet, and stays that way until
+      // the customer actually uploads payment proof within the
+      // 10-minute window (or its one-time extension). Clearing the
+      // cart at this point would lose it for a customer who never
+      // completes payment. The cart is only cleared once proof upload
+      // actually succeeds — see handleQrProofUploaded below, passed
+      // into QrPaymentPanel as onProofUploaded. Stripe is unchanged:
+      // its cart clear still happens right here, immediately.
+      if (!isBuyNow && paymentMethod !== PAYMENT_METHOD.QR) {
         // Redux cart clear
         // Order create hote hi backend cart already clear kar chuka hai — Redux
         // side bhi turant clear kar dete hain taake UI turant sync ho jaye
@@ -1028,12 +999,14 @@ const Checkout = () => {
       }
 
       if (paymentMethod === PAYMENT_METHOD.QR) {
-        // QR orders never touch Stripe at all — qr_image_url and
-        // payment_reference come straight back on this same checkout
-        // response, so the customer can pay and upload proof right away.
+        // QR orders never touch Stripe at all — qr_image_url,
+        // payment_reference and the 10-minute qr_upload_deadline come
+        // straight back on this same checkout response, so the
+        // customer can pay and upload proof right away.
         setQrPaymentDetails({
           qrImageUrl: response.data.qr_image_url,
           paymentReference: response.data.payment_reference,
+          qrUploadDeadline: response.data.qr_upload_deadline,
         });
         setStep("qr");
         return;
@@ -1045,6 +1018,13 @@ const Checkout = () => {
 
     // Runs if the checkout API call fails
     onError: (error) => {
+      // NOTE (Sep 2026, backend-confirmed): phone_verification_required
+      // is not expected here anymore — it only fires for a manual
+      // one-off address without address_id, which this Address-Book
+      // checkout never sends (see the PHONE PREFILL comment above). If
+      // the backend ever does send it, the generic message/toast logic
+      // below still surfaces its "error" text to the customer.
+
       // Extracting the most specific error message available from the API
       // response, with fallbacks. The documented error shape for this
       // endpoint (otp_required, Buy Now, and coupon_code failures alike)
@@ -1260,6 +1240,16 @@ const Checkout = () => {
     setOtpError("");
   };
 
+  // Called by QrPaymentPanel the moment payment proof upload succeeds —
+  // this is the point where a QR order's cart actually gets cleared
+  // (see checkoutMutation.onSuccess above for why it's deliberately
+  // NOT cleared when the order is first placed).
+  const handleQrProofUploaded = () => {
+    if (isBuyNow) return;
+    handleClearCart();
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+  };
+
   // Called by PaymentMethod once stripe.confirmPayment() reports "succeeded"
   // client-side, without needing a redirect. The order's FINAL "confirmed"
   // status still comes from the Stripe webhook on the backend — this only
@@ -1377,7 +1367,6 @@ const Checkout = () => {
                       register={register}
                       errors={errors}
                       email={registeredEmail}
-                      onPhoneEdited={handlePhoneEdited}
                     />
                   </motion.div>
 
@@ -1488,7 +1477,7 @@ const Checkout = () => {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
-                        Pending Payment
+                        Awaiting Payment Proof
                       </span>
                       <button
                         type="button"
@@ -1504,6 +1493,8 @@ const Checkout = () => {
                     orderNumber={orderNumber}
                     qrImageUrl={qrPaymentDetails?.qrImageUrl}
                     paymentReference={qrPaymentDetails?.paymentReference}
+                    qrUploadDeadline={qrPaymentDetails?.qrUploadDeadline}
+                    onProofUploaded={handleQrProofUploaded}
                   />
                 </motion.div>
               ) : (

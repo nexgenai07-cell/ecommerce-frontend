@@ -3,6 +3,14 @@
 // ----------------------------
 
 export const ORDER_STATUS = {
+  // QR orders only — the order's very first status, the instant it's
+  // placed, while its 10-minute payment-proof upload window is still
+  // open (see qr_upload_deadline on the order and payment objects).
+  // Moves to PENDING (below) once proof is uploaded, or to CANCELLED if
+  // the window (plus its one-time extension) passes with no upload.
+  // Stripe orders never enter this status — they start at PENDING
+  // directly, exactly as before.
+  ORDER_PLACED: "order_placed",
   PENDING: "pending_payment", // Order placed, awaiting payment (Stripe confirmation or QR proof approval)
   // Legacy state for QR orders that were reopened after a rejected proof.
   // The backend does not assign it to new orders: a rejected QR order

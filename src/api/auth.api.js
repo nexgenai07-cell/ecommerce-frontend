@@ -185,6 +185,44 @@ export const confirmEmailChange = (data, signal) => {
 };
 
 // ----------------------------
+// API - Request a phone number change (Step 1 of 2)
+// ----------------------------
+// Used from the Profile page's Personal Information form when the
+// customer edits their phone number and saves. Sends a 6-digit code
+// to the account's registered email for the new number entered — the
+// account's phone is NOT changed by this call, only after
+// confirmPhoneChange() below succeeds with the correct code.
+//
+// Request shape: { phone: string }
+// Response (200): { message: string }
+export const requestPhoneChange = (phone, signal) => {
+  return axiosInstance.post(
+    "/api/v1/auth/me/phone/change/",
+    { phone },
+    { signal },
+  );
+};
+
+// ----------------------------
+// API - Confirm a phone number change (Step 2 of 2)
+// ----------------------------
+// Validates the 6-digit code sent by requestPhoneChange() above. Only
+// on a valid, unexpired code does the account's phone number actually
+// change — phone_verified is set to true at the same time, since
+// receiving and re-entering this code already proves the customer
+// controls the new number's inbox.
+//
+// Request shape: { otp: string (6 digits) }
+// Response (200): { message: string, user: {...} } — "user" is the
+// full profile object, same shape as getMyProfile(), with the new
+// phone number already reflected and phone_verified true.
+export const confirmPhoneChange = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/me/phone/confirm/", data, {
+    signal,
+  });
+};
+
+// ----------------------------
 // API - Change Password ★ NEW (v2 backend doc)
 // ----------------------------
 // Sends current_password (for verification) + new_password.
@@ -303,6 +341,46 @@ export const sendVerificationEmail = (email, signal) => {
 // token comes from the query string in the emailed link: /verify-email?token=xxx
 export const verifyEmail = (token, signal) => {
   return axiosInstance.get("/api/v1/auth/verify-email/", {
+    signal,
+    params: { token },
+  });
+};
+
+// ----------------------------
+// API - Send Phone Verification
+// ----------------------------
+// Used when a logged-in customer needs to verify a phone number that
+// differs from the one already verified on their account — most
+// commonly triggered from the Checkout page when the typed phone
+// doesn't match the account's verified number (see Checkout's
+// phone_verification_required handling in orders.api.js's checkout()
+// comments). Emails a verification LINK to the account's own email
+// address, the same way the registration verification link works —
+// there is no SMS gateway, so this never texts the new number itself.
+// Does nothing (no email sent) if the number given is already this
+// account's currently-verified number; the response still comes back
+// 200 in that case, with already_verified: true.
+//
+// Request shape: { phone: string }
+// Response (200): { message: string } or, when already verified,
+// { message: string, already_verified: true }
+export const sendPhoneVerification = (phone, signal) => {
+  return axiosInstance.post(
+    "/api/v1/auth/send-phone-verification/",
+    { phone },
+    { signal },
+  );
+};
+
+// ----------------------------
+// API - Verify Phone
+// ----------------------------
+// token comes from the query string in the emailed link, sent by
+// sendPhoneVerification() above: /verify-phone?token=xxx. On success
+// the account's phone field is updated to this new number and
+// phone_verified is set true — mirrors verifyEmail() above exactly.
+export const verifyPhone = (token, signal) => {
+  return axiosInstance.get("/api/v1/auth/verify-phone/", {
     signal,
     params: { token },
   });

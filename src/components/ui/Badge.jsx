@@ -9,6 +9,12 @@ import cn from "../../utils/cn";
 import getStatusColor from "../../utils/getStatusColor";
 // getStatusColor utility — maps a status string (e.g. "delivered") to the correct Tailwind color classes automatically
 
+import formatBadgeLabel from "../../utils/formatBadgeLabel";
+// formatBadgeLabel utility — normalizes the displayed text into a clean,
+// consistent uppercase format (e.g. "pending_payment" -> "PENDING PAYMENT")
+// so every badge across the app looks the same, regardless of whether the
+// caller passes an already-formatted label or a raw backend value
+
 const Badge = ({
   label = "", // Text rendered inside the badge (e.g. "Delivered", "Pending", "Cancelled")
   variant = "", // Manually chosen color variant — used when no status string is provided
@@ -59,7 +65,7 @@ const Badge = ({
     <span
       className={cn(
         // Base classes — applied to every badge instance
-        "inline-flex items-center font-medium",
+        "inline-flex items-center font-medium ",
         // inline-flex + items-center: vertically centers text and icon inside the badge
         // font-medium: slightly bold text for better legibility at small sizes
 
@@ -87,8 +93,10 @@ const Badge = ({
         <span className="inline-flex items-center shrink-0">{icon}</span>
       )}
 
-      {label}
-      {/* Renders the badge text — e.g. "Delivered", "Pending", "Cancelled" */}
+      {formatBadgeLabel(label)}
+      {/* Renders the badge text in a clean, uppercase, underscore-free
+          format — e.g. "delivered" or "pending_payment" (raw backend
+          values) are displayed as "DELIVERED" and "PENDING PAYMENT" */}
     </span>
   );
 };

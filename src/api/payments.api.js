@@ -197,6 +197,29 @@ export const bulkRejectQrPayments = (orderNumbers, reason, signal) => {
 };
 
 // ----------------------------
+// Extend the QR payment upload window (customer)
+// ----------------------------
+// The customer's "Need more time?" action. Usable exactly once per
+// order, and only while the order is still "order_placed" (i.e. no
+// proof uploaded yet) — extends qr_upload_deadline to 5 minutes from
+// the moment this is called, not from the original deadline.
+//
+// Request: { order_number: string }
+// Response (200): { message, qr_upload_deadline } — restart the
+// countdown from this new deadline.
+// Possible 400 errors (under an "error" key): not a QR order, the
+// order has already moved past the upload window (proof uploaded or
+// already cancelled), or the one-time extension has already been used
+// for this order.
+export const extendQrUploadTime = (orderNumber, signal) => {
+  return axiosInstance.post(
+    "/api/v1/payments/qr/extend-time/",
+    { order_number: orderNumber },
+    { signal },
+  );
+};
+
+// ----------------------------
 // Upload QR payment proof (customer)
 // ----------------------------
 // Called ONLY for payment_method: "qr" orders — once the customer has
@@ -213,23 +236,33 @@ export const bulkRejectQrPayments = (orderNumbers, reason, signal) => {
 // - screenshot: image file (required)
 // - transaction_id: string (optional)
 //
-// Effect of an accepted upload: payment.status -> "under_review". The
-// order stays "pending_payment" and its stock stays reserved, for a
-// first upload and for a retry alike — nothing else changes until an
-// admin approves or rejects the proof.
+// Effect of an accepted upload: payment.status -> "under_review". If
+// the order was still "order_placed" (a first, never-uploaded QR
+// order, still inside its window), it also moves straight to
+// "pending_payment" in this same step, and the customer's cart —
+// deliberately kept untouched until now — is cleared for the first
+// time right here. If the order was already "pending_payment" (a
+// retry after a rejected proof), only payment.status changes; the
+// order status and the cart (already cleared long before) are
+// untouched.
+//
+// If the 10-minute window (plus its one-time 5-minute extension, see
+// extendQrUploadTime above) has already passed, this call is refused
+// and the order is cancelled on the spot as a safety net — see the
+// windowExpired handling in QrProofUploadForm.jsx.
 //
 // Retries: after the 1st or 2nd rejection a new upload is accepted.
 // After the 3rd rejection the order is permanently cancelled and any
 // further upload is refused. A cancelled order for any other reason is
 // refused with a generic cancelled message.
 //
-// Response: { order_number, order_status: "pending_payment", payment:
-// { status, screenshot_url }, duplicate_warning,
-// reopened_after_rejection }. reopened_after_rejection is true when
-// this upload is a retry after an earlier rejection. Errors are
-// returned under an "error" key — e.g. "This order has been
-// cancelled." or "Maximum re-upload attempts (3) reached for this
-// order...".
+// Response: { order_number, order_status, payment: { status,
+// screenshot_url }, duplicate_warning, reopened_after_rejection }.
+// reopened_after_rejection is true when this upload is a retry after
+// an earlier rejection. Errors are returned under an "error" key —
+// e.g. "This order has been cancelled.", "Maximum re-upload attempts
+// (3) reached for this order...", or the new "the time window ... has
+// expired and the order has been cancelled." message.
 export const uploadQrProof = (data, signal) => {
   const formData = new FormData();
   formData.append("order_number", data.order_number);

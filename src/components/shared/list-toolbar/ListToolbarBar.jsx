@@ -103,7 +103,9 @@ const ListToolbarBar = ({
       {onSearchChange && (
         <>
           {isSearchOpen ? (
-            <div className="relative w-full sm:w-52 shrink-0">
+            <div className="relative w-full sm:w-80 shrink-0">
+              {" "}
+              {/* Slightly narrowed from sm:w-96 to sm:w-80 — still wide enough to show the full placeholder text without clipping, just less wide than before */}
               <input
                 ref={searchInputRef}
                 autoFocus
