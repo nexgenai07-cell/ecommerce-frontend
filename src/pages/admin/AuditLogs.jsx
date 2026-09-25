@@ -214,9 +214,12 @@ const AuditLogs = () => {
       key: "user",
       label: "User",
       render: (row) => (
+        // user_name — API 82 (24 Sep 2026). The acting admin's readable
+        // name (e.g. "Ali Khan"; "System" for an automated action).
+        // Previously this column had no readable name to fall back
+        // to and showed the raw numeric user id instead.
         <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
-          {(typeof row.user === "object" ? row.user?.name : row.user) ||
-            "System"}
+          {row.user_name || "System"}
         </span>
       ),
     },

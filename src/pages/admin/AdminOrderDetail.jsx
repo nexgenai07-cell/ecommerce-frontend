@@ -705,6 +705,16 @@ const AdminOrderDetail = () => {
                   rejected and the customer has uploaded a new one.
                 </p>
               )}
+            {/* qr_reject_reason — API 61 (24 Sep 2026). The reason this
+                admin (or another admin) typed when rejecting this
+                order's QR payment proof. Shown whenever payment.status
+                is "rejected"; null if the payment was never rejected. */}
+            {order.payment?.status === PAYMENT_STATUS.REJECTED &&
+              order.payment?.qr_reject_reason && (
+                <p className="text-xs text-danger">
+                  Rejected: {order.payment.qr_reject_reason}
+                </p>
+              )}
           </div>
 
           {/* Order Summary */}

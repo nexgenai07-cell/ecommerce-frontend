@@ -87,6 +87,22 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
           )}
         </div>
       </div>
+
+      {/* Purchase Price — API 31/32 (24 Sep 2026). Admin-only cost
+          price, used by the backend to calculate profit (price -
+          purchase_price). Optional: leave blank when the cost price
+          isn't known yet. Never shown to customers. */}
+      <Input
+        label="Purchase Price"
+        type="number"
+        step="0.01"
+        min="0"
+        placeholder="e.g. 1200"
+        hint="Optional — your cost price for this product, used to calculate profit. Never shown to customers."
+        leftIcon={<span className="text-gray-400">Rs.</span>}
+        {...register("purchase_price")}
+        error={errors.purchase_price?.message}
+      />
     </div>
   );
 };

@@ -406,6 +406,26 @@ const OrderManagement = () => {
       ),
     },
     {
+      // Payment Status — API 60/62 (24 Sep 2026). The linked Payment's
+      // status (pending / under_review / paid / rejected / refunded),
+      // previously visible only in the CSV export, now available on
+      // this table endpoint too. null when the order has no payment
+      // record yet, shown as a plain dash rather than an empty badge.
+      key: "payment_status",
+      label: "Payment Status",
+      render: (row) =>
+        row.payment_status ? (
+          <Badge
+            label={row.payment_status}
+            status={row.payment_status}
+            size="sm"
+            rounded
+          />
+        ) : (
+          <span className="text-[10px] sm:text-[11px] text-gray-400">—</span>
+        ),
+    },
+    {
       key: "created_at",
       label: "Date",
       render: (row) => (

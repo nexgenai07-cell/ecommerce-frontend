@@ -77,6 +77,22 @@ const productSchema = z
         (val) => !val || parseFloat(val) > 0,
         "Original price must be greater than 0",
       ),
+    // Purchase Price — API 32 (24 Sep 2026). Optional cost price, used
+    // by the backend to calculate profit. The backend itself rejects
+    // a negative value with a 400, so this mirrors that rule
+    // client-side to catch it before the request is even sent.
+    purchase_price: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (val) => !val || !Number.isNaN(parseFloat(val)),
+        "Purchase price must be a valid number",
+      )
+      .refine(
+        (val) => !val || parseFloat(val) >= 0,
+        "Purchase price cannot be negative",
+      ),
     low_stock_threshold: z
       .string()
       .trim()
@@ -160,6 +176,7 @@ const ProductEdit = () => {
       category_id: "",
       price: "",
       original_price: "",
+      purchase_price: "",
       low_stock_threshold: "5",
       sku: "",
       is_active: true,
@@ -208,6 +225,11 @@ const ProductEdit = () => {
         category_id: String(product.category?.id || ""),
         price: String(product.price ?? ""),
         original_price: String(product.original_price ?? ""),
+        // purchase_price — API 32 (24 Sep 2026). Admin-only cost price;
+        // arrives as null when never set, so this pre-fills to an
+        // empty string (blank field) rather than the literal "null".
+        purchase_price:
+          product.purchase_price != null ? String(product.purchase_price) : "",
         low_stock_threshold: String(product.low_stock_threshold ?? "5"),
         sku: product.sku || "",
         is_active: !!product.is_active,
@@ -302,6 +324,10 @@ const ProductEdit = () => {
     category: Number(data.category_id),
     price: data.price,
     original_price: data.original_price || data.price,
+    // purchase_price — API 32 (24 Sep 2026). Sent as null when the
+    // admin clears the field, so an existing cost price can be
+    // removed, not just added or changed.
+    purchase_price: data.purchase_price ? data.purchase_price : null,
     low_stock_threshold: Number(data.low_stock_threshold || 5),
     sku: data.sku || "",
     is_active: data.is_active,

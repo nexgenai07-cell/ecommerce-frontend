@@ -12,6 +12,7 @@
 
 import {
   ORDER_STATUS,
+  PAYMENT_STATUS,
   RETURN_STATUS,
   COMPLAINT_STATUS,
 } from "../constants/statusTypes";
@@ -69,6 +70,28 @@ const getStatusColor = (status) => {
       // Order was cancelled — danger (red) token signals a
       // "negative/failed" outcome
       return "bg-danger-light text-danger";
+
+    // ==================================================
+    // PAYMENT STATUSES
+    // ==================================================
+    // PAYMENT_STATUS.PENDING ("pending") and PAYMENT_STATUS.REJECTED
+    // ("rejected") are intentionally NOT repeated here — they share
+    // the exact same string values as RETURN_STATUS.REQUESTED and
+    // RETURN_STATUS.REJECTED below, which already resolve to the same
+    // warning/danger colors a payment in those states should show.
+    case PAYMENT_STATUS.UNDER_REVIEW:
+      // QR proof uploaded, awaiting admin approval — warning (amber)
+      // token, same "waiting on a decision" meaning used elsewhere
+      return "bg-warning-light text-warning";
+
+    case PAYMENT_STATUS.PAID:
+      // Payment successfully completed — success (emerald) token
+      return "bg-success-light text-success";
+
+    case PAYMENT_STATUS.REFUNDED:
+      // Payment refunded back to the customer — neutral gray, same
+      // pairing PaymentInfo.jsx already uses for this state
+      return "bg-gray-100 text-gray-600";
 
     // ==================================================
     // RETURN STATUSES

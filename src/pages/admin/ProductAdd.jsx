@@ -70,6 +70,22 @@ const productSchema = z
         (val) => !val || parseFloat(val) > 0,
         "Original price must be greater than 0",
       ),
+    // Purchase Price — API 31 (24 Sep 2026). Optional cost price, used
+    // by the backend to calculate profit. The backend itself rejects
+    // a negative value with a 400, so this mirrors that rule
+    // client-side to catch it before the request is even sent.
+    purchase_price: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (val) => !val || !Number.isNaN(parseFloat(val)),
+        "Purchase price must be a valid number",
+      )
+      .refine(
+        (val) => !val || parseFloat(val) >= 0,
+        "Purchase price cannot be negative",
+      ),
     stock: z
       .string()
       .trim()
@@ -167,6 +183,7 @@ const ProductAdd = () => {
       category_id: "",
       price: "",
       original_price: "",
+      purchase_price: "",
       stock: "",
       low_stock_threshold: "5",
       sku: "",
@@ -290,6 +307,8 @@ const ProductAdd = () => {
       formData.append("category_id", data.category_id);
       formData.append("price", data.price);
       formData.append("original_price", data.original_price || data.price);
+      if (data.purchase_price)
+        formData.append("purchase_price", data.purchase_price);
       formData.append("stock", data.stock);
       formData.append("low_stock_threshold", data.low_stock_threshold || "5");
       if (data.sku) formData.append("sku", data.sku);

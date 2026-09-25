@@ -190,6 +190,20 @@ const PaymentInfo = ({ order }) => {
         </div>
       )}
 
+      {/* Rejection reason — API 57 (24 Sep 2026). The reason an admin
+          typed when rejecting this order's QR payment proof; shown
+          whenever payment.status is "rejected", regardless of
+          whether the order is still waiting on a new upload or has
+          since been cancelled after the third rejection. null if the
+          payment was never rejected. */}
+      {paymentStatus === "rejected" && payment.qr_reject_reason && (
+        <div className="px-5 pb-4">
+          <p className="text-xs text-danger">
+            Rejected: {payment.qr_reject_reason}
+          </p>
+        </div>
+      )}
+
       {/* Refund details — only ever set for manually-refunded QR cancellations */}
       {paymentStatus === "refunded" && payment.refund_method && (
         <div className="px-5 pb-4 flex flex-col gap-0.5">

@@ -24,7 +24,7 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { getCategories } from "../../api/categories.api";
 import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the categories endpoint)
-import { searchProducts, getProducts } from "../../api/products.api";
+import { getProductSuggestions } from "../../api/products.api";
 import { logoutUser as logoutApi } from "../../api/auth.api";
 import { getWishlist } from "../../api/wishlist.api";
 import { getCart } from "../../api/cart.api";
@@ -144,78 +144,22 @@ const CustomerNavbar = () => {
     (n) => !n.is_read,
   ).length;
 
-  // ===== SEARCH SUGGESTIONS — real API, debounced, min 2 chars =====
-  const { data: searchData, isLoading: searchLoading } = useQuery({
+  // ===== SEARCH SUGGESTIONS — API 29.1, debounced, min 2 chars =====
+  // Dedicated suggestions endpoint (replaces the old direct product
+  // search + local category-name fallback below it). The backend now
+  // matches by name, SKU, OR category name itself and ranks the
+  // result, so a single call here covers every case the old two-query
+  // fallback used to patch over in the browser.
+  //
+  // Response is a plain array (not the paginated { results } shape),
+  // already capped at 6 items and already ranked by relevance.
+  const { data: suggestionsData, isLoading: suggestionsLoading } = useQuery({
     queryKey: ["search-suggestions", searchQuery],
-    queryFn: ({ signal }) =>
-      searchProducts({ q: searchQuery, limit: 4 }, signal),
+    queryFn: ({ signal }) => getProductSuggestions(searchQuery, signal),
     enabled: searchQuery.length >= 2,
     staleTime: 1000 * 30,
   });
-  const searchResults = searchData?.data?.results || [];
-
-  // ===== CATEGORY-NAME FALLBACK FOR SEARCH =====
-  // Problem this solves: the backend's /products/search/ endpoint only
-  // matches against each PRODUCT's own name/description — it does NOT
-  // match category names. So typing a category name (e.g. "Shoes") into
-  // the search bar returned zero product results even though products
-  // in that category obviously exist. This block detects that case and
-  // fills the same dropdown with real products from the matching
-  // category instead of a dead-end "No products found" message.
-
-  // Look for a category whose name contains what the person typed (or
-  // vice versa), case-insensitively — e.g. typing "shoe" matches a
-  // "Shoes" category. `categories` was already fetched above for the
-  // "Popular Categories" pills, so this is just a local array search,
-  // no extra network request needed for the matching step itself.
-  const matchedCategory = categories.find((cat) =>
-    cat.name?.toLowerCase().includes(searchQuery.trim().toLowerCase()),
-  );
-
-  // Only fires when ALL of these are true, to avoid unnecessary API calls:
-  // - the person typed enough characters to search (>= 2)
-  // - the direct product text search has finished loading
-  // - that direct text search came back with zero results
-  // - what they typed actually matches a real category name
-  const shouldFetchCategoryFallback =
-    searchQuery.length >= 2 &&
-    !searchLoading &&
-    searchResults.length === 0 &&
-    !!matchedCategory;
-
-  const { data: categoryFallbackData, isLoading: categoryFallbackLoading } =
-    useQuery({
-      queryKey: ["search-suggestions-by-category", matchedCategory?.id],
-      queryFn: ({ signal }) =>
-        getProducts({ category_id: matchedCategory.id, limit: 4 }, signal),
-      enabled: shouldFetchCategoryFallback,
-      staleTime: 1000 * 30,
-    });
-  // Same response shape as searchProducts (DRF paginated: { results: [...] }),
-  // so this is read the exact same way as searchResults above.
-  const categoryFallbackResults = categoryFallbackData?.data?.results || [];
-
-  // ===== FINAL VALUES USED BY THE DROPDOWN UI =====
-  // Prefer direct product-name/description matches. Only when there are
-  // NONE of those do we show the category-matched products instead —
-  // this keeps normal product search behaving exactly as before, and
-  // only kicks in the fallback for the specific "typed a category name"
-  // case described above.
-  const displayedSuggestions =
-    searchResults.length > 0
-      ? searchResults
-      : categoryFallbackResults.slice(0, 4);
-
-  // True only when we're actually showing the fallback category results
-  // (not the normal text-match results) — used to swap the section
-  // heading so it's honest about where these products came from.
-  const isShowingCategoryFallback =
-    searchResults.length === 0 && categoryFallbackResults.length > 0;
-
-  // Combined loading flag so the skeleton shows correctly whether we're
-  // still waiting on the text search OR on the category fallback search.
-  const suggestionsLoading =
-    searchLoading || (shouldFetchCategoryFallback && categoryFallbackLoading);
+  const displayedSuggestions = suggestionsData?.data || [];
 
   // Stable debounced setter — created once via useRef so the timer
   // isn't lost/reset on every re-render
@@ -415,7 +359,7 @@ const CustomerNavbar = () => {
               <div className="relative w-full">
                 <input
                   type="text"
-                  placeholder="Search for products, brands..."
+                  placeholder="Search by product name, SKU, or category..."
                   onChange={handleSearchInput}
                   onFocus={() => setSearchOpen(true)}
                   maxLength={25}
@@ -477,9 +421,7 @@ const CustomerNavbar = () => {
                       {searchQuery.length >= 2 && (
                         <div>
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                            {isShowingCategoryFallback
-                              ? `Products in "${matchedCategory.name}"`
-                              : "Suggested Products"}
+                            Suggested Products
                           </p>
 
                           {suggestionsLoading && (
@@ -538,14 +480,10 @@ const CustomerNavbar = () => {
 
                                 <button
                                   onClick={() =>
-                                    isShowingCategoryFallback
-                                      ? handleSearchNavigate(
-                                          `${ROUTES.PRODUCTS}?category_id=${matchedCategory.id}`,
-                                        )
-                                      : handleSearchNavigate(
-                                          `${ROUTES.SEARCH}?q=${searchQuery}`,
-                                          searchQuery,
-                                        )
+                                    handleSearchNavigate(
+                                      `${ROUTES.SEARCH}?q=${searchQuery}`,
+                                      searchQuery,
+                                    )
                                   }
                                   className="flex items-center justify-center gap-1 w-full text-xs font-semibold text-primary hover:underline mt-2 py-1"
                                 >
@@ -908,7 +846,7 @@ const CustomerNavbar = () => {
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Search products..."
+                      placeholder="Search by name, SKU, or category..."
                       onChange={handleSearchInput}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && e.target.value.trim()) {

@@ -13,8 +13,14 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API  - Get a paginated list of all products
+// API 28 - Get a paginated list of all products
 // ----------------------------
+// UPDATED (24 Sep 2026): each product in the response now also
+// includes purchase_price and profit. Both are admin-only — for an
+// authenticated admin (role="admin") they return real values, for
+// any anonymous or customer request both serialize as null and must
+// never be treated as real data. purchase_price is also null for any
+// product that has no cost price saved yet.
 export const getProducts = (params, signal) => {
   return axiosInstance.get("/api/v1/products/", { signal, params });
 };
@@ -63,19 +69,48 @@ export const searchProducts = (params, signal) => {
 };
 
 // ----------------------------
-// API  - Get full details of a single product
+// API 29.1 - Get navbar search-suggestions (Admin: not required)
 // ----------------------------
+// NEW endpoint (24 Sep 2026), built specifically for the navbar's
+// live-suggestions dropdown. Matches products by name, SKU, or
+// category name, ranked by relevance, capped at 6 results.
+//
+// q -> required for real results; blank/missing returns [].
+//
+// IMPORTANT: unlike searchProducts() above, this response is a plain
+// array, NOT the { count, next, previous, results } paginated shape.
+// Read the array directly from response.data — do not reach for
+// response.data.results here.
+export const getProductSuggestions = (q, signal) => {
+  return axiosInstance.get("/api/v1/products/suggestions/", {
+    signal,
+    params: { q },
+  });
+};
+
+// ----------------------------
+// API 30 - Get full details of a single product
+// ----------------------------
+// UPDATED (24 Sep 2026): same purchase_price / profit addition as
+// API 28 above — admin-only, null for a customer/anonymous request.
 export const getProductById = (id, signal) => {
   return axiosInstance.get(`/api/v1/products/${id}/`, { signal });
 };
 
 // ----------------------------
-// API - Create a new product (Admin only)
+// API 31 - Create a new product (Admin only)
 // ----------------------------
 // UPDATED (Sep 2026, API 31 backend fix): sku now has a hard
 // 15-character cap enforced server-side — a longer value gets a 400
 // ("SKU cannot be longer than 15 characters."). Validated client-side
 // too, see the sku field in ProductAdd.jsx's Zod schema.
+//
+// UPDATED (24 Sep 2026): now also accepts an optional purchase_price
+// field — the store's cost price for this product, used only to
+// calculate profit (price - purchase_price). Must be zero or a
+// positive number; a negative value is rejected with a 400
+// ({ purchase_price: ["Purchase price cannot be negative."] }).
+// purchase_price is never shown to customers.
 export const createProduct = (data, signal) => {
   return axiosInstance.post("/api/v1/products/", data, {
     signal,
@@ -110,7 +145,7 @@ export const checkProductSkuExists = (sku, excludeId, signal) => {
 };
 
 // ----------------------------
-// API - Update an existing product (Admin only)
+// API 32 - Update an existing product (Admin only)
 // ----------------------------
 // NOTE: "stock" is intentionally NOT sent through this endpoint anymore.
 // Stock changes (add/remove/correction) now go through the dedicated
@@ -118,6 +153,9 @@ export const checkProductSkuExists = (sku, excludeId, signal) => {
 // on the backend. This endpoint stays for name/price/category/etc. only.
 // UPDATED (Sep 2026, API 32 backend fix): same 15-character sku cap as
 // createProduct() above now applies here too.
+//
+// UPDATED (24 Sep 2026): same optional purchase_price field and
+// negative-value validation as createProduct() above.
 export const updateProduct = (id, data, signal) => {
   return axiosInstance.put(`/api/v1/products/${id}/`, data, { signal });
 };
