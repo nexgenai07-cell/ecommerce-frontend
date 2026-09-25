@@ -45,6 +45,10 @@ const PARAM = {
   PAGE: "page",
   PAGE_SIZE: "page_size",
   VIEW: "view",
+  // Free-text query, e.g. from the navbar's "View All Results", Recent
+  // Searches, or mobile search Enter key — matches the backend search
+  // endpoint's own "search" param name (see products.api.js).
+  SEARCH: "search",
 };
 
 // Sort order applied when the URL does not specify one (newest first)
@@ -83,31 +87,35 @@ const Products = () => {
   // Parsed once per URL change so the filters object keeps a stable
   // identity between renders (the filter panel resets its draft whenever
   // that object changes).
-  const { filters, sortBy, viewMode, currentPage, pageSize } = useMemo(() => {
-    const params = new URLSearchParams(paramsKey);
-    const requestedPageSize = parsePositiveInt(params.get(PARAM.PAGE_SIZE));
+  const { filters, sortBy, viewMode, currentPage, pageSize, search } =
+    useMemo(() => {
+      const params = new URLSearchParams(paramsKey);
+      const requestedPageSize = parsePositiveInt(params.get(PARAM.PAGE_SIZE));
 
-    return {
-      filters: {
-        ...DEFAULT_FILTERS,
-        categories: parseCategoryIds(params.get(PARAM.CATEGORY)),
-        minPrice: parsePrice(params.get(PARAM.MIN_PRICE)),
-        maxPrice: parsePrice(params.get(PARAM.MAX_PRICE)),
-        inStock: params.get(PARAM.IN_STOCK) === "true",
-      },
-      // Sort order (e.g. "-price", "price", "-created_at")
-      sortBy: params.get(PARAM.SORT) || DEFAULT_SORT,
-      // "grid" or "list" — controls which layout renders the product results
-      viewMode: params.get(PARAM.VIEW) === "list" ? "list" : "grid",
-      // Current page number for pagination
-      currentPage: parsePositiveInt(params.get(PARAM.PAGE)) || 1,
-      // How many products are shown per UI page, controlled by the "Rows per
-      // page" dropdown in the Pagination control below
-      pageSize: UI_PAGE_SIZE_OPTIONS.includes(requestedPageSize)
-        ? requestedPageSize
-        : DEFAULT_UI_PAGE_SIZE,
-    };
-  }, [paramsKey]);
+      return {
+        filters: {
+          ...DEFAULT_FILTERS,
+          categories: parseCategoryIds(params.get(PARAM.CATEGORY)),
+          minPrice: parsePrice(params.get(PARAM.MIN_PRICE)),
+          maxPrice: parsePrice(params.get(PARAM.MAX_PRICE)),
+          inStock: params.get(PARAM.IN_STOCK) === "true",
+        },
+        // Sort order (e.g. "-price", "price", "-created_at")
+        sortBy: params.get(PARAM.SORT) || DEFAULT_SORT,
+        // "grid" or "list" — controls which layout renders the product results
+        viewMode: params.get(PARAM.VIEW) === "list" ? "list" : "grid",
+        // Current page number for pagination
+        currentPage: parsePositiveInt(params.get(PARAM.PAGE)) || 1,
+        // How many products are shown per UI page, controlled by the "Rows per
+        // page" dropdown in the Pagination control below
+        pageSize: UI_PAGE_SIZE_OPTIONS.includes(requestedPageSize)
+          ? requestedPageSize
+          : DEFAULT_UI_PAGE_SIZE,
+        // Free-text search query from the navbar, trimmed; empty string
+        // when the page was opened without one (normal browsing/filtering)
+        search: (params.get(PARAM.SEARCH) || "").trim(),
+      };
+    }, [paramsKey]);
 
   // Whether the mobile filter drawer is currently open
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -125,6 +133,7 @@ const Products = () => {
       viewMode,
       currentPage,
       pageSize,
+      search,
       ...changes,
     };
     const params = new URLSearchParams(searchParams);
@@ -155,6 +164,9 @@ const Products = () => {
     if (next.pageSize !== DEFAULT_UI_PAGE_SIZE) {
       params.set(PARAM.PAGE_SIZE, String(next.pageSize));
     }
+    if (next.search) {
+      params.set(PARAM.SEARCH, next.search);
+    }
 
     setSearchParams(params, { replace: true });
   };
@@ -162,11 +174,12 @@ const Products = () => {
   // When the page is opened or re-targeted through a category link, bring
   // the results back into view from the top
   const categoryParam = searchParams.get(PARAM.CATEGORY);
+  const searchParam = searchParams.get(PARAM.SEARCH);
   useEffect(() => {
-    if (categoryParam) {
+    if (categoryParam || searchParam) {
       scrollToTop();
     }
-  }, [categoryParam]);
+  }, [categoryParam, searchParam]);
 
   // Called whenever any filter changes (from the sidebar, toolbar chips, etc.)
   const handleFiltersChange = (newFilters) => {
@@ -208,6 +221,7 @@ const Products = () => {
     sortBy,
     uiPage: currentPage,
     pageSize,
+    search,
   });
 
   // Extract the current page's products, defaulting to an empty array
@@ -250,7 +264,7 @@ const Products = () => {
               </div>
               <div className="flex flex-col gap-1">
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
-                  All Products
+                  {search ? `Results for "${search}"` : "All Products"}
                 </h1>
                 {/* Live result count pill */}
                 <span className="inline-flex items-center gap-1.5 w-fit px-2.5 py-0.5 rounded-full bg-primary-50 text-primary text-xs font-semibold">
@@ -317,7 +331,7 @@ const Products = () => {
               <div className="flex-1 min-h-0">
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={`${viewMode}-${currentPage}-${JSON.stringify(filters)}-${sortBy}`}
+                    key={`${viewMode}-${currentPage}-${JSON.stringify(filters)}-${sortBy}-${search}`}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}

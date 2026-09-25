@@ -32,6 +32,12 @@ const useProductsSearch = ({
   // "Rows per page" selection on the Products page; defaults to the
   // original fixed page size for any caller that doesn't pass one.
   pageSize = DEFAULT_UI_PAGE_SIZE,
+  // Free-text query from the navbar search box ("View All Results",
+  // Recent Searches, mobile search Enter key). Sent to the backend as
+  // "search" — matches product name/SKU/category, same as the navbar's
+  // own live-suggestions endpoint. Optional — omitted entirely when
+  // the customer is just browsing/filtering without a text query.
+  search,
 }) => {
   const queryClient = useQueryClient();
 
@@ -41,6 +47,7 @@ const useProductsSearch = ({
     max_price: filters.maxPrice || undefined,
     in_stock: filters.inStock || undefined,
     ordering: sortBy || undefined,
+    search: search || undefined,
   };
 
   const selectedCategories = filters.categories || [];
@@ -52,7 +59,7 @@ const useProductsSearch = ({
     selectedCategories.length > 0 ? selectedCategories.join(",") : undefined;
 
   return useQuery({
-    queryKey: ["products-list", filters, sortBy, uiPage, pageSize],
+    queryKey: ["products-list", filters, sortBy, uiPage, pageSize, search],
     queryFn: async () => {
       // Fetches ONE backend page, with its own cache key (category
       // selection + params + page), so the exact same page is never

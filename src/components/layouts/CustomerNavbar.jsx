@@ -359,7 +359,7 @@ const CustomerNavbar = () => {
               <div className="relative w-full">
                 <input
                   type="text"
-                  placeholder="Search by product name, SKU, or category..."
+                  placeholder="Search by product name or category..."
                   onChange={handleSearchInput}
                   onFocus={() => setSearchOpen(true)}
                   maxLength={25}
@@ -392,7 +392,7 @@ const CustomerNavbar = () => {
                     transition={{ duration: 0.15 }}
                     className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl z-dropdown overflow-hidden"
                   >
-                    <div className="p-4 flex flex-col gap-4">
+                    <div className="p-4 flex flex-col gap-4 max-h-[420px] overflow-y-auto overflow-x-hidden">
                       {/* Popular category pills */}
                       {categories.length > 0 && (
                         <div>
@@ -481,7 +481,7 @@ const CustomerNavbar = () => {
                                 <button
                                   onClick={() =>
                                     handleSearchNavigate(
-                                      `${ROUTES.SEARCH}?q=${searchQuery}`,
+                                      `${ROUTES.PRODUCTS}?search=${encodeURIComponent(searchQuery)}`,
                                       searchQuery,
                                     )
                                   }
@@ -515,7 +515,7 @@ const CustomerNavbar = () => {
                                   key={index}
                                   onClick={() =>
                                     handleSearchNavigate(
-                                      `${ROUTES.SEARCH}?q=${recent}`,
+                                      `${ROUTES.PRODUCTS}?search=${encodeURIComponent(recent)}`,
                                     )
                                   }
                                   className="text-xs text-gray-500 hover:text-primary transition-colors"
@@ -846,12 +846,12 @@ const CustomerNavbar = () => {
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Search by name, SKU, or category..."
+                      placeholder="Search by name or category..."
                       onChange={handleSearchInput}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && e.target.value.trim()) {
                           handleSearchNavigate(
-                            `${ROUTES.SEARCH}?q=${e.target.value}`,
+                            `${ROUTES.PRODUCTS}?search=${encodeURIComponent(e.target.value)}`,
                             e.target.value,
                           );
                           setMobileDrawerOpen(false);
