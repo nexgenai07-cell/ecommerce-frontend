@@ -6,6 +6,7 @@ import {
 } from "react-icons/bs"; // Icons for paid / rejected / under-review states
 import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes";
 import QrProofUploadForm from "../payments/QrProofUploadForm";
+import QrRejectionHistory from "./QrRejectionHistory";
 
 // Small lookup table mapping each possible payment.status value (see
 // PAYMENT_STATUS in constants/statusTypes.js) to a label + badge color.
@@ -190,17 +191,18 @@ const PaymentInfo = ({ order }) => {
         </div>
       )}
 
-      {/* Rejection reason — API 57 (24 Sep 2026). The reason an admin
-          typed when rejecting this order's QR payment proof; shown
-          whenever payment.status is "rejected", regardless of
-          whether the order is still waiting on a new upload or has
-          since been cancelled after the third rejection. null if the
-          payment was never rejected. */}
-      {paymentStatus === "rejected" && payment.qr_reject_reason && (
+      {/* Rejection attempt history — mirrors the counter and per-attempt
+          breakdown the admin sees on the QR verification queue, so the
+          customer can see exactly how many of their three attempts have
+          been used and read back every reason an admin gave, each with
+          its own timestamp, rather than only the most recent one. */}
+      {isQr && (
         <div className="px-5 pb-4">
-          <p className="text-xs text-danger">
-            Rejected: {payment.qr_reject_reason}
-          </p>
+          <QrRejectionHistory
+            history={order?.status_history}
+            rejectionCount={rejectionCount}
+            maxAttempts={MAX_QR_ATTEMPTS}
+          />
         </div>
       )}
 

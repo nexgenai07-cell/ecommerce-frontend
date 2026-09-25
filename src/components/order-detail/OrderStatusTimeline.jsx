@@ -1,6 +1,12 @@
 import { BsCheckCircleFill } from "react-icons/bs";
 import OrderStatusBadge from "../shared/OrderStatusBadge";
 
+// The entry list scrolls internally once it grows past this height
+// instead of stretching the card — and the page around it — taller
+// with every status change an order picks up over its lifetime (QR
+// retries, admin updates, returns, etc).
+const TIMELINE_MAX_HEIGHT_CLASS = "max-h-[26rem]";
+
 // OrderStatusTimeline — renders an order's status_history as a vertical
 // timeline, oldest entry first (the array itself already arrives sorted
 // that way from the backend, so no re-sorting happens here). Shared
@@ -20,7 +26,14 @@ const OrderStatusTimeline = ({ history }) => {
         <h2 className="text-base font-bold text-gray-900">Order Timeline</h2>
       </div>
 
-      <div className="px-5 py-4 flex flex-col">
+      {/* Scrollable entry list — capped height with a vertical scrollbar
+          once the history outgrows it. Horizontal overflow is disabled
+          outright, and every entry below wraps its text and shrinks its
+          fixed-width elements, so a long note is never the reason this
+          card grows wider than the column it sits in. */}
+      <div
+        className={`px-5 py-4 flex flex-col overflow-y-auto overflow-x-hidden ${TIMELINE_MAX_HEIGHT_CLASS}`}
+      >
         {history.map((entry, index) => {
           const isLast = index === history.length - 1;
           // The most recent entry (last in the oldest-first array) is
@@ -31,13 +44,15 @@ const OrderStatusTimeline = ({ history }) => {
           return (
             <div
               key={`${entry.status}-${entry.changed_at}`}
-              className="flex gap-3"
+              className="flex gap-3 min-w-0"
             >
               {/* Dot + connecting line */}
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center shrink-0">
                 <span
-                  className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${
-                    isCurrent ? "bg-primary" : "bg-gray-300"
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ring-4 ${
+                    isCurrent
+                      ? "bg-primary ring-primary-50"
+                      : "bg-gray-300 ring-gray-50"
                   }`}
                 />
                 {!isLast && <span className="w-px flex-1 bg-gray-100 my-0.5" />}
@@ -48,11 +63,13 @@ const OrderStatusTimeline = ({ history }) => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <OrderStatusBadge status={entry.status} size="sm" />
                   {isCurrent && (
-                    <BsCheckCircleFill className="w-3.5 h-3.5 text-primary" />
+                    <BsCheckCircleFill className="w-3.5 h-3.5 text-primary shrink-0" />
                   )}
                 </div>
                 {entry.note && (
-                  <p className="text-sm text-gray-600 mt-1">{entry.note}</p>
+                  <p className="text-sm text-gray-600 mt-1 break-words">
+                    {entry.note}
+                  </p>
                 )}
                 {entry.changed_at && (
                   <p className="text-xs text-gray-400 mt-0.5">

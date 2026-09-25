@@ -18,6 +18,9 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import { ROUTES } from "../../constants/routes";
 // Import the API functions for fetching order details and order tracking info
 import { getOrderDetail, trackOrder } from "../../api/orders.api";
+// Import the shared status-to-label mapping — used to build a readable
+// title for each entry when this page falls back to status_history below
+import getOrderStatusLabel from "../../utils/getOrderStatusLabel";
 // Import a layout wrapper component that applies consistent max-width/padding container styling
 import Container from "../../components/layouts/Container";
 // Import the progress stepper component that shows order status steps
@@ -110,8 +113,29 @@ const OrderTracking = () => {
 
   // Extract the actual tracking info object from the API response, defaulting to null if not present
   const trackingInfo = trackingData?.data || null;
-  // Extract the status history array from the tracking info, defaulting to an empty array
-  const history = trackingInfo?.history || [];
+
+  // Fallback source for when the dedicated tracking endpoint hasn't
+  // recorded a step-by-step history yet: the order's own status_history
+  // array — the same data the Order Detail page's own timeline reads
+  // from — mapped into the { status, title, description, timestamp }
+  // shape TrackingTimeline already expects. This lets a customer see the
+  // exact same story on both pages instead of an empty state whenever
+  // the tracking endpoint simply hasn't caught up.
+  const statusHistoryAsTimeline = (order?.status_history || []).map(
+    (entry) => ({
+      status: entry.status,
+      title: getOrderStatusLabel(entry.status),
+      description: entry.note,
+      timestamp: entry.changed_at,
+    }),
+  );
+
+  // Extract the status history array from the tracking info, falling
+  // back to the mapped status_history above whenever the tracking
+  // endpoint's own history is empty.
+  const history = trackingInfo?.history?.length
+    ? trackingInfo.history
+    : statusHistoryAsTimeline;
   // Determine the current status — prefer the tracking API's current_status, fallback to the order's own status field
   const currentStatus = trackingInfo?.current_status || order?.status;
 

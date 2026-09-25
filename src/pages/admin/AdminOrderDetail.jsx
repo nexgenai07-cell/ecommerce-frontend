@@ -52,6 +52,7 @@ import PageHeader from "../../components/shared/PageHeader";
 import OrderStatusBadge from "../../components/shared/OrderStatusBadge";
 import OrderStatusStepper from "../../components/shared/OrderStatusStepper";
 import OrderStatusTimeline from "../../components/order-detail/OrderStatusTimeline";
+import QrRejectionHistory from "../../components/order-detail/QrRejectionHistory";
 
 // Every real, admin-settable ORDER_STATUS value, in the exact forward
 // sequence the backend enforces: pending_payment -> confirmed ->
@@ -674,25 +675,6 @@ const AdminOrderDetail = () => {
                 </span>
               </div>
             )}
-            {/* payment.qr_rejection_count — shown for QR orders whenever it is
-                above zero, so the admin immediately sees how many times this
-                order's proof has already been rejected and how close it is
-                to the 3-attempt permanent-cancellation cap. */}
-            {order.payment?.method === PAYMENT_METHOD.QR &&
-              order.payment?.qr_rejection_count > 0 && (
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-gray-500">QR Rejections</span>
-                  <span
-                    className={
-                      order.payment.qr_rejection_count >= 3
-                        ? "font-medium text-danger"
-                        : "font-medium text-warning"
-                    }
-                  >
-                    {order.payment.qr_rejection_count} / 3
-                  </span>
-                </div>
-              )}
             {/* Flags a retry review distinctly from a first-time one, since
                 both sit at payment.status "under_review" but mean different
                 things to the admin deciding on it. A retry is recognised by
@@ -705,16 +687,18 @@ const AdminOrderDetail = () => {
                   rejected and the customer has uploaded a new one.
                 </p>
               )}
-            {/* qr_reject_reason — API 61 (24 Sep 2026). The reason this
-                admin (or another admin) typed when rejecting this
-                order's QR payment proof. Shown whenever payment.status
-                is "rejected"; null if the payment was never rejected. */}
-            {order.payment?.status === PAYMENT_STATUS.REJECTED &&
-              order.payment?.qr_reject_reason && (
-                <p className="text-xs text-danger">
-                  Rejected: {order.payment.qr_reject_reason}
-                </p>
-              )}
+            {/* Rejection attempt history — an "attempts used" counter plus
+                one card per past rejection, each carrying the reason an
+                admin gave and exactly when they gave it, so reviewing this
+                order never depends on remembering only the latest one. */}
+            {order.payment?.method === PAYMENT_METHOD.QR && (
+              <div className="pt-1 border-t border-gray-100">
+                <QrRejectionHistory
+                  history={order.status_history}
+                  rejectionCount={order.payment?.qr_rejection_count || 0}
+                />
+              </div>
+            )}
           </div>
 
           {/* Order Summary */}
