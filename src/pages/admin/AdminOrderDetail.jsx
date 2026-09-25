@@ -644,6 +644,20 @@ const AdminOrderDetail = () => {
                 {order.payment?.status || "—"}
               </span>
             </div>
+            {/* Refunded amount — only ever set for manually-refunded QR
+                cancellations. There's no partial-refund flow anywhere in
+                this app (the admin only ever logs a reference for the
+                manual transfer), so the refunded amount is always the
+                order's own total — same figure the customer's "Refund
+                processed" notification quotes. */}
+            {order.payment?.status === PAYMENT_STATUS.REFUNDED && (
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-500">Refunded Amount</span>
+                <span className="font-medium text-gray-900">
+                  {formatPrice(order.total_amount)}
+                </span>
+              </div>
+            )}
             {order.payment?.method_label && (
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-500">Method</span>

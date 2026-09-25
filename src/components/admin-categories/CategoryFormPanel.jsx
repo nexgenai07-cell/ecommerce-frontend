@@ -38,7 +38,19 @@ const categorySchema = z.object({
   description: z.string().trim().max(500, "Description is too long").optional(),
 });
 
-const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
+const CategoryFormPanel = ({
+  isOpen,
+  activeCategory,
+  onClose,
+  onCreated,
+  // Optional — called with the newly created category (the raw API
+  // response body) right after a successful create, create mode only.
+  // Lets a caller such as the product form's category dropdown select
+  // the category it just added without the admin having to reopen the
+  // dropdown themselves. Left undefined here does nothing extra, so
+  // this component behaves exactly as before for callers that don't
+  // pass it (e.g. CategoryManagement's add/edit flow).
+}) => {
   const queryClient = useQueryClient();
 
   const isEditMode = !!activeCategory;
@@ -138,12 +150,13 @@ const CategoryFormPanel = ({ isOpen, activeCategory, onClose }) => {
         ? updateCategory(activeCategory.id, payload)
         : createCategory(payload);
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       // Refetches the categories list so the table/stats immediately
       // reflect the new or updated category — same invalidation key
       // CategoryManagement's delete flow already uses
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CATEGORIES });
       showSuccess(isEditMode ? "Category updated." : "Category created.");
+      if (!isEditMode) onCreated?.(response.data);
       onClose();
     },
     onError: (error) => {

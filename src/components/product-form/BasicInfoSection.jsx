@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AiOutlineInfoCircle } from "react-icons/ai";
+import { AiOutlineInfoCircle, AiOutlinePlus } from "react-icons/ai";
 // Small icon shown inside the section's icon badge, next to the title —
 // purely visual, helps the eye tell sections apart at a glance.
 
@@ -16,6 +17,10 @@ import Input from "../ui/Input";
 import Textarea from "../ui/Textarea";
 import Select from "../ui/Select";
 import Toggle from "../ui/Toggle";
+import CategoryFormPanel from "../admin-categories/CategoryFormPanel";
+// Reused as-is from Category Management — activeCategory left
+// undefined here puts it in create mode, and its onCreated callback
+// below lets this dropdown pick up the new category immediately.
 
 const BasicInfoSection = ({
   register,
@@ -64,6 +69,22 @@ const BasicInfoSection = ({
   // onBlur through register()'s options object, so this is the correct
   // way to add extra behavior on top of its built-in one.
 
+  // --------------------------------------------------
+  // ADD NEW CATEGORY — inline modal, opened from next to the dropdown
+  // --------------------------------------------------
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  // Remounts CategoryFormPanel with fresh internal state every time it
+  // opens, same key-bump pattern CategoryManagement uses for its own
+  // add/edit modal, so a category typed and abandoned once doesn't
+  // linger in the fields the next time this is opened.
+  const [categoryModalSessionId, setCategoryModalSessionId] = useState(0);
+
+  const openCategoryModal = () => {
+    setCategoryModalSessionId((id) => id + 1);
+    setIsCategoryModalOpen(true);
+  };
+
   return (
     // Elevated card wrapper — white surface, soft rounded corners, a
     // resting shadow-md that grows to shadow-lg on hover, with a
@@ -104,14 +125,29 @@ const BasicInfoSection = ({
           on mobile — grid-cols-1 falls back to a single column below
           the sm breakpoint so nothing gets cramped on small phones. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Select
-          label="Category"
-          required
-          options={categoryOptions}
-          placeholder="Select a category"
-          {...register("category_id")}
-          error={errors.category_id?.message}
-        />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <Select
+                label="Category"
+                required
+                options={categoryOptions}
+                placeholder="Select a category"
+                {...register("category_id")}
+                error={errors.category_id?.message}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={openCategoryModal}
+              title="Add New Category"
+              className="h-9 shrink-0 self-end flex items-center gap-1 pl-2.5 pr-3 rounded-full bg-primary-50 border  text-primary text-xs font-semibold hover:bg-primary hover:text-white hover:border-primary active:scale-95 transition-colors duration-150 "
+            >
+              <AiOutlinePlus className="w-3.5 h-3.5" />
+              Add New
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-gray-700">
@@ -129,6 +165,21 @@ const BasicInfoSection = ({
           </div>
         </div>
       </div>
+
+      <CategoryFormPanel
+        key={categoryModalSessionId}
+        isOpen={isCategoryModalOpen}
+        activeCategory={null}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onCreated={(newCategory) => {
+          // Selects the just-created category in this form the moment
+          // it's saved, so the admin doesn't have to reopen the
+          // dropdown and find it themselves.
+          setValue("category_id", String(newCategory.id), {
+            shouldValidate: true,
+          });
+        }}
+      />
     </div>
   );
 };

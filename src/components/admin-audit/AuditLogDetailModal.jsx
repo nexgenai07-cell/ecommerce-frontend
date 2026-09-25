@@ -4,8 +4,11 @@ import formatDate from "../../utils/formatDate";
 const AuditLogDetailModal = ({ isOpen, onClose, log }) => {
   if (!log) return null;
 
-  const userName =
-    (typeof log.user === "object" ? log.user?.name : log.user) || "System";
+  // user_name — API 82. The acting admin's readable name; log.user is
+  // just the numeric user id, same distinction the main table's User
+  // column already relies on (see AuditLogs.jsx), so this modal reads
+  // the same field instead of falling back to that raw id.
+  const userName = log.user_name || "System";
 
   return (
     <Modal

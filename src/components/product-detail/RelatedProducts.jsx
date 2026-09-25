@@ -19,11 +19,18 @@ const RelatedProducts = ({ categoryId, currentProductId }) => {
   const { data: productsData, isLoading } = useQuery({
     queryKey: [...QUERY_KEYS.PRODUCTS, "related", categoryId],
     queryFn: async ({ signal }) => {
-      // Step 1 — try the documented, filtered endpoint first
-      const searchRes = await searchProducts({
-        category_id: categoryId,
-        page: 1,
-      }, signal);
+      // Step 1 — try the documented, filtered endpoint first. in_stock: true
+      // is the backend's real stock filter (checks available_stock), so an
+      // out-of-stock product is never returned here instead of being
+      // fetched and then hidden on the page.
+      const searchRes = await searchProducts(
+        {
+          category_id: categoryId,
+          in_stock: true,
+          page: 1,
+        },
+        signal,
+      );
       const searchResults = searchRes?.data?.results || [];
 
       // Only useful if it actually returned items OTHER than the current product
@@ -36,8 +43,10 @@ const RelatedProducts = ({ categoryId, currentProductId }) => {
 
       // Step 2 — fallback: fetch the general product list and filter
       // by category on the frontend (covers backends that don't actually
-      // apply the category_id query param yet)
-      const allRes = await getProducts({ page: 1 }, signal);
+      // apply the category_id query param yet). Same in_stock filter
+      // applies here too, so the fallback path can't reintroduce
+      // out-of-stock products that step 1 already excluded.
+      const allRes = await getProducts({ in_stock: true, page: 1 }, signal);
       const allResults = allRes?.data?.results || [];
 
       return allResults.filter(

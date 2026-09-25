@@ -164,23 +164,75 @@ const Cart = () => {
   }, [cart]);
 
   // --------------------------------------------------------------------------
+  // Category ids currently present in the cart, used below to scope the
+  // "You Might Also Like" query to categories the customer is already
+  // shopping in. item.product.category comes back as a { id, name }
+  // object (see CartItem.jsx), so we just collect the unique ids.
+  // Recomputed on every render from cartItems — cheap, and always in sync
+  // with whatever is in the cart right now.
+  // --------------------------------------------------------------------------
+  const cartCategoryIds = [
+    ...new Set(
+      cartItems
+        .map((item) => item.product?.category?.id)
+        .filter((id) => id != null),
+    ),
+  ];
+
+  // Product ids already in the cart, so they can be filtered out of the
+  // recommendations below — no point suggesting something the customer has
+  // already added.
+  const cartProductIds = new Set(cartItems.map((item) => item.product?.id));
+
+  // --------------------------------------------------------------------------
   // QUERY: Fetch Recommended Products
-  // Loads the 4 newest products for the "You Might Also Like" section at the
-  // bottom of the page. This is a completely separate query from the cart
-  // data query, so the two load independently of one another.
+  // Loads products from the SAME categories as whatever is currently in the
+  // cart, for the "You Might Also Like" section at the bottom of the page.
+  // Falls back to the newest products overall when the cart is empty or its
+  // items have no category, so the section is never blank. This is a
+  // completely separate query from the cart data query, so the two load
+  // independently of one another.
   // --------------------------------------------------------------------------
   const { data: recommendedData, isLoading: recommendedLoading } = useQuery({
-    // The "cart-recommended" suffix makes this cache entry unique so it
-    // doesn't collide with any other product listing query elsewhere in the app.
-    queryKey: [...QUERY_KEYS.PRODUCTS, "cart-recommended"],
+    // Cache key includes the current cart category ids so switching to a
+    // different mix of categories (adding/removing items) fetches a fresh,
+    // correctly-scoped list instead of reusing a stale one.
+    queryKey: [
+      ...QUERY_KEYS.PRODUCTS,
+      "cart-recommended",
+      cartCategoryIds.join(","),
+    ],
     queryFn: ({ signal }) =>
-      getProducts({ ordering: "-created_at", page: 1 }, signal),
+      getProducts(
+        {
+          ordering: "-created_at",
+          page: 1,
+          // Real stock filter (not a client-side guess) — the backend
+          // genuinely checks available_stock, so an out-of-stock product
+          // is never even returned here instead of being fetched and
+          // then hidden.
+          in_stock: true,
+          // Only add category_id when the cart actually has categorized
+          // items — omitting it falls back to the general newest-products
+          // list rather than sending an invalid empty filter.
+          ...(cartCategoryIds.length > 0
+            ? { category_id: cartCategoryIds.join(",") }
+            : {}),
+        },
+        signal,
+      ),
     // 5-minute cache — recommended products don't need to refresh very often.
     staleTime: 1000 * 60 * 5,
+    // Wait until the cart itself has loaded, so this never fires once with
+    // no category filter and then again right after with one.
+    enabled: !cartLoading,
   });
 
-  // Only keep the first 4 results, so the recommendation grid stays compact.
-  const recommendedProducts = recommendedData?.data?.results?.slice(0, 4) || [];
+  // Drop anything already sitting in the cart, then keep the first 4 results
+  // so the recommendation grid stays compact.
+  const recommendedProducts = (recommendedData?.data?.results || [])
+    .filter((product) => !cartProductIds.has(product.id))
+    .slice(0, 4);
 
   // --------------------------------------------------------------------------
   // BULK SELECTION HELPERS

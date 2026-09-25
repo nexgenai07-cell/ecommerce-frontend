@@ -3,8 +3,10 @@ import {
   BsCheckCircleFill,
   BsExclamationCircleFill,
   BsClockHistory,
-} from "react-icons/bs"; // Icons for paid / rejected / under-review states
+  BsArrowCounterclockwise,
+} from "react-icons/bs"; // Icons for paid / rejected / under-review / refunded states
 import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes";
+import formatPrice from "../../utils/formatPrice";
 import QrProofUploadForm from "../payments/QrProofUploadForm";
 import QrRejectionHistory from "./QrRejectionHistory";
 
@@ -206,14 +208,44 @@ const PaymentInfo = ({ order }) => {
         </div>
       )}
 
-      {/* Refund details — only ever set for manually-refunded QR cancellations */}
-      {paymentStatus === "refunded" && payment.refund_method && (
-        <div className="px-5 pb-4 flex flex-col gap-0.5">
-          <p className="text-xs text-gray-400">
-            Refunded manually
-            {payment.refund_transaction_reference &&
-              ` · Ref: ${payment.refund_transaction_reference}`}
-          </p>
+      {/* Refund details — always shown once the payment is refunded. The
+          "Refunded manually · Ref: ..." block only appears when the
+          backend actually sent refund_method (manual QR refunds), but
+          the amount itself must not depend on that — it was gated
+          behind payment.refund_method before, which hid it entirely
+          whenever that field came back empty, even though the order
+          really was refunded. There's no partial-refund flow anywhere
+          in this app (the admin only ever logs a reference for the
+          manual transfer), so the refunded amount is always the
+          order's own total — same figure the "Refund processed"
+          notification quotes.
+          Styled as its own soft-tinted banner (icon + amount on the
+          left, the manual-transfer reference on the right) instead of
+          two plain text lines, so a refunded order reads as clearly as
+          the paid/pending states above it do. */}
+      {paymentStatus === "refunded" && (
+        <div className="mx-5 mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center justify-center shrink-0">
+              <BsArrowCounterclockwise className="w-4.5 h-4.5" />
+            </span>
+            <div>
+              <p className="text-xs text-gray-500">Amount Refunded</p>
+              <p className="text-lg font-bold text-gray-900">
+                {formatPrice(order?.total_amount)}
+              </p>
+            </div>
+          </div>
+          {payment.refund_method && (
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Refunded manually</p>
+              {payment.refund_transaction_reference && (
+                <p className="text-xs font-mono text-gray-400 mt-0.5">
+                  Ref: {payment.refund_transaction_reference}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
