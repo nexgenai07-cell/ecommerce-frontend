@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom"; // Outlet renders the matched child route component inside this layout
 import { Suspense } from "react"; // Suspense lets us show a fallback UI while the child route is loading
+import AccountNavbar from "./AccountNavbar"; // Dedicated top bar for the content column — notification bell + avatar dropdown only, matching the admin panel's TopHeader
 import CustomerAccountSidebar from "./CustomerAccountSidebar"; // Left sidebar on desktop, bottom tab bar on mobile
 import Container from "./Container"; // Reusable wrapper that applies consistent horizontal padding and max-width
 import { Skeleton } from "../ui/Skeleton"; // Animated placeholder shown while the page content is loading
@@ -10,30 +11,39 @@ const CustomerAccountLayout = () => {
     // Root wrapper: light gray background for the account section
     // flex-1 so it stretches to fill the space CustomerLayout gives it
     // between the (parent) navbar and footer
-    <div className="flex-1 flex flex-col bg-gray-50">
-      {/* ── Middle section ─────────────────────────────────────────────────────
-          flex-1 makes this area grow and fill available space
-          flex-row puts sidebar and main content side by side                  */}
-      <div className="flex-1 flex">
-        {/* ── Sidebar ──────────────────────────────────────────────────────────
-            Visible as a left-side panel on desktop (md and above)
-            On mobile it collapses and renders as a fixed bottom tab bar
-            Controlled entirely inside CustomerAccountSidebar itself           */}
-        <CustomerAccountSidebar />
+    // flex-row (the default for flex) puts the sidebar and the content
+    // column side by side, exactly like the admin panel's AdminSidebar
+    // + TopHeader/main pairing
+    <div className="flex-1 flex bg-gray-50">
+      {/* ── Sidebar ──────────────────────────────────────────────────────────
+          Visible as a left-side panel on desktop (md and above), starting
+          flush at the very top of the page with no bar above it — same as
+          the admin panel's own sidebar.
+          On mobile it collapses and renders as a fixed bottom tab bar.
+          Controlled entirely inside CustomerAccountSidebar itself           */}
+      <CustomerAccountSidebar />
 
-        {/* ── Page content area ────────────────────────────────────────────────
-            flex-1 lets it take up all remaining horizontal space beside the sidebar
-            min-w-0 prevents flex children from overflowing their container
-            pb-20 adds bottom padding on mobile so content isn't hidden behind
+      {/* ── Content column ───────────────────────────────────────────────────
+          flex-1 min-w-0 lets this column take up all remaining horizontal
+          space beside the sidebar without overflowing it
+          flex-col stacks AccountNavbar above the scrollable page content,
+          so the navbar only ever spans this column's width — never the
+          sidebar's — matching exactly where the admin panel's TopHeader
+          sits relative to AdminSidebar                                     */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <AccountNavbar />
+
+        {/* pb-20 adds bottom padding on mobile so content isn't hidden behind
             the bottom tab bar; md:pb-0 removes that padding on desktop        */}
         <main className="flex-1 min-w-0 pb-20 md:pb-0 flex flex-col">
-          {/* flex flex-col added: turns "main" into a flex column so the
-              account page rendered by <Outlet /> (e.g. OrderHistory,
+          {/* flex flex-col: turns "main" into a flex column so the account
+              page rendered by <Outlet /> (e.g. OrderHistory,
               NotificationHistory) can use "flex-1" to stretch to the
               bottom of the screen, letting their pagination footer stay
               pinned at the bottom even with just one or two rows. */}
-          {/* Breadcrumb trail — sits inside the content column, next to the
-              sidebar rather than spanning above it. */}
+          {/* Breadcrumb trail — sits inside the content column, below
+              AccountNavbar, next to the sidebar rather than spanning
+              above it. */}
           <Breadcrumbs />
 
           {/* Suspense boundary: while the lazy-loaded child route chunk is being

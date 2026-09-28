@@ -207,7 +207,10 @@ const CustomerAccountSidebar = () => {
           h-screen + sticky top-0 + self-start: pins the sidebar to the
           viewport instead of stretching to match the (often much taller)
           right-side page content — so only the page content scrolls,
-          the sidebar visually stays put.
+          the sidebar visually stays put. It starts flush at the very
+          top of the page, exactly like the admin panel's own sidebar —
+          AccountNavbar sits only above the main content column beside
+          it, never above the sidebar itself.
           overflow-y-auto + scrollbar-none: if the sidebar's own content
           (profile card + nav + support card + logout) is taller than a
           short viewport, it scrolls internally instead of breaking the

@@ -577,7 +577,7 @@ const AdminSidebar = () => {
         )}
       >
         {/* ===== LOGO + COLLAPSE TOGGLE ===== */}
-        <div className="flex items-center justify-between px-4 h-16 border-b border-white/6 shrink-0">
+        <div className="flex items-center justify-between px-4 h-14 border-b border-white/6 shrink-0">
           {sidebarOpen ? (
             <Link
               to={ROUTES.ADMIN_DASHBOARD}
@@ -762,7 +762,7 @@ const AdminSidebar = () => {
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 h-16 border-b border-white/6">
+          <div className="flex items-center justify-between px-4 h-14 border-b border-white/6">
             <Link
               to={ROUTES.ADMIN_DASHBOARD}
               className="flex items-center gap-2.5"

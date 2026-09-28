@@ -1,38 +1,86 @@
-import { useState } from "react"; // useState manages the dropdown open/close toggle
+import { useState } from "react"; // useState manages the dropdown open/close toggle and the custom-range validation message
 import { motion, AnimatePresence } from "framer-motion"; // motion for animated underline, AnimatePresence for dropdown mount/unmount animation
 import { AiOutlineCalendar, AiOutlineDown } from "react-icons/ai"; // Calendar icon for the date button, chevron icon that rotates when dropdown is open
 import { BsBagCheckFill } from "react-icons/bs"; // Filled bag icon used inside the page header's gradient icon box
 import { ORDER_STATUS } from "../../constants/statusTypes"; // Centralized order status constants — keeps status strings consistent across the app
 import cn from "../../utils/cn"; // Utility that merges Tailwind class names conditionally without conflicts
+import Input from "../ui/Input"; // Shared input component — reused here for the two native date pickers in the Custom Range panel
 
 // FILTER_TABS — static config array for the status tab bar
-// Each tab has an id (matched against order.status) and a display label
+// Each tab has an id (sent to the backend as the `status` query param)
+// and a display label
 export const FILTER_TABS = [
   { id: "all", label: "All Orders" }, // Shows every order regardless of status
   { id: ORDER_STATUS.PENDING, label: "Pending" }, // Orders that have been placed but not yet shipped
+  { id: ORDER_STATUS.CONFIRMED, label: "Confirmed" }, // Payment succeeded — order confirmed, not yet shipped
   { id: ORDER_STATUS.SHIPPED, label: "Shipped" }, // Orders currently in transit
   { id: ORDER_STATUS.DELIVERED, label: "Delivered" }, // Orders successfully received by the customer
   { id: ORDER_STATUS.CANCELLED, label: "Cancelled" }, // Orders that were cancelled before delivery
 ];
 
 // DATE_RANGES — static config array for the date filter dropdown
-// Each option has an id (passed up to parent for filtering logic) and a human-readable label
+// Each preset's id is converted to real start_date/end_date bounds by
+// getDateRangeBounds and sent to the backend. "custom" is handled
+// separately below — its real bounds come from the two date pickers
+// shown in the dropdown once it's selected, not from getDateRangeBounds.
 export const DATE_RANGES = [
-  { id: "3months", label: "Last 3 months" }, // Show orders from the past 3 months
-  { id: "6months", label: "Last 6 months" }, // Show orders from the past 6 months
-  { id: "1year", label: "Last year" }, // Show orders from the past 12 months
+  { id: "today", label: "Today" }, // Only today's orders
+  { id: "last7days", label: "Last 7 days" }, // Rolling 7-day window ending today
+  { id: "1month", label: "Last month" }, // Rolling 1-month window ending today
+  { id: "3months", label: "Last 3 months" }, // Rolling 3-month window ending today
+  { id: "6months", label: "Last 6 months" }, // Rolling 6-month window ending today
+  { id: "1year", label: "Last year" }, // Rolling 12-month window ending today
   { id: "all", label: "All time" }, // Show every order ever placed — no date restriction
+  { id: "custom", label: "Custom range" }, // Customer picks their own start/end dates
 ];
 
 const OrderFilters = ({
   activeTab, // string — id of the currently selected status tab
   onTabChange, // function — called with the new tab id when user clicks a tab
-  dateRange, // string — id of the currently selected date range option
-  onDateRangeChange, // function — called with the new range id when user picks a date option
-  orders = [], // array — full list of orders; used to calculate per-tab counts (defaults to empty array)
+  dateRange, // string — id of the currently selected date range option (one of DATE_RANGES, including "custom")
+  onDateRangeChange, // function — called with the new range id when user picks a preset or "Custom range"
+  customStartDate, // string ("yyyy-mm-dd") — only meaningful while dateRange === "custom"
+  customEndDate, // string ("yyyy-mm-dd") — only meaningful while dateRange === "custom"
+  onCustomStartDateChange, // function — called with the new "yyyy-mm-dd" value
+  onCustomEndDateChange, // function — called with the new "yyyy-mm-dd" value
+  totalCount = 0, // number — real result count for the current filters, straight from the backend's paginated response
 }) => {
   // dropdownOpen tracks whether the date range dropdown menu is visible or hidden
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Validation message shown under the custom date pickers when the
+  // customer types an end date earlier than the start date (or vice
+  // versa) — the invalid value is rejected before it ever reaches the
+  // parent/backend.
+  const [rangeError, setRangeError] = useState("");
+
+  const isCustom = dateRange === "custom";
+
+  // Trigger button label: the matching preset's label, or the two
+  // picked dates once a custom range is active
+  const triggerLabel = isCustom
+    ? customStartDate || customEndDate
+      ? `${customStartDate || "..."} - ${customEndDate || "..."}`
+      : "Custom range"
+    : DATE_RANGES.find((d) => d.id === dateRange)?.label;
+
+  const handleCustomStartChange = (value) => {
+    if (value && customEndDate && value > customEndDate) {
+      setRangeError("Start date cannot be after the end date.");
+      return;
+    }
+    setRangeError("");
+    onCustomStartDateChange(value);
+  };
+
+  const handleCustomEndChange = (value) => {
+    if (value && customStartDate && value < customStartDate) {
+      setRangeError("End date cannot be before the start date.");
+      return;
+    }
+    setRangeError("");
+    onCustomEndDateChange(value);
+  };
 
   return (
     // Outer wrapper stacks the heading row and the tab bar vertically with a gap
@@ -59,10 +107,12 @@ const OrderFilters = ({
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               My Orders
             </h1>
-            {/* Subtitle — real, data-driven order count within the currently selected date window */}
+            {/* Subtitle — real, backend-reported total for the currently
+                selected status + date filters (the count of matching
+                orders across every page, not just the ones on screen) */}
             <p className="text-sm text-gray-400 mt-0.5">
-              {orders.length > 0
-                ? `${orders.length} order${orders.length !== 1 ? "s" : ""} found`
+              {totalCount > 0
+                ? `${totalCount} order${totalCount !== 1 ? "s" : ""} found`
                 : "Track and manage your purchase history"}
             </p>
           </div>
@@ -72,7 +122,8 @@ const OrderFilters = ({
             position:relative on this wrapper so the dropdown menu can be
             absolutely positioned relative to the button, not the viewport   */}
         <div className="relative">
-          {/* Trigger button — shows the currently selected date range label
+          {/* Trigger button — shows the currently selected date range label,
+              or the picked "from - to" dates once a custom range is active
               Clicking toggles dropdownOpen between true and false            */}
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -87,8 +138,7 @@ const OrderFilters = ({
             {/* Calendar icon — purely decorative, indicates this is a date filter */}
             <AiOutlineCalendar className="w-4 h-4 text-gray-400" />
 
-            {/* Display the label of whichever DATE_RANGES entry matches the current dateRange id */}
-            {DATE_RANGES.find((d) => d.id === dateRange)?.label}
+            {triggerLabel}
 
             {/* Chevron icon — rotates 180° when the dropdown is open to signal it can be closed */}
             <AiOutlineDown
@@ -110,25 +160,31 @@ const OrderFilters = ({
                   onClick={() => setDropdownOpen(false)}
                 />
 
-                {/* Dropdown panel — fades and slides in from slightly below the button */}
+                {/* Dropdown panel — fades and slides in from slightly below the button
+                    w-44 -> w-60 so the Custom Range date pickers below the
+                    preset list have enough room without wrapping awkwardly */}
                 <motion.div
                   initial={{ opacity: 0, y: 4, scale: 0.98 }} // starts invisible, nudged down 4px, slightly shrunk
                   animate={{ opacity: 1, y: 0, scale: 1 }} // animates to fully visible, natural position and size
                   exit={{ opacity: 0, y: 4, scale: 0.98 }} // reverses on close
                   transition={{ duration: 0.15 }} // quick 150ms transition feels snappy
                   className="
-                    absolute right-0 top-full mt-2 w-44 z-20
+                    absolute right-0 top-full mt-2 w-60 z-20
                     bg-white border border-gray-100 rounded-xl shadow-lg
                     overflow-hidden
                   "
                 >
-                  {/* Render one button per date range option */}
+                  {/* Render one button per preset, plus the "Custom range" entry */}
                   {DATE_RANGES.map((range) => (
                     <button
                       key={range.id} // stable key for React's reconciler
                       onClick={() => {
                         onDateRangeChange(range.id); // notify parent of the new selection
-                        setDropdownOpen(false); // close the dropdown after selection
+                        setRangeError(""); // clear any leftover custom-range validation message
+                        // Every preset applies immediately and closes the
+                        // dropdown. "Custom range" stays open instead, so
+                        // the customer can then pick the two dates below.
+                        if (range.id !== "custom") setDropdownOpen(false);
                       }}
                       className={cn(
                         "w-full text-left px-4 py-2.5 text-sm transition-colors",
@@ -137,10 +193,54 @@ const OrderFilters = ({
                           : "text-gray-600 hover:bg-gray-50", // subtle hover for inactive options
                       )}
                     >
-                      {range.label}{" "}
-                      {/* Human-readable label e.g. "Last 3 months" */}
+                      {range.label}
                     </button>
                   ))}
+
+                  {/* Custom range date pickers — shown only once "Custom
+                      range" is the active selection. Every change is sent
+                      straight to the parent (which forwards it to the
+                      backend as start_date/end_date), same as every other
+                      preset above; there is no separate "Apply" button. */}
+                  {isCustom && (
+                    <div className="border-t border-gray-100 p-3 flex flex-col gap-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[11px] font-medium text-gray-500">
+                            From
+                          </span>
+                          <Input
+                            type="date"
+                            value={customStartDate || ""}
+                            max={customEndDate || undefined}
+                            onChange={(e) =>
+                              handleCustomStartChange(e.target.value)
+                            }
+                            className="py-1.5 px-2 text-xs min-w-0"
+                          />
+                        </label>
+
+                        <label className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[11px] font-medium text-gray-500">
+                            To
+                          </span>
+                          <Input
+                            type="date"
+                            value={customEndDate || ""}
+                            min={customStartDate || undefined}
+                            onChange={(e) =>
+                              handleCustomEndChange(e.target.value)
+                            }
+                            className="py-1.5 px-2 text-xs min-w-0"
+                          />
+                        </label>
+                      </div>
+
+                      {rangeError && (
+                        <p className="text-[11px] text-danger">{rangeError}</p>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               </>
             )}
@@ -154,53 +254,43 @@ const OrderFilters = ({
           filter bar treatment, instead of floating directly on the page
           overflow-x-auto + scrollbar-hide lets tabs scroll horizontally on
           narrow screens without showing an ugly scrollbar
-          border-b draws the gray baseline that the active underline sits on  */}
+          border-b draws the gray baseline that the active underline sits on
+          Tabs render as plain labels with no per-tab count badge — the
+          backend's order-list endpoint reports a total for the currently
+          active filter only, not a separate count per status, so a
+          "Cancelled (7)" style badge cannot be shown accurately without a
+          dedicated per-status count endpoint. This mirrors the admin
+          Orders page's status tabs, which are plain labels for the same
+          reason. */}
       <div className="bg-white rounded-2xl border border-gray-100 px-2">
         <div className="flex items-center overflow-x-auto scrollbar-hide border-b border-gray-100">
-          {FILTER_TABS.map((tab) => {
-            // Calculate how many orders match this tab's status
-            // "all" tab counts every order; other tabs filter by o.status
-            const count =
-              tab.id === "all"
-                ? orders.length
-                : orders.filter((o) => o.status === tab.id).length;
+          {FILTER_TABS.map((tab) => (
+            // shrink-0 prevents tabs from compressing — they scroll instead
+            <button
+              key={tab.id} // stable key for React's reconciler
+              onClick={() => onTabChange(tab.id)} // notify parent which tab was clicked
+              className={cn(
+                "relative px-4 py-3.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0",
+                activeTab === tab.id
+                  ? "text-primary-dark" // active tab uses brand color
+                  : "text-gray-400 hover:text-gray-600", // inactive tabs are muted, darken on hover
+              )}
+            >
+              {/* Tab label text e.g. "Shipped" */}
+              {tab.label}
 
-            return (
-              // shrink-0 prevents tabs from compressing — they scroll instead
-              <button
-                key={tab.id} // stable key for React's reconciler
-                onClick={() => onTabChange(tab.id)} // notify parent which tab was clicked
-                className={cn(
-                  "relative px-4 py-3.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0",
-                  activeTab === tab.id
-                    ? "text-primary-dark" // active tab uses brand color
-                    : "text-gray-400 hover:text-gray-600", // inactive tabs are muted, darken on hover
-                )}
-              >
-                {/* Tab label text e.g. "Shipped" */}
-                {tab.label}
-
-                {/* Order count badge — shown next to the label when count > 0
-                    Hidden on the "all" tab to avoid redundancy with the subtitle */}
-                {count > 0 && tab.id !== "all" && (
-                  <span className="ml-1.5 text-xs text-gray-400">
-                    ({count})
-                  </span>
-                )}
-
-                {/* Animated active underline — rendered only for the active tab
-                    layoutId shared across all tabs so Framer Motion smoothly
-                    slides the single underline element between tabs on click
-                    Gradient fill instead of a flat line for a richer, on-brand feel */}
-                {activeTab === tab.id && (
-                  <motion.div
-                    layoutId="order-tab-underline" // shared layoutId — one underline morphs across tabs
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-linear-to-r from-primary to-primary-dark rounded-full"
-                  />
-                )}
-              </button>
-            );
-          })}
+              {/* Animated active underline — rendered only for the active tab
+                  layoutId shared across all tabs so Framer Motion smoothly
+                  slides the single underline element between tabs on click
+                  Gradient fill instead of a flat line for a richer, on-brand feel */}
+              {activeTab === tab.id && (
+                <motion.div
+                  layoutId="order-tab-underline" // shared layoutId — one underline morphs across tabs
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-linear-to-r from-primary to-primary-dark rounded-full"
+                />
+              )}
+            </button>
+          ))}
         </div>
       </div>
     </div>

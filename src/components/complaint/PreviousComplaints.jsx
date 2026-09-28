@@ -80,13 +80,31 @@ const PreviousComplaints = () => {
   // COMPLAINTS
   // GET /api/v1/complaints/
   // =============================================
-  // Fetch the list of complaints using React Query, also extracting the loading state
+  // `page` is confirmed working server-side (see getComplaints in
+  // complaints.api.js). `page_size` is sent alongside it optimistically —
+  // the backend doc for this endpoint does not yet confirm it, so verify
+  // in the Network tab (same way page_size was verified on Order
+  // History) whether the returned result count actually changes with
+  // it. If the backend ignores it, every page will keep coming back at
+  // its own fixed default size regardless of the "Rows per page"
+  // selection, and that needs a backend-side fix, not a frontend one.
+  // Either way, only ONE backend page of complaints is ever fetched
+  // here now — this replaces the previous approach of always fetching
+  // the backend's default first page and re-slicing it in the browser,
+  // which silently hid any complaint past the first page.
   const { data: complaintsData, isLoading } = useQuery({
-    // Unique cache key under which this query's data is stored/retrieved
-    queryKey: QUERY_KEYS.COMPLAINTS,
-    // The actual async function that performs the API call to fetch complaints
-    queryFn: ({ signal }) => getComplaints(undefined, signal),
-    // Keep this data "fresh" (won't auto-refetch) for 2 minutes (2 * 60 * 1000 ms) to avoid unnecessary network calls
+    // Distinct cache key per page/pageSize, still prefixed with
+    // QUERY_KEYS.COMPLAINTS so ComplaintForm.jsx's submit mutation
+    // (which invalidates QUERY_KEYS.COMPLAINTS) refreshes every page of
+    // this table, not just whichever one happens to be showing.
+    queryKey: [
+      ...QUERY_KEYS.COMPLAINTS,
+      "list",
+      { page: currentPage, pageSize },
+    ],
+    queryFn: ({ signal }) =>
+      getComplaints({ page: currentPage, page_size: pageSize }, signal),
+    keepPreviousData: true, // keeps the previous page's rows on screen while a new page/page size loads
     staleTime: 1000 * 60 * 2,
   });
 
@@ -98,21 +116,12 @@ const PreviousComplaints = () => {
     !isLoading,
   );
 
-  // Safely extract the complaints array from the API response, defaulting to an empty array if data isn't available yet
-  // Routed through the normalizer, which handles both a plain array and a
-  // paginated response.
-  const allComplaints = extractListData(complaintsData);
-  // Calculate the total number of complaints fetched
-  const totalComplaints = allComplaints.length;
-  // Calculate the total number of pages needed based on total complaints and how many fit per page (rounded up)
+  // Exactly one already-paginated page of complaints straight from the
+  // backend — routed through the normalizer, which handles both a
+  // plain array and a paginated response.
+  const complaints = extractListData(complaintsData);
+  const totalComplaints = complaintsData?.data?.count ?? complaints.length;
   const totalPages = Math.max(1, Math.ceil(totalComplaints / pageSize));
-
-  // Paginated complaints
-  // Slice the full complaints array down to just the items that belong on the current page
-  const paginatedComplaints = allComplaints.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
 
   // Table column configuration for DataTable
   const columns = [
@@ -202,8 +211,8 @@ const PreviousComplaints = () => {
     },
   ];
 
-  // If data has finished loading and there are no complaints at all, render nothing (hide this component entirely)
-  if (!isLoading && allComplaints.length === 0) return null;
+  // If data has finished loading and the customer has no complaints at all, render nothing (hide this component entirely)
+  if (!isLoading && totalComplaints === 0) return null;
 
   // Begin the JSX returned by this component
   return (
@@ -271,7 +280,7 @@ const PreviousComplaints = () => {
         <div className="p-4">
           <DataTable
             columns={columns}
-            data={paginatedComplaints}
+            data={complaints}
             keyField="id"
             onRowClick={(row) =>
               navigate(ROUTES.ACCOUNT_COMPLAINT_DETAIL.replace(":id", row.id))

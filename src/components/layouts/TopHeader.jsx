@@ -48,7 +48,7 @@ const TopHeader = () => {
       <header
         className={cn(
           "sticky top-0 z-sticky", // sticks to the top of the scrollable content column, layered above page content but below dropdowns/drawers/modals (z-sticky = 200, per tokens.css)
-          "h-16 bg-surface shadow-2xl border-border", // fixed height bar, white background, thin bottom border — matches CustomerNavbar's surface language
+          "h-14 bg-surface shadow-2xl border-border", // fixed height bar, white background, thin bottom border — matches CustomerNavbar's surface language
           "flex items-center justify-between", // left group and right group pushed to opposite ends
           "px-4 md:px-6", // tighter padding on mobile, roomier on desktop — fully responsive
         )}

@@ -40,11 +40,26 @@ const PreviousReturns = () => {
   // RETURNS
   // GET /api/v1/returns/
   // =============================================
-  // Same QUERY_KEYS.RETURNS cache key used by the submit mutation in ReturnRequest.jsx,
-  // so this table refreshes automatically right after a new return is submitted.
+  // `page`, `page_size`, and `ordering` are sent straight through to the
+  // backend, which already supports all three (see getReturns in
+  // returns.api.js) — exactly one already-sorted, already-paginated
+  // page of returns is fetched, no matter how many the customer has
+  // filed in total. Same server-side pattern used on the admin orders
+  // list; this replaces the previous approach of always fetching the
+  // backend's default first page and re-sorting/re-slicing it in the
+  // browser, which silently hid any return past the first page.
   const { data: returnsData, isLoading } = useQuery({
-    queryKey: QUERY_KEYS.RETURNS,
-    queryFn: ({ signal }) => getReturns(undefined, signal),
+    // Distinct cache key per page/pageSize, still prefixed with
+    // QUERY_KEYS.RETURNS so the submit mutation in ReturnRequest.jsx
+    // (which invalidates QUERY_KEYS.RETURNS) refreshes every page of
+    // this table, not just whichever one happens to be showing.
+    queryKey: [...QUERY_KEYS.RETURNS, "list", { page: currentPage, pageSize }],
+    queryFn: ({ signal }) =>
+      getReturns(
+        { ordering: "-created_at", page: currentPage, page_size: pageSize },
+        signal,
+      ),
+    keepPreviousData: true, // keeps the previous page's rows on screen while a new page/page size loads
     staleTime: 1000 * 60 * 5,
   });
 
@@ -53,21 +68,12 @@ const PreviousReturns = () => {
   // data has loaded.
   const sectionRef = useScrollToSectionOnHash("previous-returns", !isLoading);
 
-  // Full returns array, newest first — falls back to empty array
-  // Routed through extractListData, which handles both a plain array and a
-  // paginated response
-  const allReturns = [...extractListData(returnsData)].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at),
-  );
-
-  const totalReturns = allReturns.length;
+  // Exactly one already-sorted, already-paginated page of returns
+  // straight from the backend — routed through extractListData, which
+  // handles both a plain array and a paginated response.
+  const returns = extractListData(returnsData);
+  const totalReturns = returnsData?.data?.count ?? returns.length;
   const totalPages = Math.max(1, Math.ceil(totalReturns / pageSize));
-
-  // Slice down to just the current page's rows
-  const paginatedReturns = allReturns.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
 
   // Table column configuration for DataTable
   const columns = [
@@ -140,8 +146,8 @@ const PreviousReturns = () => {
     },
   ];
 
-  // Once loading is done, hide the card entirely if the customer has no return history
-  if (!isLoading && allReturns.length === 0) return null;
+  // Once loading is done, hide the card entirely if the customer has no return history at all
+  if (!isLoading && totalReturns === 0) return null;
 
   return (
     // Outer elevated card — white bg, rounded corners, soft shadow that glows emerald on hover, gradient strip on top
@@ -183,7 +189,7 @@ const PreviousReturns = () => {
         <div className="p-4">
           <DataTable
             columns={columns}
-            data={paginatedReturns}
+            data={returns}
             keyField="id"
             onRowClick={(row) =>
               navigate(ROUTES.ACCOUNT_RETURN_DETAIL.replace(":id", row.id))

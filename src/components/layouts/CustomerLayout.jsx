@@ -35,9 +35,14 @@ const CustomerLayout = () => {
   // CustomerAccountLayout, next to the sidebar rather than above it.
   const hideBreadcrumb = location.pathname.startsWith("/account");
 
+  // /account/* pages render their own AccountNavbar (notification bell
+  // + avatar dropdown only) inside CustomerAccountLayout instead of the
+  // full site navbar, matching the admin panel's dedicated TopHeader.
+  const hideNavbar = location.pathname.startsWith("/account");
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <CustomerNavbar />
+      {!hideNavbar && <CustomerNavbar />}
 
       <main className="flex-1 w-full flex flex-col">
         {/* flex flex-col added alongside the existing flex-1: this turns
