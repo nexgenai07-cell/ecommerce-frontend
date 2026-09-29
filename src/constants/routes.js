@@ -7,10 +7,10 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password/:uid/:token",
   VERIFY_EMAIL: "/verify-email/:token",
-  // Reached from the link sendPhoneVerification() emails to the
-  // account's address when a customer needs to verify a new phone
-  // number (most commonly triggered from Checkout). Same pattern as
-  // VERIFY_EMAIL above — a one-time token in the URL path.
+  // Reached from the link emailed to the account's address when a
+  // customer needs to verify a new phone number (most commonly
+  // triggered from Checkout). Same pattern as VERIFY_EMAIL above — a
+  // one-time token in the URL path.
   VERIFY_PHONE: "/verify-phone/:token",
   // REACTIVATE_ACCOUNT — a single page that serves BOTH steps of the
   // reactivation flow, matching the exact URL shape from the backend
@@ -84,6 +84,9 @@ export const ROUTES = {
   ADMIN_PRODUCT_ADD: "/admin/products/add",
   ADMIN_PRODUCT_EDIT: "/admin/products/:id/edit",
   ADMIN_CATEGORIES: "/admin/categories",
+  // ADMIN_REVIEWS — the review moderation queue where an admin approves
+  // or rejects the reviews customers have submitted.
+  ADMIN_REVIEWS: "/admin/reviews",
 
   // Order management
   ADMIN_ORDERS: "/admin/orders",
@@ -101,6 +104,7 @@ export const ROUTES = {
   // Analytics & reporting section
   ADMIN_ANALYTICS_SALES: "/admin/analytics/sales",
   ADMIN_ANALYTICS_REVENUE: "/admin/analytics/revenue",
+  ADMIN_ANALYTICS_PROFIT: "/admin/analytics/profit",
   ADMIN_ANALYTICS_PRODUCTS: "/admin/analytics/products",
   ADMIN_ANALYTICS_CUSTOMERS: "/admin/analytics/customers",
   ADMIN_ANALYTICS_INVENTORY: "/admin/analytics/inventory",
@@ -121,19 +125,19 @@ export const ROUTES = {
   // System-level admin tools
   ADMIN_AUDIT_LOGS: "/admin/audit-logs",
   // ADMIN_NOTIFICATIONS — the admin's own notification inbox (bell
-  // dropdown + full history page), reusing the exact same List My
-  // Notifications / Mark as Read / Mark All as Read endpoints (API
-  // 75-77.1) the customer side already uses, since those endpoints
-  // return whatever is visible to the currently logged-in user —
-  // admin included. Kept distinct from ADMIN_NOTIFICATION_TEMPLATES
-  // below, which is for composing and sending a notification OUT to
-  // customers, not for reading notifications addressed TO the admin.
+  // dropdown + full history page). It reuses the same list, mark as
+  // read and mark all as read endpoints as the customer side, since
+  // those endpoints return whatever is visible to the currently logged
+  // in user, admin included. Kept distinct from
+  // ADMIN_NOTIFICATION_TEMPLATES below, which is for composing and
+  // sending a notification OUT to customers, not for reading
+  // notifications addressed TO the admin.
   ADMIN_NOTIFICATIONS: "/admin/notifications",
   ADMIN_NOTIFICATION_TEMPLATES: "/admin/notification-templates",
-  // ADMIN_PROFILE — the admin's own profile page (API 7 / API 8), reached
-  // from the "Profile" link in the TopHeader account dropdown. Reuses the
-  // exact same /api/v1/auth/me/ endpoint the customer profile page uses —
-  // there is no separate admin-only profile endpoint.
+  // ADMIN_PROFILE — the admin's own profile page, reached from the
+  // "Profile" link in the TopHeader account dropdown. It reuses the same
+  // /api/v1/auth/me/ endpoint the customer profile page uses — there is
+  // no separate admin-only profile endpoint.
   ADMIN_PROFILE: "/admin/profile",
 
   // ----------------------------

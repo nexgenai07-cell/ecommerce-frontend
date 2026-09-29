@@ -208,6 +208,10 @@ export const BREADCRUMB_ROUTES = [
     trail: [{ label: "Categories" }],
   },
   {
+    pattern: ROUTES.ADMIN_REVIEWS,
+    trail: [{ label: "Reviews" }],
+  },
+  {
     pattern: ROUTES.ADMIN_DISCOUNTS,
     trail: [{ label: "Discounts" }],
   },
@@ -256,6 +260,10 @@ export const BREADCRUMB_ROUTES = [
   {
     pattern: ROUTES.ADMIN_ANALYTICS_REVENUE,
     trail: [{ label: "Analytics" }, { label: "Revenue Report" }],
+  },
+  {
+    pattern: ROUTES.ADMIN_ANALYTICS_PROFIT,
+    trail: [{ label: "Analytics" }, { label: "Profit Report" }],
   },
   {
     pattern: ROUTES.ADMIN_ANALYTICS_PRODUCTS,

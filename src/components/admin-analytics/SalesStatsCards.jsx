@@ -5,23 +5,20 @@ import {
   AiOutlineDollarCircle, // icon used on the "Total Sales" card
   AiOutlineShoppingCart, // icon used on the "Total Orders" card
   AiOutlineCreditCard, // icon used on the "Avg Order Value" card
+  AiOutlineShopping, // icon used on the "Units Sold" card
 } from "react-icons/ai";
 
 import { getSalesReport } from "../../api/analytics.api";
-// getSalesReport -> API 83, the single source of ALL real data on this card row
+// getSalesReport -> the single source of all data on this card row
 import getPreviousPeriodRange from "../../utils/getPreviousPeriodRange";
 // getPreviousPeriodRange -> computes the "previous period" date range used
 // for the "vs last period" growth percentage on each card
 import formatPrice from "../../utils/formatPrice";
-// formatPrice -> turns a raw number into "Rs 3,481,170" style display text
+// formatPrice -> turns a raw number into "Rs. 3,481,170" style display text
 import StatsCard from "../ui/StatsCard";
 // StatsCard -> the shared small white KPI card UI used everywhere
-
-// Sums a field across every real data point in a Sales Report response
-const sumField = (dataPoints, field) =>
-  dataPoints.reduce((total, point) => total + (Number(point[field]) || 0), 0);
-// .reduce -> walks every day's data point and adds up the requested
-// field (e.g. "total_revenue" or "total_orders") into one grand total
+import ProfitSummaryCards from "./ProfitSummaryCards";
+// ProfitSummaryCards -> Total Cost, Gross Profit, Markup % and Profit Margin %
 
 // Formats a real percentage change into the "+12.5%" / "-3.2%" string
 // shape StatsCard expects, returning "" (no badge) when there's no
@@ -60,8 +57,6 @@ const SalesStatsCards = ({ startDate, endDate, status }) => {
           start_date: startDate,
           end_date: endDate,
           period: "daily",
-          // period: "daily" -> ask the API for one data point per day so
-          // the totals below are accurate for any custom range
           status,
         },
         signal,
@@ -90,32 +85,30 @@ const SalesStatsCards = ({ startDate, endDate, status }) => {
       ),
   });
 
-  const currentPoints = currentResponse?.data?.data || [];
-  // currentPoints -> the array of daily data points for the selected range,
-  // falls back to [] while loading or if the API returns nothing
+  // The "summary" object holds the totals for the whole selected range,
+  // calculated by the server. Percentages cannot be added up from daily
+  // rows, so every card reads its figure from the summary instead.
+  const currentSummary = currentResponse?.data?.summary;
+  const previousSummary = previousResponse?.data?.summary;
 
-  const previousPoints = previousResponse?.data?.data || [];
-  // previousPoints -> same, but for the comparison ("vs last period") range
-
-  const currentRevenue = sumField(currentPoints, "total_revenue");
-  // currentRevenue -> total money earned in the selected range
-  const currentOrders = sumField(currentPoints, "total_orders");
-  // currentOrders -> total number of orders placed in the selected range
+  const currentRevenue = Number(currentSummary?.total_revenue) || 0;
+  // currentRevenue -> product sales in the selected range
+  const currentOrders = Number(currentSummary?.total_orders) || 0;
+  // currentOrders -> number of orders in the selected range
+  const currentUnits = Number(currentSummary?.units_sold) || 0;
+  // currentUnits -> number of units sold in the selected range
   const currentAOV = currentOrders > 0 ? currentRevenue / currentOrders : 0;
-  // currentAOV -> "Average Order Value" = revenue divided by orders,
-  // guarded against divide-by-zero when there are no orders yet
+  // currentAOV -> average product sales per order, guarded against
+  // divide-by-zero when there are no orders
 
-  const previousRevenue = sumField(previousPoints, "total_revenue");
-  // previousRevenue -> same revenue total, but for the earlier comparison range
-  const previousOrders = sumField(previousPoints, "total_orders");
-  // previousOrders -> same order count, but for the earlier comparison range
+  const previousRevenue = Number(previousSummary?.total_revenue) || 0;
+  const previousOrders = Number(previousSummary?.total_orders) || 0;
+  const previousUnits = Number(previousSummary?.units_sold) || 0;
   const previousAOV = previousOrders > 0 ? previousRevenue / previousOrders : 0;
-  // previousAOV -> average order value for the earlier comparison range
 
   return (
-    // flex-wrap — StatsCard now carries its own fixed width/height, so
-    // this row already matches every other stats row in the admin
-    // panel without needing a page-specific max-width cap.
+    // flex-wrap — StatsCard carries its own fixed width/height, so this
+    // row matches every other stats row in the admin panel.
     <div className="flex flex-wrap gap-2">
       <StatsCard
         title="Total Sales"
@@ -143,6 +136,15 @@ const SalesStatsCards = ({ startDate, endDate, status }) => {
         trendLabel="vs last period"
       />
       <StatsCard
+        title="Units Sold"
+        value={isLoading ? "—" : currentUnits}
+        icon={<AiOutlineShopping />}
+        iconBg="bg-warning-light"
+        iconColor="text-warning"
+        trend={formatGrowth(currentUnits, previousUnits)}
+        trendLabel="vs last period"
+      />
+      <StatsCard
         title="Avg Order Value"
         value={isLoading ? "—" : formatPrice(currentAOV)}
         icon={<AiOutlineCreditCard />}
@@ -153,6 +155,10 @@ const SalesStatsCards = ({ startDate, endDate, status }) => {
         trend={formatGrowth(currentAOV, previousAOV)}
         trendLabel="vs last period"
       />
+
+      {/* Total Cost, Gross Profit, Markup % and Profit Margin %, plus a
+          note when some sold items have no cost price saved. */}
+      <ProfitSummaryCards summary={currentSummary} isLoading={isLoading} />
     </div>
   );
 };

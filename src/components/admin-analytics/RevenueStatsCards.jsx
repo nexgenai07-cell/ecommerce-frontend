@@ -5,18 +5,15 @@ import { AiOutlineDollarCircle, AiOutlineRise } from "react-icons/ai";
 // AiOutlineRise         -> icon for the "Revenue Growth" card
 
 import { getRevenueReport } from "../../api/analytics.api";
-// getRevenueReport -> API 84, the single source of real data for this row
+// getRevenueReport -> the single source of real data for this row
 import getPreviousPeriodRange from "../../utils/getPreviousPeriodRange";
 // getPreviousPeriodRange -> computes the earlier comparison date range
 import formatPrice from "../../utils/formatPrice";
-// formatPrice -> turns a raw number into "Rs 3,481,170" style display text
+// formatPrice -> turns a raw number into "Rs. 3,481,170" style display text
 import StatsCard from "../ui/StatsCard";
 // StatsCard -> the shared small white KPI card UI used everywhere
-
-const sumRevenue = (dataPoints) =>
-  dataPoints.reduce((total, point) => total + (Number(point.revenue) || 0), 0);
-// sumRevenue -> adds up the "revenue" field across every data point
-// returned by the API into one grand total
+import ProfitSummaryCards from "./ProfitSummaryCards";
+// ProfitSummaryCards -> Total Cost, Gross Profit, Markup % and Profit Margin %
 
 const formatGrowth = (current, previous) => {
   if (!previous) return "";
@@ -47,7 +44,7 @@ const RevenueStatsCards = ({ startDate, endDate, status }) => {
           start_date: startDate,
           end_date: endDate,
           period: "daily",
-          // period: "daily" -> one data point per day for an accurate total
+          // period: "daily" -> one data point per day
           status,
         },
         signal,
@@ -76,17 +73,22 @@ const RevenueStatsCards = ({ startDate, endDate, status }) => {
       ),
   });
 
-  const currentRevenue = sumRevenue(currentResponse?.data?.data || []);
-  // currentRevenue -> total revenue for the selected range (0 while loading)
-  const previousRevenue = sumRevenue(previousResponse?.data?.data || []);
-  // previousRevenue -> total revenue for the earlier comparison range
+  // The "summary" object holds the totals for the whole selected range,
+  // calculated by the server, so the cards read from it instead of adding
+  // up rows on the client.
+  const currentSummary = currentResponse?.data?.summary;
+  const previousSummary = previousResponse?.data?.summary;
+
+  const currentRevenue = Number(currentSummary?.total_revenue) || 0;
+  // currentRevenue -> product sales for the selected range (0 while loading)
+  const previousRevenue = Number(previousSummary?.total_revenue) || 0;
+  // previousRevenue -> product sales for the earlier comparison range
   const growth = formatGrowth(currentRevenue, previousRevenue);
   // growth -> the "+521.1%" style string, reused by both cards below
 
   return (
-    // flex-wrap — StatsCard now carries its own fixed width/height, so
-    // this row already matches every other stats row in the admin
-    // panel without needing a page-specific max-width cap.
+    // flex-wrap — StatsCard carries its own fixed width/height, so this
+    // row matches every other stats row in the admin panel.
     <div className="flex flex-wrap gap-2">
       <StatsCard
         title="Gross Revenue"
@@ -111,6 +113,10 @@ const RevenueStatsCards = ({ startDate, endDate, status }) => {
         iconColor="text-success"
         // iconColor -> green colored icon
       />
+
+      {/* Total Cost, Gross Profit, Markup % and Profit Margin %, plus a
+          note when some sold items have no cost price saved. */}
+      <ProfitSummaryCards summary={currentSummary} isLoading={isLoading} />
     </div>
   );
 };

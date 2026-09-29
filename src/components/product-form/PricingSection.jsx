@@ -3,34 +3,54 @@ import { AiOutlineDollarCircle } from "react-icons/ai";
 import Input from "../ui/Input";
 import Badge from "../ui/Badge";
 import calculateDiscount from "../../utils/calculateDiscount";
+import calculateProfitMetrics from "../../utils/calculateProfitMetrics";
+import formatPriceOrDash from "../../utils/formatPriceOrDash";
+import formatPercent from "../../utils/formatPercent";
+
+// One labelled figure of the profit preview strip.
+const ProfitFigure = ({ label, value }) => (
+  <div className="flex flex-col gap-0.5 min-w-0">
+    <span className="text-[11px] font-medium text-gray-500">{label}</span>
+    <span className="text-sm font-semibold text-gray-900 truncate">
+      {value}
+    </span>
+  </div>
+);
 
 const PricingSection = ({ register, errors, watch, trigger }) => {
   const originalPrice = parseFloat(watch("original_price")) || 0;
   const salePrice = parseFloat(watch("price")) || 0;
 
   const discountPercent = calculateDiscount(originalPrice, salePrice);
-  // Returns 0 when prices are missing/equal/invalid — calculateDiscount
-  // already guards against divide-by-zero and bad input internally
+  // Returns 0 when prices are missing, equal or invalid; calculateDiscount
+  // already guards against divide-by-zero and bad input internally.
 
-  // The "original price must be greater than the sale price" rule lives
-  // in the schema's cross-field superRefine (see ProductAdd/ProductEdit),
-  // which only re-checks BOTH fields together when explicitly told to.
-  // With mode: "onTouched", blurring one field only re-validates that
-  // single field on its own — so this cross-field issue never actually
-  // surfaced until the whole form was validated on Submit. Calling
-  // trigger() for both field names together, on either field's blur,
-  // forces that pair to be re-checked as a pair right away — this is
-  // register()'s own onBlur (needed for its normal per-field validation)
-  // PLUS this extra pairwise re-check, not a replacement for it.
+  // Live profit preview. The server calculates the stored figures; this
+  // preview only lets the admin see the effect of the prices while typing.
+  const { profit, markupPercent, marginPercent } = calculateProfitMetrics(
+    watch("price"),
+    watch("purchase_price"),
+  );
+  const hasProfitPreview = profit !== null;
+
+  // The "original price must be greater than the sale price" rule lives in
+  // the schema's cross-field validation (see ProductAdd / ProductEdit),
+  // which only re-checks both fields together when explicitly told to.
+  // With mode "onTouched", blurring one field only re-validates that
+  // single field, so the cross-field issue would not surface until the
+  // whole form is submitted. Calling trigger() for both field names on
+  // either field's blur re-checks the pair right away. This runs in
+  // addition to register()'s own onBlur, not instead of it.
   const revalidatePricePair = () => trigger(["price", "original_price"]);
 
   const originalPriceField = register("original_price");
   const salePriceField = register("price");
+  const purchasePriceField = register("purchase_price");
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-md hover:shadow-lg transition-shadow duration-300 p-5 sm:p-6 flex flex-col gap-5">
-      {/* Section header row: icon badge + title, same pattern used on
-          every card in this form for a consistent visual language */}
+      {/* Section header row: icon badge and title, the same pattern used on
+          every card in this form */}
       <div className="flex items-center gap-2.5 border-b border-gray-100 pb-3">
         <span className="w-8 h-8 rounded-lg bg-primary-50 text-primary flex items-center justify-center shrink-0">
           <AiOutlineDollarCircle className="w-4.5 h-4.5" />
@@ -74,8 +94,8 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
             error={errors.price?.message}
           />
 
-          {/* Discount badge — only rendered when there's an actual real
-              discount (sale price genuinely lower than original price) */}
+          {/* Discount badge, only rendered when there is a real discount
+              (sale price genuinely lower than original price) */}
           {discountPercent > 0 && (
             <Badge
               label={`${discountPercent}% OFF`}
@@ -88,21 +108,40 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
         </div>
       </div>
 
-      {/* Purchase Price — API 31/32 (24 Sep 2026). Admin-only cost
-          price, used by the backend to calculate profit (price -
-          purchase_price). Optional: leave blank when the cost price
-          isn't known yet. Never shown to customers. */}
+      {/* Purchase Price: the store's cost price for this product. It is
+          required, because profit, markup and margin are calculated from
+          it everywhere in the admin panel. Zero is accepted. It is never
+          shown to customers. */}
       <Input
         label="Purchase Price"
         type="number"
         step="0.01"
         min="0"
         placeholder="e.g. 1200"
-        hint="Optional — your cost price for this product, used to calculate profit. Never shown to customers."
+        required
+        hint="Your cost price for this product. Used to calculate profit and never shown to customers."
         leftIcon={<span className="text-gray-400">Rs.</span>}
-        {...register("purchase_price")}
+        {...purchasePriceField}
         error={errors.purchase_price?.message}
       />
+
+      {/* Live profit preview, shown once both prices are valid numbers */}
+      {hasProfitPreview && (
+        <div className="grid grid-cols-3 gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+          <ProfitFigure
+            label="Profit per unit"
+            value={formatPriceOrDash(profit)}
+          />
+          <ProfitFigure
+            label="Markup (on cost)"
+            value={formatPercent(markupPercent)}
+          />
+          <ProfitFigure
+            label="Margin (on price)"
+            value={formatPercent(marginPercent)}
+          />
+        </div>
+      )}
     </div>
   );
 };

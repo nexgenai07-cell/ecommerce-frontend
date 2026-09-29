@@ -9,6 +9,13 @@ import { exportReport } from "../../api/analytics.api";
 
 import { showSuccess, showError } from "../../components/ui/Toast";
 import downloadExportCsv from "../../utils/downloadExportCsv";
+import {
+  getDefaultRange,
+  getPresetRanges,
+} from "../../utils/getReportDateRanges";
+// getDefaultRange / getPresetRanges — read the local calendar date, so
+// "Today" and the other quick ranges always match the admin's own day,
+// even in the hours where UTC and local time fall on different dates.
 
 import AnalyticsPageHeader from "../../components/admin-analytics/AnalyticsPageHeader";
 // AnalyticsPageHeader — the page title with the Filters and Export buttons
@@ -29,60 +36,6 @@ const STATUS_OPTIONS = [
   { value: "refunded", label: "Refunded" },
   { value: "all", label: "All Statuses" },
 ];
-
-const getDefaultRange = () => {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return {
-    startDate: firstOfMonth.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10),
-  };
-};
-
-// --------------------------------------------------
-// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips next to the date
-// range (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
-// Every value is computed live from the real current date, nothing is
-// hardcoded, so the chips stay correct on any day the admin opens the page.
-// Same preset set as the Sales Report page.
-// --------------------------------------------------
-const getPresetRanges = () => {
-  const now = new Date();
-  // toISO — converts a Date object to the "YYYY-MM-DD" string shape the
-  // date inputs and the API's start_date/end_date query params both expect
-  const toISO = (date) => date.toISOString().slice(0, 10);
-  const today = toISO(now);
-
-  // Last 7 Days — today minus 6 days, so the range is exactly 7 days
-  // inclusive of today
-  const sevenDaysAgo = new Date(now);
-  sevenDaysAgo.setDate(now.getDate() - 6);
-
-  // Last 30 Days — today minus 29 days, so the range is exactly 30 days
-  // inclusive of today
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(now.getDate() - 29);
-
-  // This Month — the 1st of the current month through today
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  // Last Month — the full previous calendar month, start to end
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-  // Day 0 of the current month rolls back to the last day of the month before it
-
-  return [
-    { label: "Today", startDate: today, endDate: today },
-    { label: "Last 7 Days", startDate: toISO(sevenDaysAgo), endDate: today },
-    { label: "Last 30 Days", startDate: toISO(thirtyDaysAgo), endDate: today },
-    { label: "This Month", startDate: toISO(thisMonthStart), endDate: today },
-    {
-      label: "Last Month",
-      startDate: toISO(lastMonthStart),
-      endDate: toISO(lastMonthEnd),
-    },
-  ];
-};
 
 const RevenueReport = () => {
   const defaultRange = getDefaultRange();

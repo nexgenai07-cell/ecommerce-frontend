@@ -10,10 +10,16 @@
 // REUSABILITY: both SalesReport.jsx and RevenueReport.jsx need this
 // exact same "what period came before this one" math, so it lives
 // here once instead of being duplicated in each page.
+//
+// The result is built from each date's local calendar parts, not
+// toISOString(), so the calculation matches the calendar day the
+// admin actually selected regardless of time zone.
+
+import { parseLocalISODate, toLocalISODate } from "./getReportDateRanges";
 
 const getPreviousPeriodRange = (startDateStr, endDateStr) => {
-  const startDate = new Date(startDateStr);
-  const endDate = new Date(endDateStr);
+  const startDate = parseLocalISODate(startDateStr);
+  const endDate = parseLocalISODate(endDateStr);
 
   // How many days the CURRENT period spans (inclusive of both ends)
   const rangeDays =
@@ -32,8 +38,8 @@ const getPreviousPeriodRange = (startDateStr, endDateStr) => {
   // Returned as plain "YYYY-MM-DD" strings, matching the format the
   // backend's start_date/end_date query params expect
   return {
-    startDate: previousStart.toISOString().slice(0, 10),
-    endDate: previousEnd.toISOString().slice(0, 10),
+    startDate: toLocalISODate(previousStart),
+    endDate: toLocalISODate(previousEnd),
   };
 };
 

@@ -18,6 +18,13 @@ import { getBestSellers } from "../../api/analytics.api";
 import { getCategories } from "../../api/categories.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
+import {
+  getDefaultRange,
+  getPresetRanges,
+} from "../../utils/getReportDateRanges";
+// getDefaultRange / getPresetRanges — read the local calendar date, so
+// "Today" and the other quick ranges always match the admin's own day,
+// even in the hours where UTC and local time fall on different dates.
 
 // AnalyticsPageHeader -> the page title with the Filters button at the top
 // right, and the filter chips (date range with quick ranges, and category)
@@ -35,52 +42,6 @@ import TopProductsRevenueList from "../../components/admin-analytics/TopProducts
 // ProductsPerformanceTable -> the full data table below, listing every
 // fetched product with its rank, units sold, and revenue
 import ProductsPerformanceTable from "../../components/admin-analytics/ProductsPerformanceTable";
-
-// getDefaultRange -> the 1st day of the current month through today
-const getDefaultRange = () => {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return {
-    startDate: firstOfMonth.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10),
-  };
-};
-
-// --------------------------------------------------
-// QUICK-RANGE PRESETS — one-tap shortcuts shown as chips next to the date
-// range (Today / Last 7 Days / Last 30 Days / This Month / Last Month).
-// Same preset set and same live-computed-from-today approach as the
-// Sales Report page, so both pages behave identically.
-// --------------------------------------------------
-const getPresetRanges = () => {
-  const now = new Date();
-  const toISO = (date) => date.toISOString().slice(0, 10);
-  const today = toISO(now);
-
-  const sevenDaysAgo = new Date(now);
-  sevenDaysAgo.setDate(now.getDate() - 6);
-
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(now.getDate() - 29);
-
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-  // Day 0 of the current month rolls back to the last day of the month before it
-
-  return [
-    { label: "Today", startDate: today, endDate: today },
-    { label: "Last 7 Days", startDate: toISO(sevenDaysAgo), endDate: today },
-    { label: "Last 30 Days", startDate: toISO(thirtyDaysAgo), endDate: today },
-    { label: "This Month", startDate: toISO(thisMonthStart), endDate: today },
-    {
-      label: "Last Month",
-      startDate: toISO(lastMonthStart),
-      endDate: toISO(lastMonthEnd),
-    },
-  ];
-};
 
 // ProductsPerformance -> the main page component rendered at
 // ROUTES.ADMIN_ANALYTICS_PRODUCTS ("/admin/analytics/products")

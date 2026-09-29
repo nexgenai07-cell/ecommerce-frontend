@@ -20,19 +20,20 @@ import {
 
 import { getCategories } from "../../api/categories.api";
 import { exportReport } from "../../api/analytics.api";
-// exportReport — API 99, type=products. The backend builds the CSV
-// directly for whatever filters are currently applied (q, category_id,
-// in_stock/status, min_price/max_price, ordering) — including the
-// correct "Stock" column definition (available stock = total minus
-// reserved, matching what the table itself shows), so this replaced
-// the old approach of paging through every result in the browser and
-// building the file by hand.
+// exportReport — requests the products CSV (type "products"). The server
+// builds the file for whatever filters are currently applied (q,
+// category_id, in_stock/status, min_price/max_price, ordering), including
+// the Stock column (available stock, matching the table) and the cost and
+// profit columns.
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
+import formatPriceOrDash from "../../utils/formatPriceOrDash";
+import formatPercent from "../../utils/formatPercent";
 import downloadExportCsv from "../../utils/downloadExportCsv";
 import chunkArray from "../../utils/chunkArray";
+import { toLocalISODate } from "../../utils/getReportDateRanges";
 import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Button from "../../components/ui/Button";
@@ -68,7 +69,7 @@ const ProductList = () => {
   // client-side slice size for the Low Stock exception view.
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
-  // page value, since staying on a deep page of a now-differently-sized
+  // page value, since staying on a deep page of a differently sized
   // result set could land on an empty page.
   const handlePageSizeChange = (size) => {
     setPageSize(size);
@@ -121,19 +122,18 @@ const ProductList = () => {
   // --------------------------------------------------
   // MAIN PRODUCT QUERY — real server-side filtering + pagination
   // --------------------------------------------------
-  // The backend's search endpoint (/api/v1/products/search/) now
-  // correctly filters `in_stock`, matches `q` against both name and
-  // sku, and filters `category_id` server-side — so every filter here
-  // is sent straight to the backend and only ONE page of already
-  // -filtered, already-sorted results comes back. Nothing is fetched
-  // or filtered in the browser anymore.
+  // The search endpoint (/api/v1/products/search/) filters `in_stock`,
+  // matches `q` against both name and SKU, and filters `category_id` on
+  // the server, so every filter here is sent straight to the backend and
+  // only ONE page of already filtered, already sorted results comes
+  // back. Nothing is filtered in the browser.
   //
-  // "Low Stock" is the one exception — the backend has no dedicated
-  // low-stock filter on this endpoint (only a plain in_stock boolean),
-  // so selecting it swaps the data source to the dedicated Low Stock
-  // endpoint below instead of calling this query. See the Low Stock
-  // query and `activeProducts`/`activeIsLoading` derivation further
-  // down for how the two data sources are combined into one table.
+  // "Low Stock" is the one exception: the search endpoint has no
+  // low-stock filter (only a plain in_stock boolean), so selecting it
+  // swaps the data source to the dedicated Low Stock endpoint below
+  // instead of calling this query. See the Low Stock query and the
+  // `activeProducts` derivation further down for how the two data
+  // sources are combined into one table.
   const isLowStockView = filters.status === "low_stock";
 
   const {
@@ -184,13 +184,11 @@ const ProductList = () => {
   const searchResults = extractListData(searchResponse);
   const searchTotalCount = searchResponse?.data?.count ?? 0;
 
-  // NEW (Sep 2026, API 29 backend fix): the search endpoint now 400s
-  // on an invalid price range (negative min/max, or min greater than
-  // max) — something the admin-side price filter (RangeFilterChip, a
-  // plain number input) can actually produce, unlike the customer
-  // storefront's slider which already clamps itself. Surface that
-  // specific reason as a toast instead of letting the table silently
-  // render an empty state with no explanation.
+  // The search endpoint answers an invalid price range (a negative
+  // minimum or maximum, or a minimum greater than the maximum) with a
+  // 400. The admin price filter is a plain number input, so it can
+  // produce such a range. The server's reason is shown as a toast
+  // instead of letting the table silently render an empty state.
   useEffect(() => {
     if (isErrorSearch && searchQueryError) {
       showError(
@@ -204,8 +202,8 @@ const ProductList = () => {
   // --------------------------------------------------
   // LOW STOCK COUNT — always fetched (unpaginated), feeds the "Low
   // Stock" stat card regardless of which status filter is currently
-  // selected. No params are sent, so per API 38's opt-in pagination
-  // rule the response stays the complete plain array it always was.
+  // selected. No params are sent, so the response is the complete plain
+  // array of low-stock products.
   // --------------------------------------------------
   const { data: lowStockCountResponse, isLoading: isLoadingLowStockCount } =
     useQuery({
@@ -216,19 +214,14 @@ const ProductList = () => {
   const lowStockCount = extractListData(lowStockCountResponse).length;
 
   // --------------------------------------------------
-  // LOW STOCK TABLE QUERY — real server-side search, category, price
-  // range, and sort filtering, plus pagination (API 38, 16 Sep 2026
-  // Filtering Fix pass), used as the actual table data source whenever
-  // the "Low Stock" status filter is selected. `page` is explicitly
-  // sent here, so the backend switches into its paginated
-  // { count, next, previous, results } shape for this request only —
-  // the count query above never sends `page`, so it is unaffected.
-  //
-  // UPDATED (24 Sep 2026): min_price, max_price, and ordering were
-  // previously dropped on this request, so switching to Low Stock
-  // silently ignored any price range or sort the admin had selected —
-  // the backend never received them, so it had nothing to filter on.
-  // Now forwarded exactly like the main search query above.
+  // LOW STOCK TABLE QUERY — server-side search, category, price range
+  // and sort filtering, plus pagination. It is the table's data source
+  // whenever the "Low Stock" status filter is selected. `page` is sent
+  // explicitly, so the backend answers in its paginated
+  // { count, next, previous, results } shape for this request only; the
+  // count query above never sends `page` and keeps the plain array.
+  // The price range and ordering are forwarded exactly like the main
+  // search query above.
   // --------------------------------------------------
   const {
     data: lowStockTableResponse,
@@ -315,7 +308,7 @@ const ProductList = () => {
   const totalCount = totalCountResponse?.data?.count ?? 0;
 
   // --------------------------------------------------
-  // BULK DELETE — API 34.1. A single row selected through the row-level
+  // BULK DELETE. A single row selected through the row-level
   // delete button still goes through this same function, so there is
   // only one delete code path in this file.
   //
@@ -376,25 +369,18 @@ const ProductList = () => {
   };
 
   // --------------------------------------------------
-  // EXPORT — API 99, type=products. The backend builds and returns the
-  // CSV file directly for the currently applied filters, so this is one
-  // request instead of looping every page of results and building the
-  // file in the browser by hand.
+  // EXPORT — the server builds and returns the products CSV for the
+  // currently applied filters in a single request, so the file always
+  // matches what the table shows.
   //
-  // Low Stock is sent as `status: "low_stock,out_of_stock"` — NOT just
-  // "low_stock" alone. The on-screen Low Stock table (dedicated
-  // /products/low-stock/ endpoint, API 38) defines "low stock" as
-  // available_stock < low_stock_threshold, which also catches products
-  // sitting at 0 available stock (fully reserved). The export's status
-  // filter (API 29's classification, used by API 99) treats those same
-  // 0-available products as "out_of_stock" instead, a separate bucket
-  // from "low_stock" — so sending status=low_stock alone silently
-  // dropped every 0-available product from the export even though it
-  // was visible on screen. Sending both statuses together reproduces
-  // the same available_stock < threshold set the on-screen table uses.
-  // min_price/max_price are now sent for Low Stock too, since the
-  // on-screen Low Stock view supports a price filter (previously it
-  // didn't, which is why these were left out before).
+  // Low Stock is sent as `status: "low_stock,out_of_stock"`, not just
+  // "low_stock". The on-screen Low Stock table (dedicated low-stock
+  // endpoint) defines "low stock" as available_stock below the product's
+  // threshold, which also includes products at 0 available stock (fully
+  // reserved). The export's status filter classifies those 0-available
+  // products as "out_of_stock", a separate bucket, so both statuses must
+  // be sent together to reproduce the set the table shows. The price
+  // range is sent for Low Stock as well, because that view supports it.
   // --------------------------------------------------
   const handleExport = async () => {
     setIsExporting(true);
@@ -422,7 +408,7 @@ const ProductList = () => {
       const { success, message } = await downloadExportCsv(
         exportReport,
         params,
-        `products-export-${new Date().toISOString().slice(0, 10)}`,
+        `products-export-${toLocalISODate(new Date())}`,
       );
 
       if (success) {
@@ -441,27 +427,18 @@ const ProductList = () => {
       label: "Product",
       render: (row) => (
         <div className="flex items-center gap-2">
-          {/* gap-3 -> gap-2: tightened to match the smaller image + text next to it */}
           <img
             src={row.primary_image || "/placeholder-product.svg"}
             alt={row.name}
             className="w-7 h-7 rounded-lg object-cover border border-gray-100 shrink-0"
-            // w-10 h-10 (40px) was BIGGER than the DataTable's new fixed 36px row height,
-            // so this thumbnail alone was forcing every product row to grow past the fixed
-            // height no matter what the DataTable component did. w-7 h-7 (28px) now
-            // comfortably fits inside the 36px row with room for the cell's own padding.
           />
           <div className="min-w-0">
             <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 truncate leading-tight">
-              {/* text-sm (14px) -> text-[10px] sm:text-[11px]: matches the compact size
-                  used everywhere else in the reference image; leading-tight keeps this
-                  line and the SKU line below it both fitting inside the fixed row height */}
               {row.name}
             </p>
             <p className="text-[9px] text-gray-400 leading-tight">
               SKU: {row.sku || "—"}
             </p>
-            {/* text-xs (12px) -> text-[9px]: the SKU sub-line, shrunk to match */}
           </div>
         </div>
       ),
@@ -484,12 +461,6 @@ const ProductList = () => {
       render: (row) => (
         <div>
           <p className="text-[10px] sm:text-[11px] font-medium text-gray-900 leading-tight">
-            {/* text-sm (14px) -> text-[10px] sm:text-[11px] leading-tight: this is the
-                exact "price on top, discount line underneath" stacked-cell pattern from
-                Rimsha's reference image — at the old text-sm size, two of these stacked
-                lines didn't fit inside the DataTable's fixed 36px row, so this shrink
-                (matched with the DataTable's own overflow-hidden fix) is what actually
-                gets it fitting without clipping */}
             {formatPrice(row.price)}
           </p>
           {/* Number(): row.original_price and row.price arrive as decimal
@@ -499,11 +470,66 @@ const ProductList = () => {
               is smaller than the sale price's leading digit. */}
           {Number(row.original_price) > Number(row.price) && (
             <p className="text-[9px] text-gray-400 line-through leading-tight">
-              {/* text-xs (12px) -> text-[9px] leading-tight: the second stacked line */}
               {formatPrice(row.original_price)}
             </p>
           )}
         </div>
+      ),
+    },
+    {
+      // The store's cost price for one unit. Admin-only; null when no
+      // purchase price has been saved for the product.
+      key: "purchasePrice",
+      label: "Cost",
+      render: (row) => (
+        <span className="text-[10px] sm:text-[11px] text-gray-700">
+          {formatPriceOrDash(row.purchase_price)}
+        </span>
+      ),
+    },
+    {
+      // Profit per unit (price minus purchase price). Green when the
+      // product earns money, red when it sells below cost.
+      key: "profit",
+      label: "Profit",
+      render: (row) => {
+        const profit =
+          row.profit === null || row.profit === undefined
+            ? null
+            : Number(row.profit);
+        const toneClass =
+          profit === null || Number.isNaN(profit) || profit === 0
+            ? "text-gray-700"
+            : profit > 0
+              ? "text-success"
+              : "text-danger";
+        return (
+          <span
+            className={`text-[10px] sm:text-[11px] font-medium ${toneClass}`}
+          >
+            {formatPriceOrDash(row.profit)}
+          </span>
+        );
+      },
+    },
+    {
+      // Profit as a percentage of the cost price.
+      key: "markupPercent",
+      label: "Markup %",
+      render: (row) => (
+        <span className="text-[10px] sm:text-[11px] text-gray-700">
+          {formatPercent(row.markup_percent)}
+        </span>
+      ),
+    },
+    {
+      // Profit as a percentage of the selling price.
+      key: "profitMarginPercent",
+      label: "Margin %",
+      render: (row) => (
+        <span className="text-[10px] sm:text-[11px] text-gray-700">
+          {formatPercent(row.profit_margin_percent)}
+        </span>
       ),
     },
     {
@@ -515,9 +541,6 @@ const ProductList = () => {
         const reserved = row.reserved_stock ?? 0;
         return (
           <span
-            // text-sm (14px) -> text-[10px] sm:text-[11px] on all three branches below:
-            // same compact size as the rest of the table's cells, and small enough that
-            // this column never needs its own two-line wrap inside the fixed row height
             className={
               available === 0
                 ? "text-danger text-[10px] sm:text-[11px]"
@@ -535,12 +558,9 @@ const ProductList = () => {
       },
     },
     {
-      // Renamed from "status" → "stockHealth" and its label from
-      // "Status" → "Stock Health", to avoid being confused with the
-      // "On Website" column below. This column has ALWAYS been about
-      // stock levels (in stock / running low / out of stock) — it
-      // never reflected the is_active publish flag, it was just
-      // ambiguously named "Status" before.
+      // Stock levels only (in stock / running low / out of stock). It is
+      // named "Stock Health" so it is not confused with the "On Website"
+      // column below, which reflects the is_active publish flag.
       key: "stockHealth",
       label: "Stock Health",
       render: (row) => {
@@ -616,11 +636,6 @@ const ProductList = () => {
   ];
 
   return (
-    // Vertical rhythm tightened further (gap-2 -> gap-1.5) so the stats
-    // cards, the filters/export toolbar, and the products table below it
-    // all sit even closer together -- addresses continued feedback that
-    // the distance above/below the buttons row was still too large.
-    // Purely spacing, no structural change.
     <div className="flex flex-col gap-1.5 flex-1 min-h-0">
       {/* Page header — uses the shared PageHeader component so this
           page matches every other admin screen's title styling. */}
@@ -694,15 +709,9 @@ const ProductList = () => {
         onPageSizeChange={handlePageSizeChange}
       />
 
-      {/* UPDATED COPY: the previous message claimed "this action can be
-          reversed by an admin later" — that was never actually true in
-          this UI (there was never a Restore button for products here),
-          and it's now confirmed false at the backend level too: delete
-          sets an internal is_delete flag with no restore endpoint, so
-          the product(s) disappear from every list for good once this
-          is confirmed. Past orders that already reference this product
-          keep showing its name/image normally — only the catalog
-          listing/search/detail pages stop returning it. */}
+      {/* Deleting removes the product from every catalog list for good;
+          there is no restore action. Past orders that already reference
+          the product keep showing its name and image. */}
       <ConfirmModal
         isOpen={confirmDeleteOpen}
         onClose={() => setConfirmDeleteOpen(false)}

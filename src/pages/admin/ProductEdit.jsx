@@ -15,7 +15,8 @@ import {
   checkProductNameExists,
   checkProductSkuExists,
 } from "../../api/products.api";
-// checkProductNameExists / checkProductSkuExists — API 31.1 / API 31.2
+// checkProductNameExists / checkProductSkuExists — duplicate checks that
+// run when the admin leaves the Name / SKU field
 import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 import useBreadcrumb from "../../hooks/useBreadcrumb";
 import { getCategories } from "../../api/categories.api";
@@ -23,7 +24,6 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import generateSku from "../../utils/generateSku";
-import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — used only by the manual "Regenerate" button here.
 // Unlike ProductAdd, editing an EXISTING product's name should not
 // silently rewrite its already-assigned SKU — that would be a
@@ -77,20 +77,20 @@ const productSchema = z
         (val) => !val || parseFloat(val) > 0,
         "Original price must be greater than 0",
       ),
-    // Purchase Price — API 32 (24 Sep 2026). Optional cost price, used
-    // by the backend to calculate profit. The backend itself rejects
-    // a negative value with a 400, so this mirrors that rule
-    // client-side to catch it before the request is even sent.
+    // Purchase Price is the store's cost price. It is required because
+    // profit, markup and margin are calculated from it. Zero is allowed,
+    // a negative value is not. The server enforces the same rules; they
+    // are mirrored here so a problem is caught before the request is sent.
     purchase_price: z
       .string()
       .trim()
-      .optional()
+      .min(1, "Purchase price is required")
       .refine(
-        (val) => !val || !Number.isNaN(parseFloat(val)),
-        "Purchase price must be a valid number",
+        (val) => !Number.isNaN(parseFloat(val)),
+        "Enter a valid purchase price",
       )
       .refine(
-        (val) => !val || parseFloat(val) >= 0,
+        (val) => Number.isNaN(parseFloat(val)) || parseFloat(val) >= 0,
         "Purchase price cannot be negative",
       ),
     low_stock_threshold: z
@@ -130,12 +130,16 @@ const productSchema = z
     }
   });
 
-// Same DRF-style sku error reader used on ProductAdd — kept identical
-// so both pages report a duplicate SKU the exact same way.
-const extractSkuError = (error) => {
-  const skuField = error?.response?.data?.sku;
-  if (Array.isArray(skuField)) return skuField[0];
-  if (typeof skuField === "string") return skuField;
+// Reads the backend's validation error for one specific field out of a
+// DRF-style error response — { "sku": ["already exists..."] } or, less
+// commonly, a plain string under the same key. Returns null when the
+// error was not about that field, so the caller can fall back to a
+// generic error message instead. The Add Product page reads errors the
+// same way, so both pages report field errors identically.
+const extractFieldError = (error, fieldName) => {
+  const fieldError = error?.response?.data?.[fieldName];
+  if (Array.isArray(fieldError)) return fieldError[0];
+  if (typeof fieldError === "string") return fieldError;
   return null;
 };
 
@@ -196,8 +200,8 @@ const ProductEdit = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.name]);
 
-  // Real-time "already exists" checks (API 31.1 / API 31.2) — fire on
-  // blur of the Name / SKU fields. excludeId is this product's OWN id
+  // Real-time "already exists" checks — fire on blur of the Name / SKU
+  // fields. excludeId is this product's OWN id
   // (from the route param), so re-submitting the product's unchanged
   // name/SKU never incorrectly flags it as a duplicate of itself.
   const { checkOnBlur: checkNameOnBlur } = useFieldAvailabilityCheck({
@@ -225,9 +229,9 @@ const ProductEdit = () => {
         category_id: String(product.category?.id || ""),
         price: String(product.price ?? ""),
         original_price: String(product.original_price ?? ""),
-        // purchase_price — API 32 (24 Sep 2026). Admin-only cost price;
-        // arrives as null when never set, so this pre-fills to an
-        // empty string (blank field) rather than the literal "null".
+        // The cost price arrives as null for a product that never had one,
+        // so it pre-fills to an empty string (a blank field, which the
+        // admin must fill in before saving) rather than the text "null".
         purchase_price:
           product.purchase_price != null ? String(product.purchase_price) : "",
         low_stock_threshold: String(product.low_stock_threshold ?? "5"),
@@ -324,10 +328,8 @@ const ProductEdit = () => {
     category: Number(data.category_id),
     price: data.price,
     original_price: data.original_price || data.price,
-    // purchase_price — API 32 (24 Sep 2026). Sent as null when the
-    // admin clears the field, so an existing cost price can be
-    // removed, not just added or changed.
-    purchase_price: data.purchase_price ? data.purchase_price : null,
+    // The purchase price is required on every save, so it is always sent.
+    purchase_price: data.purchase_price,
     low_stock_threshold: Number(data.low_stock_threshold || 5),
     sku: data.sku || "",
     is_active: data.is_active,
@@ -344,10 +346,19 @@ const ProductEdit = () => {
       );
       navigate(ROUTES.ADMIN_PRODUCTS);
     } catch (error) {
-      const skuError = extractSkuError(error);
+      // A rejected SKU or purchase price is shown right under its own
+      // field (not just in a toast) and the admin stays on the page.
+      const skuError = extractFieldError(error, "sku");
+      const purchasePriceError = extractFieldError(error, "purchase_price");
       if (skuError) {
         setError("sku", { type: "manual", message: skuError });
         showError(skuError);
+      } else if (purchasePriceError) {
+        setError("purchase_price", {
+          type: "manual",
+          message: purchasePriceError,
+        });
+        showError(purchasePriceError);
       } else {
         showError(
           error?.response?.data?.message ||

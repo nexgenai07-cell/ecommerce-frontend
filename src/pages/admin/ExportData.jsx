@@ -19,6 +19,13 @@ import PageHeader from "../../components/shared/PageHeader";
 // used on every other admin screen, replacing this page's own plain
 // <h1> so it finally matches the rest of the panel.
 import ExportReportCard from "../../components/admin-export/ExportReportCard";
+import {
+  getDefaultRange,
+  toLocalISODate,
+} from "../../utils/getReportDateRanges";
+// getDefaultRange / toLocalISODate — read the local calendar date, so the
+// starting range and the exported file's date both match the admin's own
+// day, even in the hours where UTC and local time fall on different dates.
 
 // Predefined report cards — "Sales by Category" from the design was
 // dropped entirely, not just its PDF button: there's no
@@ -84,15 +91,6 @@ const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
 ];
 
-const getDefaultRange = () => {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return {
-    startDate: firstOfMonth.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10),
-  };
-};
-
 const ExportData = () => {
   const [exportingType, setExportingType] = useState(null);
   // Tracks WHICH card's export is currently in flight, so only that
@@ -123,7 +121,7 @@ const ExportData = () => {
         // simply omitted from the request
         status: type === "sales" || type === "revenue" ? status : undefined,
       },
-      `${type}-export-${new Date().toISOString().slice(0, 10)}`,
+      `${type}-export-${toLocalISODate(new Date())}`,
     );
   };
 

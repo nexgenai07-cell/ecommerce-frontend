@@ -31,7 +31,9 @@ import {
   AiOutlineComment, // Comment icon (Bot Conversations)
   AiOutlinePhone, // Phone icon (WhatsApp Numbers)
   AiOutlineQrcode, // QR code icon (QR Payment Queue)
-  AiOutlineSend, // Paper-plane icon (Send Notification) — swapped in so it no longer shares AiOutlineBell with the new "Notifications" inbox item below
+  AiOutlineSend, // Paper-plane icon (Send Notification)
+  AiOutlineStar, // Star icon (Reviews)
+  AiOutlineRise, // Rising-arrow icon (Profit Report)
 } from "react-icons/ai";
 import { BsBoxSeam } from "react-icons/bs"; // Box icon (Products)
 import cn from "../../utils/cn"; // Import utility function to conditionally combine class names
@@ -44,10 +46,11 @@ import ConfirmModal from "../ui/ConfirmModal"; // Reusable "Are you sure?" confi
 
 // =============================================
 // NAV ITEMS CONFIG
-// Every real, built admin page (26+ pages) gets a home here, grouped
-// into clear sections. No numeric count badges are shown next to any
-// item — the sidebar only shows the icon, the page name, and (for
-// group items) its list of sub-pages.
+// Every admin page has a home here, grouped into clear sections. No
+// numeric count badges are shown next to any item: the sidebar only
+// shows the icon, the page name, and (for group items) its list of
+// sub-pages. The number of reviews waiting for approval is shown on the
+// dashboard and on the Reviews page itself.
 // =============================================
 const NAV_ITEMS = [
   {
@@ -72,6 +75,11 @@ const NAV_ITEMS = [
         label: "Categories", // Text shown for this nav item
         icon: <AiOutlineAppstore className="w-4.5 h-4.5" />, // Icon for this nav item
         route: ROUTES.ADMIN_CATEGORIES, // Route this item navigates to
+      },
+      {
+        label: "Reviews", // Text shown for this nav item — the review moderation queue
+        icon: <AiOutlineStar className="w-4.5 h-4.5" />, // Icon for this nav item
+        route: ROUTES.ADMIN_REVIEWS, // Route this item navigates to
       },
       {
         label: "Discounts", // Text shown for this nav item
@@ -114,7 +122,7 @@ const NAV_ITEMS = [
     group: "Insights", // Group heading shown above this section's items
     items: [
       {
-        label: "Analytics", // Text shown for this nav item — an expandable group covering all 6 real analytics pages
+        label: "Analytics", // Text shown for this nav item — an expandable group covering every analytics page
         icon: <AiOutlineBarChart className="w-4.5 h-4.5" />, // Icon for this nav item
         route: ROUTES.ADMIN_ANALYTICS_SALES, // Clicking the parent itself lands on Sales Report, the first sub item
         subItems: [
@@ -127,6 +135,11 @@ const NAV_ITEMS = [
             label: "Revenue Report",
             icon: <AiOutlineDollarCircle className="w-4 h-4" />,
             route: ROUTES.ADMIN_ANALYTICS_REVENUE,
+          },
+          {
+            label: "Profit Report",
+            icon: <AiOutlineRise className="w-4 h-4" />,
+            route: ROUTES.ADMIN_ANALYTICS_PROFIT,
           },
           {
             label: "Product Performance",
@@ -268,14 +281,14 @@ const AdminSidebar = () => {
   // Immediately hide any open flyout whenever the sidebar is expanded
   // again, or whenever the admin navigates to a different page —
   // otherwise a stale flyout could keep floating on screen pointing
-  // at an icon that no longer matches its old collapsed position
+  // at an icon that does not match its collapsed position
   useEffect(() => {
     setFlyoutData(null);
   }, [sidebarOpen, location.pathname]);
 
   // Clear any pending close-timer if this component unmounts while a
-  // close is still scheduled, so we never try to update state on a
-  // component that no longer exists
+  // close is still scheduled, so state is never updated on an
+  // unmounted component
   useEffect(() => {
     return () => clearTimeout(flyoutCloseTimer.current);
   }, []);
@@ -424,10 +437,10 @@ const AdminSidebar = () => {
                           : "text-gray-400 hover:text-white hover:bg-white/6",
                         collapsed && "justify-center px-2",
                       )}
-                      // No native "title" tooltip here anymore — the
-                      // custom hover flyout (rendered via portal below)
-                      // already shows the page name, and having both at
-                      // once used to cause two overlapping tooltips
+                      // No native "title" tooltip is used here: the custom
+                      // hover flyout (rendered via portal below) already
+                      // shows the page name, and showing both would
+                      // produce two overlapping tooltips
                       aria-label={collapsed ? item.label : undefined}
                     >
                       {/* Active background — a soft gradient wash rather
@@ -662,8 +675,7 @@ const AdminSidebar = () => {
                 </p>
               </div>
 
-              {/* Profile — navigates to the new Admin Profile page
-                  (API 7 / API 8) */}
+              {/* Profile — navigates to the Admin Profile page */}
               <Link
                 to={ROUTES.ADMIN_PROFILE}
                 onClick={() => setProfileMenuOpen(false)}
@@ -809,8 +821,7 @@ const AdminSidebar = () => {
                     {user?.role === "admin" ? "Super Admin" : user?.role}
                   </p>
                 </div>
-                {/* Profile — navigates to the new Admin Profile page
-                    (API 7 / API 8) */}
+                {/* Profile — navigates to the Admin Profile page */}
                 <Link
                   to={ROUTES.ADMIN_PROFILE}
                   onClick={() => setProfileMenuOpen(false)}

@@ -12,9 +12,10 @@ import {
   checkProductNameExists,
   checkProductSkuExists,
 } from "../../api/products.api";
-// createProduct       — API 19: POST /api/v1/products/ (multipart)
-// uploadProductImage  — API 22: POST /api/v1/products/{id}/images/
-// checkProductNameExists / checkProductSkuExists — API 31.1 / API 31.2
+// createProduct       — creates the product (multipart request)
+// uploadProductImage  — uploads one image for an existing product
+// checkProductNameExists / checkProductSkuExists — duplicate checks that
+// run when the admin leaves the Name / SKU field
 
 import useFieldAvailabilityCheck from "../../hooks/useFieldAvailabilityCheck";
 
@@ -70,20 +71,20 @@ const productSchema = z
         (val) => !val || parseFloat(val) > 0,
         "Original price must be greater than 0",
       ),
-    // Purchase Price — API 31 (24 Sep 2026). Optional cost price, used
-    // by the backend to calculate profit. The backend itself rejects
-    // a negative value with a 400, so this mirrors that rule
-    // client-side to catch it before the request is even sent.
+    // Purchase Price is the store's cost price. It is required because
+    // profit, markup and margin are calculated from it. Zero is allowed,
+    // a negative value is not. The server enforces the same rules; they
+    // are mirrored here so a problem is caught before the request is sent.
     purchase_price: z
       .string()
       .trim()
-      .optional()
+      .min(1, "Purchase price is required")
       .refine(
-        (val) => !val || !Number.isNaN(parseFloat(val)),
-        "Purchase price must be a valid number",
+        (val) => !Number.isNaN(parseFloat(val)),
+        "Enter a valid purchase price",
       )
       .refine(
-        (val) => !val || parseFloat(val) >= 0,
+        (val) => Number.isNaN(parseFloat(val)) || parseFloat(val) >= 0,
         "Purchase price cannot be negative",
       ),
     stock: z
@@ -136,15 +137,15 @@ const productSchema = z
     }
   });
 
-// Reads the backend's validation error for the sku field specifically,
-// out of a DRF-style error response — { "sku": ["already exists..."] }
-// or, less commonly, a plain string under the same key. Returns null
-// when the error wasn't actually about the sku field, so the caller
-// can fall back to a generic error message instead.
-const extractSkuError = (error) => {
-  const skuField = error?.response?.data?.sku;
-  if (Array.isArray(skuField)) return skuField[0];
-  if (typeof skuField === "string") return skuField;
+// Reads the backend's validation error for one specific field out of a
+// DRF-style error response — { "sku": ["already exists..."] } or, less
+// commonly, a plain string under the same key. Returns null when the
+// error was not about that field, so the caller can fall back to a
+// generic error message instead.
+const extractFieldError = (error, fieldName) => {
+  const fieldError = error?.response?.data?.[fieldName];
+  if (Array.isArray(fieldError)) return fieldError[0];
+  if (typeof fieldError === "string") return fieldError;
   return null;
 };
 
@@ -198,8 +199,8 @@ const ProductAdd = () => {
   });
   const categories = extractListData(categoriesResponse);
 
-  // Real-time "already exists" checks (API 31.1 / API 31.2) — fire on
-  // blur of the Name / SKU fields (wired via BasicInfoSection's
+  // Real-time "already exists" checks — fire on blur of the Name / SKU
+  // fields (wired via BasicInfoSection's
   // onNameBlur and InventorySection's onSkuBlur below). No excludeId
   // here: this is the CREATE form, so there's no existing record of
   // its own to exclude from the match.
@@ -280,7 +281,7 @@ const ProductAdd = () => {
   };
 
   // --------------------------------------------------
-  // CREATE PRODUCT MUTATION — API 19
+  // CREATE PRODUCT MUTATION
   // --------------------------------------------------
   const createMutation = useMutation({
     mutationFn: (formData) => createProduct(formData),
@@ -307,8 +308,7 @@ const ProductAdd = () => {
       formData.append("category_id", data.category_id);
       formData.append("price", data.price);
       formData.append("original_price", data.original_price || data.price);
-      if (data.purchase_price)
-        formData.append("purchase_price", data.purchase_price);
+      formData.append("purchase_price", data.purchase_price);
       formData.append("stock", data.stock);
       formData.append("low_stock_threshold", data.low_stock_threshold || "5");
       if (data.sku) formData.append("sku", data.sku);
@@ -340,13 +340,20 @@ const ProductAdd = () => {
       );
       navigate(ROUTES.ADMIN_PRODUCTS);
     } catch (error) {
-      // Duplicate SKU gets special handling: show it right under the
-      // SKU field (not just a toast) and DON'T navigate away, so the
-      // admin can immediately fix it and resubmit.
-      const skuError = extractSkuError(error);
+      // A rejected SKU or purchase price is shown right under its own
+      // field (not just in a toast) and the admin stays on the page, so
+      // it can be fixed and resubmitted immediately.
+      const skuError = extractFieldError(error, "sku");
+      const purchasePriceError = extractFieldError(error, "purchase_price");
       if (skuError) {
         setError("sku", { type: "manual", message: skuError });
         showError(skuError);
+      } else if (purchasePriceError) {
+        setError("purchase_price", {
+          type: "manual",
+          message: purchasePriceError,
+        });
+        showError(purchasePriceError);
       } else {
         showError(
           error?.response?.data?.message ||

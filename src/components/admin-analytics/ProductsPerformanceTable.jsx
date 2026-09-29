@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import formatPrice from "../../utils/formatPrice";
+import formatPriceOrDash from "../../utils/formatPriceOrDash";
+import formatPercent from "../../utils/formatPercent";
 
 // Spinner -> large loading indicator shown while data is still being fetched
 import Spinner from "../ui/Spinner";
@@ -14,8 +16,8 @@ import DataTable from "../ui/DataTable";
 
 // Selectable "rows per page" values shown in the pagination dropdown.
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
-// Capped at 50 (not the usual 100) since the parent page only ever
-// fetches the top 50 products for this date range in the first place.
+// Capped at 50 (not the usual 100) because the parent page only fetches
+// the top 50 products for the date range.
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 // ProductsPerformanceTable -> receives the already-fetched `products`
@@ -26,12 +28,12 @@ const ProductsPerformanceTable = ({ products, isLoading }) => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // pageSize — how many ranked products are shown per page, controlled
   // by the "Rows per page" dropdown in the table footer. Purely a
-  // client-side slice of the already-fetched `products` array — no
+  // client-side slice of the already-fetched `products` array, so no
   // extra network request is made when it changes.
 
   // Resets back to page 1 whenever the rows-per-page value changes, so
-  // staying on a deep page of a now-differently-sized list can't land
-  // on an empty page.
+  // staying on a deep page of a differently sized list can't land on an
+  // empty page.
   const handlePageSizeChange = (size) => {
     setPageSize(size);
     setCurrentPage(1);
@@ -70,6 +72,27 @@ const ProductsPerformanceTable = ({ products, isLoading }) => {
       label: "Units Sold",
     },
     {
+      // Average selling price of one unit in the selected range
+      key: "avg_selling_price_per_unit",
+      label: "Avg Price",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPriceOrDash(row.avg_selling_price_per_unit)}
+        </span>
+      ),
+    },
+    {
+      // Average cost price of one unit. A dash means no sold unit of this
+      // product has a cost price saved.
+      key: "avg_cost_per_unit",
+      label: "Avg Cost",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPriceOrDash(row.avg_cost_per_unit)}
+        </span>
+      ),
+    },
+    {
       key: "total_revenue",
       label: "Revenue",
       render: (row) => (
@@ -78,24 +101,76 @@ const ProductsPerformanceTable = ({ products, isLoading }) => {
         </span>
       ),
     },
+    {
+      key: "total_cost",
+      label: "Cost",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPriceOrDash(row.total_cost)}
+        </span>
+      ),
+    },
+    {
+      // Revenue minus cost. Green for a profit, red for a loss.
+      key: "gross_profit",
+      label: "Profit",
+      render: (row) => {
+        const profit =
+          row.gross_profit === null || row.gross_profit === undefined
+            ? null
+            : Number(row.gross_profit);
+        const toneClass =
+          profit === null || Number.isNaN(profit) || profit === 0
+            ? "text-gray-700"
+            : profit > 0
+              ? "text-success"
+              : "text-danger";
+        return (
+          <span className={`font-medium ${toneClass}`}>
+            {formatPriceOrDash(row.gross_profit)}
+          </span>
+        );
+      },
+    },
+    {
+      // Profit as a percentage of cost
+      key: "markup_percent",
+      label: "Markup %",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPercent(row.markup_percent)}
+        </span>
+      ),
+    },
+    {
+      // Profit as a percentage of revenue
+      key: "profit_margin_percent",
+      label: "Margin %",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPercent(row.profit_margin_percent)}
+        </span>
+      ),
+    },
   ];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Card header — title + short description, sits above the
-          table body so it's always visible */}
+      {/* Card header — title and short description, always visible above
+          the table body */}
       <div className="p-5 border-b border-gray-100">
         <h2 className="text-base font-semibold text-gray-900">
           Top Performing Products
         </h2>
         <p className="text-xs text-gray-400">
-          Ranked by units sold and revenue for the selected date range
+          Ranked by units sold, with revenue, cost and profit for the selected
+          date range
         </p>
       </div>
 
       {isLoading ? (
-        // Loading state — large centered spinner while the shared query
-        // in the parent page is still in flight
+        // Loading state — large centered spinner while the query in the
+        // parent page is still in flight
         <div className="py-16 flex items-center justify-center">
           <Spinner size="lg" />
         </div>

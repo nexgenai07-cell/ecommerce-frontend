@@ -197,6 +197,8 @@ const DiscountManagement = lazy(
 );
 const SalesReport = lazy(() => import("./pages/admin/SalesReport"));
 const RevenueReport = lazy(() => import("./pages/admin/RevenueReport"));
+const ProfitReport = lazy(() => import("./pages/admin/ProfitReport"));
+const ReviewModeration = lazy(() => import("./pages/admin/ReviewModeration"));
 const ProductsPerformance = lazy(
   () => import("./pages/admin/ProductsPerformance"),
 );
@@ -743,6 +745,17 @@ const AppRoutes = () => {
           />
 
           <Route
+            path={ROUTES.ADMIN_REVIEWS}
+            element={
+              <AdminProtectedRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <ReviewModeration />
+                </Suspense>
+              </AdminProtectedRoute>
+            }
+          />
+
+          <Route
             path={ROUTES.ADMIN_ORDERS}
             element={
               <AdminProtectedRoute>
@@ -836,6 +849,17 @@ const AppRoutes = () => {
               <AdminProtectedRoute>
                 <Suspense fallback={<PageLoader />}>
                   <RevenueReport />
+                </Suspense>
+              </AdminProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ADMIN_ANALYTICS_PROFIT}
+            element={
+              <AdminProtectedRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <ProfitReport />
                 </Suspense>
               </AdminProtectedRoute>
             }

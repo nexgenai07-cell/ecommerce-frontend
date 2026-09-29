@@ -6,6 +6,8 @@ import {
 } from "react-icons/ai";
 
 import formatPrice from "../../utils/formatPrice";
+import formatPriceOrDash from "../../utils/formatPriceOrDash";
+import formatPercent from "../../utils/formatPercent";
 import formatDate from "../../utils/formatDate";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
@@ -20,18 +22,18 @@ const DailyBreakdownTable = ({ dataPoints, isLoading }) => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // pageSize — how many daily rows are shown per page, controlled by
   // the "Rows per page" dropdown in the table footer. Purely a
-  // client-side slice of the already-fetched `dataPoints` — no extra
+  // client-side slice of the already-fetched `dataPoints`, so no extra
   // network request is made when it changes.
 
   // Resets back to page 1 whenever the rows-per-page value changes, so
-  // staying on a deep page of a now-differently-sized list can't land
-  // on an empty page.
+  // staying on a deep page of a differently sized list can't land on an
+  // empty page.
   const handlePageSizeChange = (size) => {
     setPageSize(size);
     setCurrentPage(1);
   };
 
-  // Sorted newest-first, matching the mockup's ordering
+  // Sorted newest-first
   const sortedPoints = [...dataPoints].sort(
     (a, b) => new Date(b.date) - new Date(a.date),
   );
@@ -96,6 +98,63 @@ const DailyBreakdownTable = ({ dataPoints, isLoading }) => {
       ),
     },
     {
+      key: "units_sold",
+      label: "Units",
+      render: (row) => Number(row.units_sold ?? row.total_units) || 0,
+    },
+    {
+      // Total cost of the goods sold that day (purchase price x quantity)
+      key: "total_cost",
+      label: "Cost",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPriceOrDash(row.total_cost)}
+        </span>
+      ),
+    },
+    {
+      // Revenue minus cost. Green for a profit, red for a loss.
+      key: "gross_profit",
+      label: "Profit",
+      render: (row) => {
+        const profit =
+          row.gross_profit === null || row.gross_profit === undefined
+            ? null
+            : Number(row.gross_profit);
+        const toneClass =
+          profit === null || Number.isNaN(profit) || profit === 0
+            ? "text-gray-700"
+            : profit > 0
+              ? "text-success"
+              : "text-danger";
+        return (
+          <span className={`font-medium ${toneClass}`}>
+            {formatPriceOrDash(row.gross_profit)}
+          </span>
+        );
+      },
+    },
+    {
+      // Profit as a percentage of cost
+      key: "markup_percent",
+      label: "Markup %",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPercent(row.markup_percent)}
+        </span>
+      ),
+    },
+    {
+      // Profit as a percentage of revenue
+      key: "profit_margin_percent",
+      label: "Margin %",
+      render: (row) => (
+        <span className="text-gray-500">
+          {formatPercent(row.profit_margin_percent)}
+        </span>
+      ),
+    },
+    {
       key: "aov",
       label: "AOV",
       render: (row) => (
@@ -115,17 +174,15 @@ const DailyBreakdownTable = ({ dataPoints, isLoading }) => {
         shadow-[0_2px_10px_-3px_rgba(16,24,40,0.08)]
         hover:shadow-[0_4px_14px_-4px_rgba(16,24,40,0.10)]
         transition-shadow duration-300"
-      // shadow-[...] — a soft resting shadow (same elevation used by
-      // StatsCard) so this table card visibly "lifts" off the page
-      // background instead of sitting flat, with a slightly stronger
-      // shadow on hover for a subtle interactive feel
+      // The soft resting shadow matches StatsCard's elevation, with a
+      // slightly stronger shadow on hover.
     >
       <div className="p-5 border-b border-gray-100">
         <h2 className="text-base font-semibold text-gray-900">
           Daily Breakdown
         </h2>
         <p className="text-xs text-gray-400">
-          Granular view of orders and revenue metrics per day
+          Orders, revenue, cost and profit for each day
         </p>
       </div>
 

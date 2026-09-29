@@ -17,11 +17,18 @@ export const QUERY_KEYS = {
   PRODUCTS: ["products"],
   PRODUCT_DETAIL: (id) => ["product", id],
   LOW_STOCK_PRODUCTS: ["low-stock-products"],
-  // API 30.1 — paginated review list + rating summary for one product.
-  // Kept separate from PRODUCT_DETAIL(id) above since it's a completely
-  // different endpoint/response shape (a review page, not the product
-  // itself), and needs its own cache entry per page number.
+  // Paginated list of approved reviews plus the rating summary for one
+  // product. Kept separate from PRODUCT_DETAIL(id) above because it is a
+  // different endpoint with a different response shape (a review page,
+  // not the product itself), and it needs its own cache entry per page.
   PRODUCT_REVIEWS: (productId) => ["product-reviews", productId],
+  // Shared prefix of every product review list cache entry, whatever the
+  // product. Used to refresh all of them at once after a moderation
+  // decision.
+  ALL_PRODUCT_REVIEWS: ["product-reviews"],
+  // Admin review moderation queue. Each status tab and page number is
+  // cached separately by appending them to this key.
+  ADMIN_REVIEWS: ["admin-reviews"],
 
   // ----------------------------
   // CATEGORIES
@@ -56,10 +63,9 @@ export const QUERY_KEYS = {
   // the same key would let one shape silently overwrite the other in
   // the cache and break whichever screen reads it next.
   MY_ORDERS_FULL: ["my-orders", "full-paginated"],
-  // MY_ORDER_STATS — API 56.1 (GET /api/v1/orders/stats/), the
-  // customer's own accurate { total_orders, total_spent }. Kept
-  // separate from MY_ORDERS since it's a different endpoint with a
-  // completely different response shape.
+  // The customer's own accurate { total_orders, total_spent } totals.
+  // Kept separate from MY_ORDERS because it is a different endpoint with
+  // a completely different response shape.
   MY_ORDER_STATS: ["my-order-stats"],
   ORDER_DETAIL: (orderNumber) => ["order", orderNumber],
   ORDER_TRACKING: (orderNumber) => ["order-tracking", orderNumber],
@@ -78,8 +84,8 @@ export const QUERY_KEYS = {
   COMPLAINTS: ["complaints"],
   COMPLAINT_DETAIL: (id) => ["complaint", id],
   COMPLAINT_MESSAGES: (id) => ["complaint-messages", id],
-  // API 72.2 — the logged-in user's own open/in_progress complaints
-  // count, used by the Support page's Active Status Notice banner.
+  // The logged-in user's own count of open or in-progress complaints,
+  // used by the active complaint notice banner on the support page.
   OPEN_COMPLAINTS_COUNT: ["open-complaints-count"],
 
   // ----------------------------
@@ -94,6 +100,7 @@ export const QUERY_KEYS = {
   DASHBOARD_SUMMARY: ["dashboard-summary"],
   SALES_REPORT: ["sales-report"],
   REVENUE_REPORT: ["revenue-report"],
+  PROFIT_REPORT: ["profit-report"],
   ORDERS_ANALYTICS: ["orders-analytics"],
   BEST_SELLERS: ["best-sellers"],
   LOW_PERFORMING: ["low-performing"],
