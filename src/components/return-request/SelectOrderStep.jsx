@@ -1,7 +1,7 @@
 // Step 1 — Select Order to Return
-// Dropdown — sirf delivered orders dikhao
+// Dropdown — only orders the backend marks as returnable are listed
 // Status + Estimated Refund display
-// Real API — getMyOrders filtered by delivered status
+// Real API — getMyOrders filtered by the can_return flag
 // NOTE: no outer card here — this renders INSIDE the single unified form card
 // on ReturnRequest.jsx, so it's just a plain content section, fully responsive
 
@@ -15,8 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function for fetching the logged-in user's own orders
 import { getMyOrders } from "../../api/orders.api";
-// Import the ORDER_STATUS constant object that holds all possible order status string values
-import { ORDER_STATUS } from "../../constants/statusTypes";
 // Import a utility function to format numeric price values into a display-friendly currency string
 import formatPrice from "../../utils/formatPrice";
 // Import a utility function to format date values into a display-friendly date string
@@ -25,8 +23,8 @@ import formatDate from "../../utils/formatDate";
 // Main functional component for step 1 of the return flow; receives the currently selected order number and a callback to update it
 const SelectOrderStep = ({ selectedOrder, onOrderSelect }) => {
   // =============================================
-  // MY ORDERS API — sirf delivered orders
-  // API 43 — GET /api/v1/orders/
+  // MY ORDERS API — only returnable orders are used
+  // GET /api/v1/orders/
   // =============================================
   // Use react-query to fetch the user's full orders list, destructuring the data and loading state
   const { data: ordersData, isLoading } = useQuery({
@@ -38,12 +36,13 @@ const SelectOrderStep = ({ selectedOrder, onOrderSelect }) => {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Sirf delivered orders return ke liye eligible hain
-  // Filter the full orders list down to only those with a "delivered" status, since only delivered orders can be returned; default to empty array if data is missing
+  // The backend decides eligibility through can_return: true only for a
+  // delivered order that has no return request yet and was delivered
+  // within the return window. Filtering on this flag keeps already
+  // returned and expired orders out of the dropdown.
   const deliveredOrders =
-    ordersData?.data?.results?.filter(
-      (order) => order.status === ORDER_STATUS.DELIVERED,
-    ) || [];
+    ordersData?.data?.results?.filter((order) => order.can_return === true) ||
+    [];
 
   // Selected order ka full data
   // Find the full order object matching the currently selected order number, so we can display its details below
@@ -109,7 +108,7 @@ const SelectOrderStep = ({ selectedOrder, onOrderSelect }) => {
       {!isLoading && deliveredOrders.length === 0 && (
         // Centered light gray message informing the user there's nothing eligible for return
         <p className="text-sm text-gray-400 text-center py-2">
-          No delivered orders available for return.
+          No orders are currently eligible for return.
         </p>
       )}
 

@@ -1,84 +1,87 @@
 // ============================================================
 // WISHLIST API MODULE
 // ============================================================
-// This file contains ALL API calls related to the Wishlist module.
-// These endpoints handle everything needed to manage a customer's
-// wishlist — viewing saved products, adding new products to it,
-// and removing products from it.
+// Every API call for the wishlist lives in this file.
 //
-// These functions are designed to be used as query/mutation functions
-// inside TanStack Query (React Query) hooks throughout the app.
-// After these mutations succeed, the wishlist should typically be
-// re-synced with Redux (via the setWishlist action) so the UI
-// reflects the latest backend state.
+// The wishlist works for both signed-in customers and guests:
+// - A signed-in customer's requests carry the Authorization header and
+//   operate on the account wishlist.
+// - A guest's requests carry the X-Cart-Session header and operate on a
+//   guest wishlist. The guest session key is shared with the cart, and
+//   the shared axios instance stores and attaches it automatically.
+//   When the guest signs in, the guest wishlist is merged into the
+//   account wishlist by the login request itself.
+//
+// These functions are meant to be used as query and mutation functions
+// with TanStack Query. After a mutation succeeds, the wishlist query is
+// invalidated so every screen reflects the latest server state.
 
 import axiosInstance from "../lib/axiosInstance";
-// Importing the pre-configured Axios instance, which automatically
-// attaches the base URL, auth token, and handles 401 errors globally.
+// Pre-configured axios instance: base URL, auth token, guest session
+// header and global 401 handling are all applied here.
 
 // ----------------------------
-// API  - Get the full wishlist data
+// Get the full wishlist
 // ----------------------------
-// Fetches the complete list of products the logged-in customer has
-// saved to their wishlist. Typically called when the wishlist page
-// loads, or when the app needs to know which products are saved
-// (e.g. to show filled/empty heart icons on product cards).
+// Fetches every product saved to the wishlist. Called by the navbar to
+// keep the heart icons and the badge in sync, and by the Wishlist page.
 //
-// Backend now returns the documented nested shape directly
-// (product: { id, name, price, primary_image, total_stock,
-// reserved_stock, available_stock, category }) — matching Cart's
-// pattern, so no frontend-side normalization is needed anymore.
+// Response shape: { items: [{ id, product: { id, name, price,
+// primary_image, in_stock, total_stock, reserved_stock, available_stock,
+// rating, review_count, category } }] }
+// For a guest the response also carries a session_key.
 export const getWishlist = (signal) => {
   return axiosInstance.get("/api/v1/wishlist/", { signal });
 };
 
 // ----------------------------
-// API  - Add a product to the wishlist
+// Add a product to the wishlist
 // ----------------------------
-// Used when the customer clicks an EMPTY heart icon on a product
-// card or product detail page, indicating they want to save that
-// product to their wishlist. The "data" payload is expected to
-// contain:
-// - product_id: which product to add to the wishlist
+// Used when the customer taps an empty heart icon.
+//
+// Request shape: { product_id: number }
+// Response (200): the updated wishlist plus a message. Adding a product
+// that is already saved is not an error: the response has the same shape
+// with a message saying so, so callers should display the returned
+// message instead of assuming a new item was created.
 export const addToWishlist = (data, signal) => {
   return axiosInstance.post("/api/v1/wishlist/add/", data, { signal });
 };
 
 // ----------------------------
-// API  - Remove a product from the wishlist
+// Remove one item from the wishlist
 // ----------------------------
-// Used when the customer clicks a FILLED heart icon (meaning the
-// product is already saved), indicating they want to remove it from
-// their wishlist. "itemId" identifies which specific wishlist entry
-// to delete (this is the wishlist ITEM's id, not the product's id).
+// Used when the customer taps a filled heart icon or a remove button.
+// "itemId" is the wishlist ITEM id, not the product id.
 export const removeFromWishlist = (itemId, signal) => {
   return axiosInstance.delete(`/api/v1/wishlist/remove/${itemId}/`, { signal });
 };
 
 // ----------------------------
-// API 54.1 - Remove multiple products from the wishlist in one request ★ NEW
+// Remove several items in one request
 // ----------------------------
-// Used by the "select all and delete" / partial multi-select flow on
-// the Wishlist page instead of calling removeFromWishlist() above once
-// per selected item in a loop — that loop was the exact cause of
-// selected items disappearing one-by-one instead of together whenever
-// more than one was deleted at once (see Wishlist.jsx's
-// handleRemoveSelected). This is a single database query on the
-// backend for the whole batch.
+// Used by the multi-select delete flow on the Wishlist page so the
+// selected cards leave together instead of one request per item.
 //
-// data shape: { item_ids: number[] } — these are wishlist ITEM ids
-// (item.id), the same id removeFromWishlist() above expects, not
-// product ids.
-//
-// Response (200 OK): { message, removed_count, wishlist: { id, items,
-// created_at } } — item_ids that don't exist, or belong to another
-// customer's wishlist, are silently excluded from removed_count
-// rather than causing an error, so removed_count can legitimately be
-// smaller than the number of ids sent.
+// Request shape: { item_ids: number[] }, wishlist ITEM ids.
+// Response (200): { message, removed_count, wishlist }. Ids that do not
+// exist or belong to another wishlist are ignored silently, so
+// removed_count can be smaller than the number of ids sent.
 export const bulkRemoveFromWishlist = (itemIds, signal) => {
   return axiosInstance.post(
     "/api/v1/wishlist/bulk-remove/",
     { item_ids: itemIds },
     { signal },
   );
+};
+
+// ----------------------------
+// Clear the entire wishlist
+// ----------------------------
+// Removes every saved product in a single request. Used by the
+// "Clear Wishlist" action on the Wishlist page.
+//
+// No request body. Response (200): { message }.
+export const clearWishlist = (signal) => {
+  return axiosInstance.delete("/api/v1/wishlist/clear/", { signal });
 };

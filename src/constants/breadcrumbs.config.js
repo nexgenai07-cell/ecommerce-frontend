@@ -71,6 +71,10 @@ export const BREADCRUMB_ROUTES = [
     trail: [{ label: "Shopping Cart" }],
   },
   {
+    pattern: ROUTES.WISHLIST,
+    trail: [{ label: "Wishlist" }],
+  },
+  {
     pattern: ROUTES.CHECKOUT,
     trail: [
       { label: "Shopping Cart", path: ROUTES.CART },

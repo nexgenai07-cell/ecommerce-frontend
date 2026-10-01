@@ -102,9 +102,10 @@ export const getDashboardSummary = (signal) => {
 // - period: how the data is grouped: "daily", "weekly", "monthly" or
 //   "yearly"
 // - status: optional, defaults to "sold". One of "sold" (orders that
-//   count as revenue), "cancelled" (cancelled orders that were never
-//   refunded), "refunded" (cancelled orders whose payment was
-//   refunded), "all" (every order, no filtering) or any exact order
+//   count as revenue and were not refunded), "cancelled" (cancelled
+//   orders that were never refunded), "refunded" (every order whose
+//   payment was refunded: cancelled orders and delivered orders whose
+//   return was approved), "all" (every order, no filtering) or any exact order
 //   status string (e.g. "on_hold"). Pass the exact same value to
 //   exportReport() so a CSV download always matches the screen.
 //

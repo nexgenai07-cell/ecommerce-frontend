@@ -12,6 +12,8 @@ import {
 import { HiOutlineLockClosed } from "react-icons/hi2";
 import { showSuccess, showError } from "../ui/Toast";
 import { changePassword } from "../../api/auth.api";
+import ChangePasswordOtpModal from "./ChangePasswordOtpModal";
+import useAuth from "../../hooks/useAuth";
 import {
   getPasswordStrength,
   PASSWORD_STRENGTH,
@@ -78,6 +80,12 @@ const ChangePasswordForm = () => {
   // Shows the requirement checklist once the user focuses the New Password
   // field — same trigger/behavior as the Register page
   const [showRequirements, setShowRequirements] = useState(false);
+  // Whether the code-entry modal (step 2) is open
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  // The validated values from step 1, kept so a code can be resent without
+  // asking the customer to type the passwords again
+  const [pendingValues, setPendingValues] = useState(null);
+  const { user } = useAuth();
 
   const {
     register,
@@ -109,11 +117,16 @@ const ChangePasswordForm = () => {
   const strengthConfig = strength ? STRENGTH_CONFIG[strength] : null;
 
   // =============================================
-  // CHANGE PASSWORD MUTATION
-  // API 9 — POST /api/v1/auth/change-password/  (v2 backend doc)
+  // CHANGE PASSWORD — STEP 1 OF 2
+  // POST /api/v1/auth/change-password/
   // Request: { current_password, new_password }
-  // Response 200: { message: "Password changed successfully." }
-  // Response 400: { error: "Current password is incorrect." }
+  // Response 200: { message } — a code was emailed; the password has NOT
+  // changed yet, so this form must not report success. The code-entry
+  // modal opens instead, and only its confirmation changes the password.
+  // Response 400: { error } — wrong current password, or the new password
+  // equals the current one.
+  // Response 503: { error } — the email could not be sent.
+  // The same mutation also serves the modal's "Resend code" action.
   // =============================================
   const changeMutation = useMutation({
     mutationFn: (data) =>
@@ -122,17 +135,28 @@ const ChangePasswordForm = () => {
         new_password: data.newPassword,
       }),
 
-    onSuccess: (response) => {
-      showSuccess(response?.data?.message || "Password changed successfully!");
-      reset();
-      setNewPasswordValue("");
-      setShowRequirements(false);
+    onSuccess: (response, variables) => {
+      setPendingValues(variables);
+      setIsOtpModalOpen(true);
+      showSuccess(
+        response?.data?.message ||
+          "A verification code has been sent to your email.",
+      );
     },
 
     onError: (error) => {
       const message = error?.response?.data?.error;
-      if (error?.response?.status === 400 && message) {
-        setError("currentPassword", { type: "server", message });
+      const status = error?.response?.status;
+
+      // The server rejected the passwords themselves. Any code screen is
+      // closed so the message is shown next to the field it concerns.
+      if (status === 400 && message) {
+        setIsOtpModalOpen(false);
+        if (/new password/i.test(message)) {
+          setError("newPassword", { type: "server", message });
+        } else {
+          setError("currentPassword", { type: "server", message });
+        }
         return;
       }
       showError(message || "Failed to change password. Please try again.");
@@ -141,6 +165,34 @@ const ChangePasswordForm = () => {
 
   const onSubmit = (data) => {
     changeMutation.mutate(data);
+  };
+
+  // Sends a fresh code using the values validated in step 1
+  const handleResendCode = async () => {
+    if (!pendingValues) return;
+    try {
+      await changeMutation.mutateAsync(pendingValues);
+    } catch {
+      // The error is already reported by the mutation's onError handler.
+    }
+  };
+
+  // Clears everything once the password was really changed
+  const handlePasswordChanged = () => {
+    setIsOtpModalOpen(false);
+    setPendingValues(null);
+    reset();
+    setNewPasswordValue("");
+    setShowRequirements(false);
+  };
+
+  // The pending change can no longer be confirmed (too many wrong codes,
+  // expired code or no pending request), so the customer starts again
+  // from the form with their typed values still in place.
+  const handleRestartRequired = (message) => {
+    setIsOtpModalOpen(false);
+    setPendingValues(null);
+    showError(message);
   };
 
   return (
@@ -348,13 +400,25 @@ const ChangePasswordForm = () => {
           {changeMutation.isPending ? (
             <div className="flex items-center justify-center gap-2">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Changing...
+              Sending code...
             </div>
           ) : (
             "Change Password"
           )}
         </button>
       </form>
+
+      {/* Step 2 — the emailed code. The password only changes once this
+          modal confirms it. */}
+      <ChangePasswordOtpModal
+        isOpen={isOtpModalOpen}
+        email={user?.email}
+        onClose={() => setIsOtpModalOpen(false)}
+        onSuccess={handlePasswordChanged}
+        onResend={handleResendCode}
+        isResending={changeMutation.isPending}
+        onRestartRequired={handleRestartRequired}
+      />
     </div>
   );
 };

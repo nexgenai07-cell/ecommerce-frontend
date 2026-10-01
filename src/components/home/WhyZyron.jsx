@@ -1,28 +1,32 @@
-import { useState, useEffect, useRef, useCallback } from "react"; // React hooks: state, side-effects (autoplay), refs, memoized callbacks
-import { motion, AnimatePresence } from "framer-motion"; // Animation library used for the stacked-image transitions and the fade/slide text transitions
-import { AiOutlineArrowLeft, AiOutlineArrowRight } from "react-icons/ai"; // Arrow icons for the prev/next navigation buttons
-import { BsRobot, BsTruck, BsHeadset } from "react-icons/bs"; // Small badge icons shown next to each feature's text (kept separate from the card image)
-import Container from "../layouts/Container"; // Shared layout wrapper that centers content and adds consistent horizontal padding
-import cn from "../../utils/cn"; // Tailwind class-merging helper used to conditionally combine class names safely
+import { Link } from "react-router-dom"; // Client-side navigation for the call-to-action on the last page
+import { AiOutlineArrowRight } from "react-icons/ai"; // Arrow used as the "turn the page" affordance and inside the call-to-action
+import {
+  BsRobot,
+  BsTruck,
+  BsHeadset,
+  BsBagCheckFill,
+  BsCheckCircleFill,
+} from "react-icons/bs"; // Feature icons, plus the badge and check marks of the closing page
+import Container from "../layouts/Container"; // Shared layout wrapper that centers content
+import InteractiveBook from "../ui/InteractiveBook"; // Reusable 3D page-flip book
+import { ROUTES } from "../../constants/routes"; // Central list of app route paths
 
-// =============================================
-// FEATURE DATA — same 3 features as the original "Why Choose Zyron" section.
-// Each points to a real, topic-related, high-quality photo for the card image,
-// plus a small icon that sits next to the text on the right — icon and photo
-// are intentionally kept separate.
-// =============================================
+// ============================================================
+// FEATURE DATA
+// The three reasons shown in the book. Each feature is printed as a
+// photo page (left) paired with a text page (right) in the same spread.
+// ============================================================
 const FEATURES = [
   {
-    id: 1, // Unique id — used as the React list key instead of the title
-    label: "Feature 01", // Small eyebrow tag shown above the icon on the text side
+    id: 1, // Unique identifier used as the React key
+    label: "Feature 01", // Small eyebrow shown above the title
     title: "AI Recommendations",
     description:
       "Our proprietary AI learns your style and curates a personalized selection just for you, getting smarter with every interaction.",
-    // Real, high-resolution photo related to AI/circuit technology, sharply
-    // cropped and centered so it fills the frame cleanly at any card size
     image:
-      "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&q=85&auto=format&fit=crop&crop=entropy",
-    Icon: BsRobot, // Small badge icon shown beside the title on the text side
+      "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=900&q=80&auto=format&fit=crop&crop=entropy", // Photo related to AI and circuitry
+    Icon: BsRobot, // Badge icon shown on the photo
+    highlights: ["Personalized", "Self-learning"], // Short tags printed under the description
   },
   {
     id: 2,
@@ -30,10 +34,10 @@ const FEATURES = [
     title: "Lightning Fast Delivery",
     description:
       "Logistics optimized for maximum speed. Most orders arrive within 2-3 business days with real-time tracking.",
-    // Real, high-resolution photo of a shipping/delivery package
     image:
-      "https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?w=1200&q=85&auto=format&fit=crop&crop=entropy",
+      "https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?w=900&q=80&auto=format&fit=crop&crop=entropy", // Photo of a shipping package
     Icon: BsTruck,
+    highlights: ["2-3 days", "Live tracking"],
   },
   {
     id: 3,
@@ -41,236 +45,289 @@ const FEATURES = [
     title: "24/7 AI Support",
     description:
       "Intelligent assistance available around the clock. Get instant answers to any question, anytime you need help.",
-    // Real, high-resolution photo of a customer-support headset
     image:
-      "https://images.unsplash.com/photo-1553775282-20af80779df7?w=1200&q=85&auto=format&fit=crop&crop=entropy",
+      "https://images.unsplash.com/photo-1553775282-20af80779df7?w=900&q=80&auto=format&fit=crop&crop=entropy", // Photo of a support headset
     Icon: BsHeadset,
+    highlights: ["Always on", "Instant answers"],
   },
-]; // End of the FEATURES array
+];
 
-const AUTOPLAY_MS = 5000; // How long (in ms) each slide stays visible before automatically advancing
+// Short recap of the benefits listed on the closing page
+const BENEFIT_RECAP = [
+  "AI-curated picks",
+  "2-3 day delivery",
+  "24/7 AI support",
+];
 
-// A small fixed set of "random-looking" rotation angles, one per feature — this
-// gives the stacked-photo deck its slightly messy, hand-placed look instead of
-// a perfectly neat stack. Declared OUTSIDE the component as a plain constant
-// (not via Math.random during render) so the component stays pure.
-const STACK_ROTATIONS = [-6, 4, -3];
+const TOTAL_FEATURES = FEATURES.length; // Number of features, used for the "01 / 03" counter
 
-const WhyZyron = () => {
-  const [activeIndex, setActiveIndex] = useState(0); // Index of the feature currently shown on both the image stack and the text side
-  const total = FEATURES.length; // Total number of features — used for wraparound math below
+// Pads a number to two digits, for example 1 becomes "01"
+const formatNumber = (value) => String(value).padStart(2, "0");
 
-  const isPausedRef = useRef(false); // Ref (not state) so hovering doesn't trigger re-renders — only read inside the autoplay interval
-  const autoplayIntervalRef = useRef(null); // Holds the autoplay interval ID so it can be cleared on unmount
+// ============================================================
+// PAGE CONTENT
+// The three page layouts printed inside the book. Every measurement
+// uses em units, and the base font size of a page scales with the page
+// width (see .zyron-book__type in index.css), so each layout stays
+// proportional on every screen size.
+// ============================================================
 
-  // goTo() moves to any target index, wrapping around circularly using the
-  // "positive modulo" trick so negative indices correctly loop to the end
-  const goTo = useCallback(
-    (targetIndex) => setActiveIndex(((targetIndex % total) + total) % total),
-    [total],
-  );
-
-  const next = useCallback(() => goTo(activeIndex + 1), [goTo, activeIndex]); // Advances to the next feature
-  const prev = useCallback(() => goTo(activeIndex - 1), [goTo, activeIndex]); // Goes back to the previous feature
-
-  // ---- Autoplay effect — automatically advances the slide, pausable on hover ----
-  useEffect(() => {
-    if (total <= 1) return undefined; // No autoplay needed if there's nothing to cycle through
-
-    autoplayIntervalRef.current = setInterval(() => {
-      if (!isPausedRef.current) {
-        setActiveIndex((current) => (current + 1) % total); // Advance to the next slide, wrapping back to 0 at the end
-      }
-    }, AUTOPLAY_MS);
-
-    return () => clearInterval(autoplayIntervalRef.current); // Clean up the interval on unmount or when "total" changes
-  }, [total]);
-
-  const activeFeature = FEATURES[activeIndex]; // Convenience reference to the currently active feature object
-  const ActiveIcon = activeFeature.Icon; // Pull out the active feature's icon component so it can be rendered as <ActiveIcon />
+// Left page: framed photo of a feature with its icon badge and counter
+const FeaturePhotoPage = ({ feature, index, folio }) => {
+  const { Icon } = feature; // Icon component of this feature
 
   return (
-    // Outer <section> wrapper — a soft gradient backdrop (rather than plain
-    // white) so the raised white card below visually pops out and reads as
-    // its own distinct block instead of blending into the page
-    <section className="py-16 sm:py-10 px-4 sm:px-6 lg:px-10 bg-linear-to-b from-gray-50 via-primary-50/40 to-gray-50">
-      <Container>
+    <div className="zyron-book__pad zyron-book__pad--photo zyron-book__type flex h-full select-none flex-col gap-[0.6em]">
+      {/* Photo frame, like a mounted print */}
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[0.9em] bg-gray-200">
+        <img
+          src={feature.image}
+          alt={feature.title}
+          className="size-full object-cover object-center"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+        {/* Soft gradient so the chips stay readable on any photo */}
+        <div className="absolute inset-0 bg-linear-to-t from-black/45 via-transparent to-black/10" />
+
+        {/* Icon badge in the top-left corner of the photo */}
+        <div className="absolute left-[0.8em] top-[0.8em] flex size-[2.7em] items-center justify-center rounded-[0.85em] bg-linear-to-br from-primary to-primary-dark text-[1.15em] text-white shadow-lg shadow-primary/30">
+          <Icon aria-hidden="true" />
+        </div>
+
+        {/* Feature counter in the bottom-left corner of the photo */}
+        <span className="absolute bottom-[0.8em] left-[0.8em] rounded-full bg-white/85 px-[0.8em] py-[0.25em] font-sans text-[0.75em] font-semibold tracking-wider text-gray-800 backdrop-blur-sm">
+          {formatNumber(index + 1)} / {formatNumber(TOTAL_FEATURES)}
+        </span>
+      </div>
+
+      {/* Page number; a non-breaking space keeps the frame height identical when no page number is given */}
+      <span className="font-sans text-[0.8em] tracking-wider text-gray-400">
+        {folio ?? "\u00A0"}
+      </span>
+    </div>
+  );
+};
+
+// Right page: label, title, description, tags, progress and a "next" cue for a feature
+const FeatureTextPage = ({ feature, index, folio }) => (
+  <div className="zyron-book__pad zyron-book__type relative flex h-full select-none flex-col font-serif text-gray-700">
+    {/* Decorative background: soft glows, a dotted corner and a large ghost number */}
+    <div className="pointer-events-none absolute -bottom-[24cqw] -left-[24cqw] size-[76cqw] rounded-full bg-primary/10 blur-2xl" />
+    <div className="pointer-events-none absolute -right-[20cqw] -top-[20cqw] size-[62cqw] rounded-full bg-primary-100/70 blur-2xl" />
+    <div className="zyron-book__dots pointer-events-none absolute right-0 top-0 size-[44cqw]" />
+    <span
+      className="pointer-events-none absolute -bottom-[3cqw] right-[3cqw] font-serif text-[44cqw] font-black leading-none text-primary/[0.07]"
+      aria-hidden="true"
+    >
+      {formatNumber(index + 1)}
+    </span>
+
+    {/* Top row: feature label pill and page number */}
+    <div className="relative flex items-center justify-between">
+      <span className="inline-flex items-center gap-[0.5em] rounded-full bg-primary/10 px-[0.85em] py-[0.3em] font-sans text-[0.8em] font-bold uppercase tracking-[0.16em] text-primary-dark">
+        <span
+          className="size-[0.55em] rounded-full bg-primary"
+          aria-hidden="true"
+        />
+        {feature.label}
+      </span>
+      <span className="font-sans text-[0.8em] tracking-wider text-gray-400">
+        {folio}
+      </span>
+    </div>
+
+    {/* Feature copy, vertically centered in the page */}
+    <div className="relative flex min-h-0 flex-1 flex-col items-start justify-center gap-[0.85em]">
+      <h3 className="break-words text-[1.45em] font-extrabold leading-[1.08] tracking-tight text-gray-900 min-[380px]:text-[1.7em]">
+        {feature.title}
+      </h3>
+      <span
+        className="h-[0.3em] w-[3.2em] rounded-full bg-linear-to-r from-primary to-primary-light"
+        aria-hidden="true"
+      />
+      {/* The first letter is enlarged like the drop cap of a printed book */}
+      <p className="leading-[1.55] text-gray-600 first-letter:float-left first-letter:mr-[0.1em] first-letter:text-[2.7em] first-letter:font-black first-letter:leading-[0.85] first-letter:text-primary">
+        {feature.description}
+      </p>
+      {/* Tags are hidden on the narrowest screens to protect the space of the description */}
+      <ul className="flex flex-wrap gap-[0.4em] max-[380px]:hidden">
+        {feature.highlights.map((highlight) => (
+          <li
+            key={highlight}
+            className="rounded-full border border-primary/25 bg-white/80 px-[0.75em] py-[0.25em] font-sans text-[0.8em] font-semibold text-primary-dark shadow-sm"
+          >
+            {highlight}
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    {/* Bottom row: progress dots and the cue that clicking turns the page */}
+    <div className="relative flex items-center justify-between">
+      <div className="flex items-center gap-[0.4em]" aria-hidden="true">
+        {FEATURES.map((item, dotIndex) => (
+          <span
+            key={item.id}
+            className={`h-[0.5em] rounded-full transition-all ${
+              dotIndex === index
+                ? "w-[1.7em] bg-primary"
+                : "w-[0.5em] bg-primary/25"
+            }`}
+          />
+        ))}
+      </div>
+      <span
+        className="flex items-center gap-[0.5em] font-sans text-[0.8em] font-semibold text-primary-dark"
+        aria-hidden="true"
+      >
+        Next
+        <span className="relative flex size-[2.6em] items-center justify-center rounded-full bg-linear-to-br from-primary to-primary-dark text-[1.05em] text-white shadow-md shadow-primary/30">
+          <span className="zyron-book__pulse absolute inset-0 rounded-full bg-primary/40" />
+          <AiOutlineArrowRight className="relative" />
+        </span>
+      </span>
+    </div>
+  </div>
+);
+
+// Left page of the last spread: recap of the three benefits and the call-to-action
+const ClosingPage = ({ folio }) => (
+  <div className="zyron-book__pad zyron-book__type relative flex h-full select-none flex-col font-serif text-gray-700">
+    {/* Decorative glows in the corners of the page */}
+    <div className="pointer-events-none absolute -right-[22cqw] -top-[22cqw] size-[70cqw] rounded-full bg-primary/15 blur-2xl" />
+    <div className="pointer-events-none absolute -bottom-[26cqw] -left-[26cqw] size-[76cqw] rounded-full bg-primary-100/80 blur-2xl" />
+    <div className="pointer-events-none absolute -right-[30cqw] -top-[30cqw] size-[90cqw] rounded-full border border-primary/15" />
+
+    {/* Page number, placed in the corner so it does not take space from the content */}
+    <span className="absolute left-[7cqw] top-[5cqw] font-sans text-[0.8em] tracking-wider text-gray-400">
+      {folio}
+    </span>
+
+    <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-[0.85em] text-center">
+      {/* Icon badge with a soft pulsing ring */}
+      <div className="relative">
+        <span
+          className="zyron-book__pulse absolute inset-0 rounded-full bg-primary/40"
+          aria-hidden="true"
+        />
+        <div className="relative flex size-[2.8em] items-center justify-center rounded-full bg-linear-to-br from-primary-light to-primary-dark text-[1.3em] text-white shadow-lg shadow-primary/40 ring-[0.22em] ring-white">
+          <BsBagCheckFill aria-hidden="true" />
+        </div>
+      </div>
+
+      <span className="font-sans text-[0.78em] font-bold uppercase tracking-[0.2em] text-primary">
+        Your turn
+      </span>
+
+      <h3 className="break-words text-[1.4em] font-extrabold leading-[1.1] tracking-tight text-gray-900 min-[380px]:text-[1.6em]">
+        Ready when{" "}
+        <span className="bg-linear-to-r from-primary to-primary-dark bg-clip-text text-transparent">
+          you are
+        </span>
+      </h3>
+
+      {/* Recap of the three benefits */}
+      <ul className="flex flex-col gap-[0.5em] text-left font-sans text-[0.85em] font-medium text-gray-600">
+        {BENEFIT_RECAP.map((benefit) => (
+          <li key={benefit} className="flex items-center gap-[0.6em]">
+            <BsCheckCircleFill
+              className="shrink-0 text-primary"
+              aria-hidden="true"
+            />
+            {benefit}
+          </li>
+        ))}
+      </ul>
+
+      {/* Call-to-action with a light sweep */}
+      <Link
+        to={ROUTES.PRODUCTS}
+        onClick={(event) => event.stopPropagation()} // Keeps the click from turning the page
+        className="group relative mt-[0.3em] inline-flex items-center gap-[0.6em] overflow-hidden rounded-full bg-linear-to-br from-primary to-primary-dark px-[1.5em] py-[0.8em] font-sans text-[0.9em] font-semibold text-white shadow-lg shadow-primary/40 transition-transform duration-300 hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <span
+          className="zyron-book__sweep pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-white/30"
+          aria-hidden="true"
+        />
+        <span className="relative">Start Shopping</span>
+        <AiOutlineArrowRight
+          className="relative transition-transform duration-300 group-hover:translate-x-1"
+          aria-hidden="true"
+        />
+      </Link>
+    </div>
+  </div>
+);
+
+// ============================================================
+// BOOK CONTENT
+// Spread 1 shows feature 1 (photo on the inside cover, text on sheet 1).
+// Every following spread pairs the photo on the back of the previous
+// sheet with the text on the front of the next one. The back of the
+// last sheet holds the closing invitation.
+// ============================================================
+const BOOK_PAGES = FEATURES.map((feature, index) => {
+  const nextFeature = FEATURES[index + 1]; // Feature whose photo is printed on the back of this sheet, if any
+
+  return {
+    id: feature.id,
+    front: (
+      <FeatureTextPage feature={feature} index={index} folio={index * 2 + 1} />
+    ),
+    back: nextFeature ? (
+      <FeaturePhotoPage
+        feature={nextFeature}
+        index={index + 1}
+        folio={(index + 1) * 2}
+      />
+    ) : (
+      <ClosingPage folio={TOTAL_FEATURES * 2} />
+    ),
+  };
+});
+
+// Inside of the front cover: the photo of the first feature
+const COVER_INNER = <FeaturePhotoPage feature={FEATURES[0]} index={0} />;
+
+// Emblem printed on the front cover
+const COVER_EMBLEM = (
+  <div className="flex size-[13cqw] items-center justify-center rounded-[3.5cqw] border border-white/40 bg-white/10 font-serif text-[7cqw] font-bold leading-none text-white backdrop-blur-sm">
+    Z
+  </div>
+);
+
+const WhyZyron = () => {
+  return (
+    // Section with a soft gradient backdrop; horizontal overflow is clipped so the 3D motion can never cause sideways scrolling
+    <section className="overflow-x-clip bg-linear-to-b from-gray-50 via-primary-50/40 to-gray-50 py-16 sm:py-10">
+      {/* Small side padding on phones gives the two-page spread as much width as possible */}
+      <Container className="px-2 sm:px-6 lg:px-8">
         {/* ============ SECTION HEADER ============ */}
-        <div className="flex flex-col items-center text-center gap-3 mb-10 sm:mb-12">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-gray-900">
+        <div className="mb-6 flex flex-col items-center gap-3 px-2 text-center sm:mb-8">
+          <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-3xl lg:text-4xl">
             Why Choose Zyron
           </h2>
-          <p className="text-sm sm:text-base text-gray-500 max-w-md">
+          <p className="max-w-md text-sm text-gray-500 sm:text-base">
             Built different. Designed for the modern shopper.
           </p>
         </div>
 
-        {/* ============ RAISED, CENTERED CARD ============ */}
-        {/* Wrapping the whole layout in its own white, shadowed, rounded
-            card makes this block visually distinct from the sections above
-            and below it, and gives it a "lifted up" appearance — as if it's
-            floating above the gradient backdrop rather than sitting flush */}
-        <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl border border-gray-100 p-5 sm:p-8 md:p-10">
-          {/* ============ ANIMATED IMAGE + CONTENT LAYOUT ============ */}
-          {/* Two-column layout on desktop: framed photo deck on the left,
-              richly-styled feature text + icon + navigation on the right. */}
-          <div
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 items-center"
-            onMouseEnter={() => (isPausedRef.current = true)} // Pause autoplay while the user is hovering the whole block
-            onMouseLeave={() => (isPausedRef.current = false)} // Resume autoplay once the mouse leaves
-          >
-            {/* ---- LEFT: framed, stacked photo deck ---- */}
-            <div
-              className="relative h-55 sm:h-65 md:h-70 max-w-75 sm:max-w-85 md:max-w-none mx-auto w-full why-zyron-perspective" // why-zyron-perspective now defined in index.css instead of an inline style object
-            >
-              {/* Every feature's photo is rendered at all times (not just the
-                  active one) so the "deck of photos" behind the top card stays
-                  visible — only their rotation/scale/opacity animate as the
-                  active index changes */}
-              {FEATURES.map((feature, i) => {
-                const isActive = i === activeIndex; // Whether this photo is the currently-focused one on top of the stack
-
-                return (
-                  <motion.div
-                    key={feature.id} // Stable key based on the feature's id, required for React list rendering
-                    initial={false} // Skip the mount-in animation — cards should already be in their resting position on first paint
-                    animate={{
-                      // Active card sits perfectly straight and fully visible on
-                      // top; inactive cards get their pre-computed tilt and sit
-                      // slightly behind/smaller/faded, creating the "deck" illusion
-                      rotate: isActive
-                        ? 0
-                        : STACK_ROTATIONS[i % STACK_ROTATIONS.length],
-                      scale: isActive ? 1 : 0.9,
-                      opacity: isActive ? 1 : 0.45,
-                      zIndex: isActive
-                        ? total
-                        : total - Math.abs(i - activeIndex), // Active card always renders above the rest
-                      y: isActive ? 0 : 14, // Inactive cards sit slightly lower, peeking out from behind the active one
-                    }}
-                    transition={{ duration: 0.4, ease: "easeInOut" }} // Smooth, moderately quick transition between states
-                    className={cn(
-                      "absolute inset-0 rounded-2xl p-2 bg-white transition-shadow duration-300", // "Photo frame" padding around every card, like a mounted print
-                      isActive
-                        ? "shadow-[0_25px_50px_-12px_rgba(16,185,129,0.35)] ring-1 ring-primary/20" // Active card gets a soft emerald glow + hairline ring
-                        : "shadow-lg", // Inactive cards keep a plainer shadow so the active one visually leads
-                    )}
-                  >
-                    {/* Inner rounded photo — the frame (parent) provides the
-                        white border margin, this fills the rest with the image */}
-                    <div className="relative w-full h-full rounded-xl overflow-hidden">
-                      {/* Real, topic-related photograph — NOT an icon — filling the whole inner frame */}
-                      <img
-                        src={feature.image} // The feature's related photo URL
-                        alt={feature.title} // Descriptive alt text for accessibility, based on the feature title
-                        className="w-full h-full object-cover object-center" // Fills the frame completely, cropping evenly from the center so nothing important gets cut off
-                        loading="lazy" // Defers loading off-screen images until they're needed, for performance
-                      />
-                      {/* Subtle bottom-to-top dark gradient so the image edge always reads cleanly, regardless of the photo's own colors */}
-                      <div className="absolute inset-0 bg-linear-to-t from-black/15 via-transparent to-transparent" />
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* ---- RIGHT: icon + feature text + navigation, redesigned to feel richer and more intentional ---- */}
-            <div className="flex flex-col justify-center items-center md:items-start text-center md:text-left">
-              {/* AnimatePresence lets the outgoing text fade/slide out while the
-                  incoming text fades/slides in, instead of snapping instantly */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeIndex} // Changing the key forces AnimatePresence to treat this as a new element to transition
-                  initial={{ opacity: 0, y: 16 }} // Starts slightly lower and invisible
-                  animate={{ opacity: 1, y: 0 }} // Settles into place at full opacity
-                  exit={{ opacity: 0, y: -16 }} // Exits by fading out while drifting slightly upward
-                  transition={{ duration: 0.3, ease: "easeInOut" }} // Quick, smooth transition timing
-                  className="flex flex-col items-center md:items-start"
-                >
-                  {/* LINE 1 — small uppercase eyebrow label in the brand green, giving the block a sense of structure/numbering */}
-                  <span className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-3">
-                    {activeFeature.label}
-                  </span>
-
-                  {/* LINE 2 — icon sits directly in front of the heading, on the same row, instead of stacked above it */}
-                  <div className="flex items-center gap-3 mb-4">
-                    {/* Icon badge — gradient-filled with its own soft shadow so it reads as a deliberate design element rather than a plain flat icon */}
-                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-linear-to-br from-primary to-primary-dark text-white flex items-center justify-center shadow-lg shadow-primary/30">
-                      <ActiveIcon className="w-5 h-5" />{" "}
-                      {/* The active feature's icon, rendered in white on the gradient badge */}
-                    </div>
-                    {/* Feature title — large, bold, tight tracking for a premium display-heading feel, aligned right next to the icon */}
-                    <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-gray-900 text-left">
-                      {activeFeature.title}
-                    </h3>
-                  </div>
-
-                  {/* LINE 3 — description in its own distinct callout format (soft tinted card with a colored left bar and a large decorative quote mark) instead of plain flat paragraph text */}
-                  <div className="relative w-full max-w-sm bg-primary-50/70 border-l-4 border-primary rounded-r-xl rounded-l-sm px-4 py-3">
-                    {/* Large decorative quote mark, purely stylistic, sitting behind the text to give the callout more visual character */}
-                    <span className="absolute -top-2 left-2 text-4xl font-serif text-primary/20 select-none leading-none">
-                      "
-                    </span>
-                    <p className="relative text-sm sm:text-base text-gray-700 leading-relaxed font-medium">
-                      {activeFeature.description}
-                    </p>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-
-              {/* ---- Prev / Next navigation buttons + a small progress counter ---- */}
-              <div className="flex items-center gap-4 pt-7">
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={prev} // Moves to the previous feature
-                    aria-label="Previous feature" // Accessible label for screen readers
-                    className="w-10 h-10 rounded-full bg-white border border-primary/30 hover:bg-primary/10 hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] text-primary flex items-center justify-center transition-all duration-200 group"
-                  >
-                    <AiOutlineArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />{" "}
-                    {/* Left arrow icon, nudges slightly further left on hover for a subtle interactive feel */}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={next} // Moves to the next feature
-                    aria-label="Next feature" // Accessible label for screen readers
-                    className="w-10 h-10 rounded-full bg-white border border-primary/30 hover:bg-primary/10 hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] text-primary flex items-center justify-center transition-all duration-200 group"
-                  >
-                    <AiOutlineArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5" />{" "}
-                    {/* Right arrow icon, nudges slightly further right on hover */}
-                  </button>
-                </div>
-                {/* Small "1 / 3" style counter, giving the navigation a bit more polish and context */}
-                <span className="text-xs font-medium text-gray-400 tracking-wide">
-                  {String(activeIndex + 1).padStart(2, "0")} /{" "}
-                  {String(total).padStart(2, "0")}
-                </span>
-              </div>
-
-              {/* ---- Small dot indicators showing progress through the features ---- */}
-              <div className="flex items-center gap-1.5 pt-4">
-                {FEATURES.map((feature, i) => (
-                  <button
-                    key={feature.id} // Unique key per dot, based on the feature's stable id
-                    type="button"
-                    onClick={() => goTo(i)} // Clicking a dot jumps straight to that feature
-                    aria-label={`Go to feature ${i + 1}`} // Accessible label describing which slide this dot jumps to
-                    aria-current={i === activeIndex} // Marks the currently active dot for assistive technology
-                    className={cn(
-                      "h-1.5 rounded-full transition-all duration-300", // Shared base styling for every dot
-                      i === activeIndex
-                        ? "w-6 bg-primary" // Active dot: wider emerald pill
-                        : "w-1.5 bg-gray-300 hover:bg-gray-400", // Inactive dots: small, subtle gray circles
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* ============ INTERACTIVE BOOK ============ */}
+        <InteractiveBook
+          title="The Zyron Promise"
+          subtitle="Three reasons to shop with us"
+          coverEmblem={COVER_EMBLEM}
+          coverInner={COVER_INNER}
+          pages={BOOK_PAGES}
+          endTitle="Thank you for reading"
+          endSubtitle="Your next favorite find is just one click away."
+          restartLabel="Read Again"
+        />
       </Container>
     </section>
   );
 };
 
-export default WhyZyron; // Exporting the component so it can be imported and used elsewhere in the app (Home.jsx imports this as "WhyZyron")
+export default WhyZyron; // Rendered by the Home page

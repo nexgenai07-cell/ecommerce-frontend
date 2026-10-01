@@ -111,13 +111,15 @@ const useGoogleSignIn = (containerId, redirectOptions = {}) => {
       try {
         const { data } = await googleAuth({ id_token: response.credential });
 
-        // Same guest-cart cleanup performed by a normal login (see
-        // Login.jsx completeLogin): if a guest cart session existed, the
-        // backend has already merged it into the user's account cart as
-        // part of this response, so the local guest session key and any
-        // cached (pre-merge) cart data are now stale and must be dropped.
+        // Same guest session cleanup performed by a normal login (see
+        // Login.jsx completeLogin): if a guest session existed, the
+        // backend has already merged the guest cart and wishlist into the
+        // user's account as part of this response, so the local guest
+        // session key and any cached (pre-merge) cart and wishlist data
+        // are now stale and must be dropped.
         localStorage.removeItem("cartSessionKey");
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
 
         login({ user: data.user, tokens: data.tokens });
         showSuccess(`Welcome, ${data.user.name}!`);

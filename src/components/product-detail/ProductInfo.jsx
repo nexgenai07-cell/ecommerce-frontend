@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -30,8 +30,6 @@ import Badge from "../ui/Badge";
 
 const ProductInfo = ({ product, imageRef }) => {
   const navigate = useNavigate();
-  // The current page, handed to Login so the visitor returns here after signing in
-  const location = useLocation();
   const queryClient = useQueryClient();
 
   const { isAuthenticated } = useAuth();
@@ -75,7 +73,7 @@ const ProductInfo = ({ product, imageRef }) => {
     (item) => item.product.id === product?.id,
   );
 
-  // ─── ADD TO CART — API 33 ───
+  // ─── ADD TO CART ───
   const addToCartMutation = useMutation({
     mutationFn: () => addToCart({ product_id: product.id, quantity }),
 
@@ -163,19 +161,23 @@ const ProductInfo = ({ product, imageRef }) => {
     },
   });
 
-  // ─── WISHLIST TOGGLE — API 40 / 41 ───
+  // ─── WISHLIST TOGGLE ───
+  // Works for guests and signed-in customers alike: a guest's wishlist is
+  // kept server-side under the guest session header (see axiosInstance.js).
   const wishlistMutation = useMutation({
     mutationFn: () =>
       inWishlist
         ? removeFromWishlist(wishlistEntry?.id)
         : addToWishlist({ product_id: product.id }),
-    onSuccess: () => {
+    onSuccess: (response) => {
       if (inWishlist) {
         handleRemoveFromWishlist(wishlistEntry?.id);
         showSuccess("Removed from wishlist");
       } else {
         handleAddToWishlist({ product });
-        showSuccess("Added to wishlist!");
+        // The server answers with 200 both for a newly saved product and
+        // for one that was already saved, so its message is shown as is.
+        showSuccess(response?.data?.message || "Added to wishlist!");
       }
       return queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
@@ -183,10 +185,9 @@ const ProductInfo = ({ product, imageRef }) => {
   });
 
   const handleAddToCart = () => {
-    // Guest cart support (backend v3.0): adding to cart no longer requires
-    // login — the backend supports an anonymous server-side guest cart via
-    // X-Cart-Session (see axiosInstance.js). Login/registration is only
-    // enforced later, at checkout.
+    // Adding to the cart does not require login — guests use an anonymous
+    // server-side cart identified by the X-Cart-Session header (see
+    // axiosInstance.js). Login is only enforced later, at checkout.
 
     // Stop here — before any network request — if the customer's cart
     // already holds every unit this product has in stock. Without this
@@ -201,7 +202,7 @@ const ProductInfo = ({ product, imageRef }) => {
     addToCartMutation.mutate();
   };
 
-  // ─── BUY NOW — API 55 (Checkout, further change, Sep 2026) ───
+  // ─── BUY NOW ───
   // Skips the cart entirely and sends the customer straight into the
   // normal Checkout page, carrying just this one product + the quantity
   // currently selected on this page via router state. Checkout.jsx reads
@@ -213,30 +214,23 @@ const ProductInfo = ({ product, imageRef }) => {
     if (!isInStock || isMaxedInCart) return;
 
     if (!isAuthenticated) {
-      // Checkout requires a logged-in customer — same gate Checkout.jsx
-      // itself enforces on mount, applied a step earlier here so the
+      // Checkout requires a logged-in customer — the same gate
+      // Checkout.jsx enforces on mount, applied a step earlier here so the
       // customer isn't sent to a page that immediately bounces them
       // straight back out to Login anyway.
       //
-      // BUGFIX: this used to call navigate(ROUTES.LOGIN) with no state
-      // at all — since we're redirecting from HERE instead of letting
-      // Checkout.jsx mount and do it, Checkout.jsx's own login-redirect
-      // effect (which carries the Buy Now product/quantity through as
-      // from.state) never got a chance to run, and Login.jsx's "from"
-      // fell back to its ROUTES.HOME default. The customer ended up on
-      // Home after signing in, with the product/quantity they picked
-      // gone entirely. Passing the exact same { from: { pathname,
-      // state } } shape here that Checkout.jsx's effect uses fixes
-      // this — Login.jsx already knows how to read it back and hand it
-      // straight to Checkout on success, for the password, 2FA, and
-      // Google sign-in paths alike.
-      // DURABLE BACKUP: router state alone doesn't survive a hard page
-      // reload — and this app's own session-refresh logic
-      // (axiosInstance.js) can trigger exactly that via
-      // window.location.href if a request racing with this login happens
-      // to hit a 401 at the wrong moment. sessionStorage survives a hard
-      // reload within the same tab; Login.jsx falls back to reading this
-      // if the router state it was expecting isn't there.
+      // Because the redirect happens here instead of inside Checkout.jsx,
+      // it must carry the same { from: { pathname, state } } shape that
+      // Checkout.jsx's own login-redirect effect uses. Login.jsx reads
+      // that shape back and hands the Buy Now product and quantity
+      // straight to Checkout after a password, 2FA or Google sign-in.
+      //
+      // Router state alone doesn't survive a hard page reload, and the
+      // session-refresh logic in axiosInstance.js can trigger one through
+      // window.location.href if a request racing with this login hits a
+      // 401 at the wrong moment. sessionStorage survives a hard reload
+      // within the same tab, so Login.jsx falls back to reading it when
+      // the expected router state is missing.
       try {
         sessionStorage.setItem(
           "buyNowRedirect",
@@ -270,10 +264,6 @@ const ProductInfo = ({ product, imageRef }) => {
   };
 
   const handleWishlistToggle = () => {
-    if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN, { state: { from: location } });
-      return;
-    }
     // Fires immediately, before the network call — the photo is still on
     // this very page either way, so this either flies up into the bag
     // (adding) or flies back down into the page (removing).
@@ -348,7 +338,7 @@ const ProductInfo = ({ product, imageRef }) => {
           {product.name}
         </h1>
 
-        {/* ─── Rating + Sold Count — API 30 (further change, Sep 2026) ───
+        {/* ─── Rating + Sold Count ───
             average_rating/review_count/total_sold all come back as
             0/0.0 for a brand-new product with no reviews or sales yet —
             the rating row is hidden entirely in that case ("No reviews
@@ -457,7 +447,7 @@ const ProductInfo = ({ product, imageRef }) => {
             )}
           </motion.button>
 
-          {/* Buy Now — API 55, skips the cart and jumps straight into
+          {/* Buy Now — skips the cart and jumps straight into
               Checkout's Buy Now mode with just this product + quantity. */}
           <motion.button
             onClick={handleBuyNow}

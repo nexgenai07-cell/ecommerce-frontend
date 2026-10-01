@@ -1,4 +1,8 @@
-import { ORDER_STATUS } from "../constants/statusTypes";
+import {
+  ORDER_STATUS,
+  ORDER_HISTORY_STATUS,
+  PAYMENT_STATUS,
+} from "../constants/statusTypes";
 
 // getOrderStatusLabel — converts a raw order status value into the same
 // human-readable wording shown on the colored status badge across the
@@ -31,6 +35,10 @@ const getOrderStatusLabel = (status) => {
       return "Delivered"; // Order has been delivered to the customer
     case ORDER_STATUS.CANCELLED:
       return "Cancelled"; // Order has been cancelled
+    case ORDER_HISTORY_STATUS.RETURNED:
+      return "Returned"; // Timeline entry added when a return request is approved
+    case PAYMENT_STATUS.REFUNDED:
+      return "Refunded"; // Timeline entry added when the payment is refunded (cancellation or approved return)
     default:
       return status; // Unknown status — just display it as is
   }

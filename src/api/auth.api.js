@@ -223,12 +223,45 @@ export const confirmPhoneChange = (data, signal) => {
 };
 
 // ----------------------------
-// API - Change Password ★ NEW (v2 backend doc)
+// Change Password (Step 1 of 2)
 // ----------------------------
-// Sends current_password (for verification) + new_password.
-// Backend returns 400 with { error: "Current password is incorrect." } if current_password is wrong.
+// Validates the current password and the new password, then emails a
+// 6-digit code to the account's registered address. The password is NOT
+// changed by this call — only after confirmPasswordChange() below
+// succeeds. A new request replaces any still-pending one, so only the
+// most recently requested code is valid. This same call is used to
+// resend a code.
+//
+// Request shape: { current_password: string, new_password: string }
+// Response (200): { message: string }
+// Possible errors (returned under an "error" key):
+// - 400 "Current password is incorrect."
+// - 400 "New password must be different from the current password."
+// - 503 "Could not send the verification email. Please try again."
 export const changePassword = (data, signal) => {
   return axiosInstance.post("/api/v1/auth/change-password/", data, { signal });
+};
+
+// ----------------------------
+// Change Password (Step 2 of 2)
+// ----------------------------
+// Validates the 6-digit code sent by changePassword() above. Only on a
+// valid, unexpired code (valid for 10 minutes) does the password actually
+// change. After 5 wrong codes the pending request is deleted and the
+// customer must start again from step 1.
+//
+// Request shape: { otp: string (6 digits) }
+// Response (200): { message: string }
+// Possible 400 errors (returned under an "error" key):
+// - "otp is required."
+// - "No pending password change found. Call /change-password/ first."
+// - "Invalid code. {n} attempt(s) left."
+// - "Too many wrong attempts. Please request a new code."
+// - "Code has expired. Please request a new one."
+export const confirmPasswordChange = (data, signal) => {
+  return axiosInstance.post("/api/v1/auth/change-password/confirm/", data, {
+    signal,
+  });
 };
 
 // ----------------------------

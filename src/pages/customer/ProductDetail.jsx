@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { BsExclamationTriangle } from "react-icons/bs";
 
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import { getProductById } from "../../api/products.api";
@@ -100,6 +101,17 @@ const ProductDetail = () => {
     );
   }
 
+  // A product that an admin deactivated or deleted while this page was open.
+  // The flags are only trusted when they are explicitly present in the data.
+  const isUnavailable =
+    product.is_active === false || product.is_delete === true;
+
+  // An unavailable product is presented with zero stock, which puts the
+  // purchase controls into their existing out-of-stock state.
+  const displayProduct = isUnavailable
+    ? { ...product, available_stock: 0 }
+    : product;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -109,6 +121,24 @@ const ProductDetail = () => {
     >
       <Container className="py-6 sm:py-10 max-w-6xl mx-auto">
         <div className="flex flex-col gap-8 sm:gap-10">
+          {isUnavailable && (
+            <div
+              role="alert"
+              className="flex items-start gap-3 rounded-2xl border border-danger/20 bg-danger-light px-4 py-3"
+            >
+              <BsExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+              <div>
+                <p className="text-sm font-semibold text-danger">
+                  This product is no longer available
+                </p>
+                <p className="mt-0.5 text-xs text-gray-600">
+                  The store has removed or deactivated this product, so it can
+                  no longer be purchased.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start">
             <div className="relative">
               {/* Numeric conversion is required here — product.original_price
@@ -139,7 +169,7 @@ const ProductDetail = () => {
               />
             </div>
 
-            <ProductInfo product={product} />
+            <ProductInfo product={displayProduct} />
           </div>
 
           <ProductTabs product={product} />

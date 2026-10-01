@@ -1,8 +1,7 @@
 // Local state hook — tracks whether the product image failed to load
 import { useState, useRef } from "react";
-// Link (for navigating to the product page) + navigate (for redirecting to
-// login when an unauthenticated user tries to act on a product)
-import { Link, useNavigate, useLocation } from "react-router-dom";
+// Link — navigates to the product detail page
+import { Link } from "react-router-dom";
 // React Query — runs the add-to-cart / wishlist-toggle network calls
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 // App route path constants (avoids hardcoding URL strings)
@@ -12,8 +11,6 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 // API calls
 import { addToCart } from "../../api/cart.api";
 import { addToWishlist, removeFromWishlist } from "../../api/wishlist.api";
-// Auth hook — tells us if the current visitor is logged in
-import useAuth from "../../hooks/useAuth";
 // Cart hook — keeps the Redux cart badge in sync after a successful add
 import useCart from "../../hooks/useCart";
 // Wishlist hook — exposes current wishlist items + optimistic add/remove helpers
@@ -42,14 +39,8 @@ import { AiOutlineHeart, AiFillHeart } from "react-icons/ai";
 const FALLBACK_IMAGE = "/placeholder-product.svg";
 
 const ProductListItem = ({ product }) => {
-  // Used to redirect unauthenticated users to the login page
-  const navigate = useNavigate();
-  // The current page, handed to Login so the visitor returns here after signing in
-  const location = useLocation();
   // Used to invalidate cached cart/wishlist queries after a successful mutation
   const queryClient = useQueryClient();
-  // Whether the current visitor is logged in
-  const { isAuthenticated } = useAuth();
   // Cart helper — updates Redux immediately so the navbar badge feels
   // instant. "items" is also needed here to check how many units of THIS
   // product are already in the cart, so the button can stop the customer
@@ -158,13 +149,15 @@ const ProductListItem = ({ product }) => {
       inWishlist
         ? removeFromWishlist(wishlistEntry?.id) // Remove using the wishlist item's own id
         : addToWishlist({ product_id: product.id }), // Add using the product id
-    onSuccess: () => {
+    onSuccess: (response) => {
       if (inWishlist) {
         handleRemoveFromWishlist(wishlistEntry?.id);
         showSuccess("Removed from wishlist");
       } else {
         handleAddToWishlist({ product });
-        showSuccess("Added to wishlist");
+        // The server answers with 200 both for a newly saved product and
+        // for one that was already saved, so its message is shown as is.
+        showSuccess(response?.data?.message || "Added to wishlist");
       }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
@@ -194,8 +187,9 @@ const ProductListItem = ({ product }) => {
   // Handles the "Add to Cart" button click
   const handleAddToCart = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
-    // Guest cart support (backend v3.0): adding to cart no longer requires
-    // login — see axiosInstance.js's X-Cart-Session guest cart handling.
+    // Adding to the cart does not require login — guests use a
+    // server-side cart identified by the X-Cart-Session header (see
+    // axiosInstance.js).
     if ((product?.available_stock ?? 0) <= 0) return; // Safety guard — button is disabled anyway when out of stock
 
     // Stop here — before any network request — if the customer's cart
@@ -215,11 +209,9 @@ const ProductListItem = ({ product }) => {
   // Handles the heart/wishlist button click
   const handleWishlist = (e) => {
     e.preventDefault(); // Stop the surrounding <Link> from navigating away
-    if (!isAuthenticated) {
-      // Guests must log in first; the current page is passed along so Login
-      // can return them here afterwards.
-      return navigate(ROUTES.LOGIN, { state: { from: location } });
-    }
+
+    // The wishlist is available to guests as well as signed-in customers,
+    // so no login check is needed before saving or removing a product.
 
     // Fires immediately, before the network call — this row stays on
     // screen either way, so the item either flies up into the bag

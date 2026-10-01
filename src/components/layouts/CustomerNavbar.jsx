@@ -87,10 +87,13 @@ const CustomerNavbar = () => {
   // place that keeps Redux (heart icons, cart badge) accurate — even
   // right after a page refresh — instead of relying only on whatever
   // was added to Redux locally during the current session.
+  //
+  // The wishlist works for guests as well as signed-in customers (a
+  // guest wishlist is identified by the same session header as the
+  // guest cart), so this query is not gated by isAuthenticated.
   const { data: wishlistSyncData } = useQuery({
     queryKey: QUERY_KEYS.WISHLIST,
     queryFn: ({ signal }) => getWishlist(signal),
-    enabled: isAuthenticated,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -100,11 +103,11 @@ const CustomerNavbar = () => {
     }
   }, [wishlistSyncData]);
 
-  // Guest cart support (backend v3.0): unlike wishlist/notifications, the
-  // cart now works for logged-out visitors too (server-side guest cart via
-  // X-Cart-Session — see axiosInstance.js), so this query is NOT gated by
-  // isAuthenticated — the navbar's cart badge should reflect a guest's
-  // cart just as much as a logged-in customer's.
+  // The cart, like the wishlist, works for logged-out visitors too
+  // (server-side guest cart via X-Cart-Session — see axiosInstance.js),
+  // so this query is not gated by isAuthenticated — the navbar's cart
+  // badge should reflect a guest's cart just as much as a logged-in
+  // customer's.
   const { data: cartSyncData } = useQuery({
     queryKey: QUERY_KEYS.CART,
     queryFn: ({ signal }) => getCart(signal),
@@ -119,7 +122,7 @@ const CustomerNavbar = () => {
 
   // ===== NOTIFICATIONS — real API, powers the bell icon's unread badge =====
   // Same pattern as the wishlist/cart sync queries above: fetch once per
-  // cache window, logged-in users only. QUERY_KEYS.NOTIFICATIONS is the
+  // cache window, but for logged-in users only. QUERY_KEYS.NOTIFICATIONS is the
   // exact same cache key used by NotificationHistory.jsx and
   // RecentNotifications.jsx, so marking a notification as read on either
   // of those pages will automatically invalidate this query too and the
@@ -260,13 +263,17 @@ const CustomerNavbar = () => {
       handleClearCart();
       handleClearWishlist();
 
-      // Wishlist and notifications are logged-in-only data — just drop
-      // them from cache so the navbar badges go back to 0/hidden right
-      // away instead of staying stale until a refresh.
-      queryClient.removeQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      // Notifications are logged-in-only data — drop them from cache so
+      // the bell badge goes back to hidden right away instead of staying
+      // stale until a refresh.
       queryClient.removeQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
-      // Cart still works for guests, so re-fetch (not remove) — this
-      // pulls whatever guest cart now applies instead of just zeroing it.
+      // The wishlist still works for guests, so it is reset rather than
+      // removed: the cached account data is discarded immediately (it
+      // must never linger on a shared device) and the active query then
+      // fetches whatever guest wishlist now applies.
+      queryClient.resetQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      // Cart works for guests too, so re-fetch (not remove) — this pulls
+      // whatever guest cart now applies instead of just zeroing it.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
 
       setUserDropdownOpen(false);
@@ -545,12 +552,7 @@ const CustomerNavbar = () => {
 
               {/* Wishlist */}
               <Link
-                to={isAuthenticated ? ROUTES.ACCOUNT_WISHLIST : ROUTES.LOGIN}
-                state={
-                  isAuthenticated
-                    ? undefined
-                    : { from: { pathname: ROUTES.ACCOUNT_WISHLIST } }
-                }
+                to={isAuthenticated ? ROUTES.ACCOUNT_WISHLIST : ROUTES.WISHLIST}
                 className="relative p-2 rounded-full text-gray-600 hover:bg-primary-50 hover:text-primary transition-colors"
                 aria-label="Wishlist"
               >

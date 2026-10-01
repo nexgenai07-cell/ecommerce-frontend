@@ -12,6 +12,7 @@
 
 import {
   ORDER_STATUS,
+  ORDER_HISTORY_STATUS,
   PAYMENT_STATUS,
   RETURN_STATUS,
   COMPLAINT_STATUS,
@@ -42,8 +43,8 @@ const getStatusColor = (status) => {
       return "bg-warning-light text-warning";
 
     case ORDER_STATUS.ON_HOLD:
-      // NEW (Sep 2026) — QR order reopened for a retry review after an
-      // earlier proof rejection. Same warning (amber) token as PENDING
+      // QR order reopened for a retry review after an earlier proof
+      // rejection. Same warning (amber) token as PENDING
       // since it's another "waiting on a decision" state, just a
       // retry rather than a first attempt.
       return "bg-warning-light text-warning";
@@ -70,6 +71,11 @@ const getStatusColor = (status) => {
       // Order was cancelled — danger (red) token signals a
       // "negative/failed" outcome
       return "bg-danger-light text-danger";
+
+    case ORDER_HISTORY_STATUS.RETURNED:
+      // Timeline entry for an approved return — warning (amber) token
+      // marks it as a notable event without reading as a failure
+      return "bg-warning-light text-warning";
 
     // ==================================================
     // PAYMENT STATUSES

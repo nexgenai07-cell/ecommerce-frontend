@@ -1039,6 +1039,24 @@ const Checkout = () => {
       // Displaying the error message to the user via toast notification
       showError(message);
 
+      // UNPAID ORDER EXISTS: only one unpaid order is allowed at a time,
+      // so the backend refuses a new checkout while an earlier order is
+      // still waiting for payment (a QR order inside its upload window or
+      // awaiting review, or a Stripe order inside its payment window).
+      // The message names that order, e.g. "You already have an unpaid
+      // order (ORD-2026-00042). ...". Instead of leaving the customer
+      // stuck here, they are sent to that order, where they can finish
+      // paying or see its countdown.
+      const unpaidOrderMatch = /unpaid order \(([^)]+)\)/i.exec(message);
+      if (error?.response?.status === 400 && unpaidOrderMatch) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
+        navigate(
+          ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", unpaidOrderMatch[1]),
+        );
+        return;
+      }
+
       // COUPON REMOVED: the coupon already on the cart was no longer valid
       // (minimum order amount no longer met, expired or deactivated). No
       // order was created and the backend has already removed the coupon

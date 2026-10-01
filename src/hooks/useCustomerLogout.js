@@ -2,7 +2,7 @@
 // ============================================================
 // WHY THIS HOOK EXISTS:
 // The "log the customer out" sequence (call the logout API, clear
-// Redux auth state, drop cached cart/wishlist/notifications data, show
+// Redux auth state, reset cached cart/wishlist/notifications data, show
 // a toast, redirect home) needs to be identical everywhere it's
 // triggered from. Centralizing it here mirrors the existing
 // useAdminLogout hook, so both sides of the app follow the same
@@ -14,7 +14,7 @@ import { useState } from "react";
 // is currently open
 
 import { useQueryClient } from "@tanstack/react-query";
-// useQueryClient — lets us drop the cached cart/wishlist/notifications
+// useQueryClient — lets us reset the cached cart/wishlist/notifications
 // data on logout, so nothing from this customer's session lingers on
 // screen — or leaks into the next customer's session on a shared
 // device — until a manual refresh
@@ -73,13 +73,17 @@ const useCustomerLogout = () => {
       handleClearCart();
       handleClearWishlist();
 
-      // Wishlist and notifications are logged-in-only data — drop them
-      // from cache so any badge counts go back to 0/hidden right away
-      // instead of staying stale until a refresh.
-      queryClient.removeQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      // Notifications are logged-in-only data — drop them from cache so
+      // the badge count goes back to hidden right away instead of
+      // staying stale until a refresh.
       queryClient.removeQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
-      // Cart still works for guests, so re-fetch (not remove) — this
-      // pulls whatever guest cart now applies instead of just zeroing it.
+      // The wishlist still works for guests, so it is reset rather than
+      // removed: the cached account data is discarded immediately (it
+      // must never linger on a shared device) and any active wishlist
+      // query then fetches whatever guest wishlist now applies.
+      queryClient.resetQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      // Cart works for guests too, so re-fetch (not remove) — this pulls
+      // whatever guest cart now applies instead of just zeroing it.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
 
       showSuccess("Logged out successfully");

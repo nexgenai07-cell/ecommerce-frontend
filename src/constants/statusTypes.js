@@ -30,6 +30,18 @@ export const ORDER_STATUS = {
 };
 
 // ----------------------------
+// ORDER HISTORY-ONLY STATUS
+// ----------------------------
+// Values that can appear on an entry of an order's status_history
+// timeline without ever being the order's own status. An order whose
+// return was approved keeps the status "delivered"; the timeline gains a
+// "returned" entry (and a "refunded" entry, see PAYMENT_STATUS.REFUNDED)
+// instead.
+export const ORDER_HISTORY_STATUS = {
+  RETURNED: "returned", // A return request for the order was approved
+};
+
+// ----------------------------
 // PAYMENT STATUS
 // ----------------------------
 // Represents the current state of payment for an order. Exactly these

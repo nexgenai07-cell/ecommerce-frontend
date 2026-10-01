@@ -1,11 +1,12 @@
 import { AiFillHeart } from "react-icons/ai"; // Filled heart icon for the wishlist icon box
-import { BsCartPlus } from "react-icons/bs"; // Cart-plus icon for the Add All to Cart button
+import { BsCartPlus, BsTrash } from "react-icons/bs"; // Cart-plus icon for the Add All to Cart button, trash icon for the Clear Wishlist button
 import { Spinner } from "../ui/Spinner"; // Reusable spinner — shown inside the button while adding all items
 
 const WishlistHeader = ({
   itemCount, // number — total saved wishlist items, drives the subtitle text and button visibility
   onAddAllToCart, // function — callback fired when the customer clicks Add All to Cart
   isAddingAll, // boolean — true while the add-all mutation is in flight; disables the button
+  onClearWishlist, // function — callback fired when the customer clicks Clear Wishlist
 }) => {
   return (
     // Outer row — stacks vertically on mobile (flex-col), aligns to bottom edge side by side on sm+
@@ -71,6 +72,26 @@ const WishlistHeader = ({
             )}
             {isAddingAll ? "Adding..." : "Add All to Cart"}
             {/* Label changes while mutation is in flight */}
+          </button>
+
+          {/* Clear Wishlist — secondary, outlined action that opens the
+              parent's confirmation dialog; it never empties the list by
+              itself. */}
+          <button
+            type="button"
+            onClick={onClearWishlist}
+            disabled={isAddingAll}
+            className="
+              flex items-center gap-2 px-4 py-2.5
+              border border-danger/30 text-danger text-sm font-semibold rounded-xl
+              hover:bg-danger-light
+              active:scale-[0.98]
+              disabled:opacity-60 disabled:cursor-not-allowed
+              transition-all duration-200
+            "
+          >
+            <BsTrash className="w-4 h-4" />
+            Clear Wishlist
           </button>
         </div>
       )}

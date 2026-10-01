@@ -40,8 +40,11 @@ const OrderCard = ({ order, index = 0 }) => {
   const canTrack =
     order.can_track !== false && order.status !== ORDER_STATUS.DELIVERED;
 
-  // Return Items button is shown only after the order has been successfully delivered
-  const canReturn = order.status === ORDER_STATUS.DELIVERED;
+  // Return Items button visibility is decided by the backend flag
+  // (can_return), which is true only for a delivered order that has no
+  // return request yet and was delivered within the return window. The
+  // status text is deliberately not checked here.
+  const canReturn = order.can_return === true;
 
   return (
     // motion.div gives this card its entrance/exit animation
@@ -205,7 +208,7 @@ const OrderCard = ({ order, index = 0 }) => {
               </Link>
             )}
 
-            {/* Return Items — only shown once the order status is Delivered */}
+            {/* Return Items — only shown while the backend says the order is returnable */}
             {canReturn && (
               <Link
                 to={ROUTES.ACCOUNT_RETURNS} // navigates to the returns/refund request page

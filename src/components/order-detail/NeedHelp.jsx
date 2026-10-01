@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom"; // Link renders anchor tags that navigate without a full page reload; useNavigate lets the AI button navigate programmatically
 import { BsTruck, BsArrowReturnLeft, BsRobot } from "react-icons/bs"; // Truck for tracking, return arrow for returns, robot for AI chat
 import { ROUTES } from "../../constants/routes"; // Centralized route path constants — avoids hardcoding URL strings
-import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used for the return button and the explanatory tooltips
+import { ORDER_STATUS } from "../../constants/statusTypes"; // Shared order status constants used for the explanatory tooltips
 import cn from "../../utils/cn"; // Merges Tailwind class strings and handles conditional classes cleanly
 
 const NeedHelp = ({
@@ -9,7 +9,7 @@ const NeedHelp = ({
   status, // string — current order status, used for the return button and the tooltips
   canCancel, // boolean — backend flag (can_cancel): whether the order can still be cancelled
   canTrack, // boolean — backend flag (can_track): whether the order can be tracked
-  hasReturn, // boolean — true if a return request already exists for this order
+  canReturn, // boolean — backend flag (can_return): delivered, no return filed yet and still inside the return window
   onCancel, // function — callback fired when the customer clicks Cancel Order
 }) => {
   const navigate = useNavigate(); // used by the "Chat with AI" button to navigate programmatically
@@ -27,10 +27,6 @@ const NeedHelp = ({
       : status === ORDER_STATUS.DELIVERED
         ? "A delivered order cannot be cancelled."
         : "This order has already shipped and can no longer be cancelled.";
-
-  // canReturn — true only when the order has been delivered AND no return has been filed
-  // Prevents a second return request from being created for the same order
-  const canReturn = status === ORDER_STATUS.DELIVERED && !hasReturn;
 
   return (
     // Card wrapper — white background, rounded corners, subtle border, inner padding, vertical stack
@@ -76,7 +72,7 @@ const NeedHelp = ({
       )}
 
       {/* ── Return Items ──────────────────────────────────────────────────────
-          Only rendered when canReturn is true (Delivered + no existing return)
+          Only rendered when the backend allows a return (canReturn is true)
           Outlined button style — less prominent than Track Order               */}
       {canReturn && (
         <Link

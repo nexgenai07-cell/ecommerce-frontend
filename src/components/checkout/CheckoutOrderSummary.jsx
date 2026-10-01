@@ -18,6 +18,8 @@ import { validateCoupon } from "../../api/discounts.api";
 import { showSuccess, showError } from "../ui/Toast";
 // Utility function to format raw numeric price values into a readable currency string
 import formatPrice from "../../utils/formatPrice";
+// Finds order lines whose quantity is higher than the stock available right now
+import getCartStockIssues from "../../utils/getCartStockIssues";
 
 // Main functional component for the Checkout Order Summary sidebar
 // Props:
@@ -72,6 +74,15 @@ const CheckoutOrderSummary = ({
 
   // Extracting the list of cart items safely; falls back to an empty array if cart or items is undefined
   const cartItems = cart?.items || [];
+
+  // Reason shown when a product's stock dropped below the requested quantity
+  // while the customer was on this page. A reason supplied by the parent
+  // (for example a missing address city) always takes priority.
+  const stockBlockedReason =
+    getCartStockIssues(cartItems).length > 0
+      ? "Some items exceed the available stock. Adjust the quantities to continue."
+      : "";
+  const effectiveBlockedReason = placeOrderBlockedReason || stockBlockedReason;
   // Converting subtotal string/value from cart object into a proper float number; defaults to 0 if missing
   const subtotal = parseFloat(cart?.subtotal || 0);
   // Converting discount amount from cart object into a float number; defaults to 0 if missing
@@ -418,7 +429,7 @@ const CheckoutOrderSummary = ({
       {showPlaceOrderButton && (
         <button
           onClick={onPlaceOrder} // Calls the parent-provided function to actually place the order when clicked
-          disabled={isPlacingOrder || !!placeOrderBlockedReason}
+          disabled={isPlacingOrder || !!effectiveBlockedReason}
           // Disables the button while the order placement request is in progress, preventing duplicate submissions,
           // and while the parent reports a reason why the order cannot be placed yet
           className="
@@ -442,9 +453,9 @@ const CheckoutOrderSummary = ({
       )}
 
       {/* Explains why the Place Order button is disabled, when the parent gives a reason */}
-      {showPlaceOrderButton && placeOrderBlockedReason && (
+      {showPlaceOrderButton && effectiveBlockedReason && (
         <p className="text-xs text-center text-warning -mt-2">
-          {placeOrderBlockedReason}
+          {effectiveBlockedReason}
         </p>
       )}
 

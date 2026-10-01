@@ -284,6 +284,14 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
   const isLowStock =
     item.product.available_stock <= 5 && item.product.available_stock > 0;
 
+  // True when the quantity held in the cart is higher than what can currently
+  // be purchased, for example because the stock dropped while the cart was
+  // open. The check uses the quantity stored on the server for this line and
+  // only applies when the stock figure is a known number.
+  const exceedsAvailableStock =
+    typeof item.product.available_stock === "number" &&
+    item.quantity > item.product.available_stock;
+
   // ----------------------------------------------------------------------------
   // RENDER
   // ----------------------------------------------------------------------------
@@ -359,7 +367,18 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
           </button>
         </div>
 
-        {isLowStock && (
+        {exceedsAvailableStock && (
+          <div className="flex items-center gap-1.5" role="alert">
+            <BsExclamationTriangle className="w-3 h-3 text-danger shrink-0" />
+            <p className="text-xs text-danger font-medium">
+              {item.product.available_stock === 0
+                ? "This item is out of stock. Remove it to continue to checkout."
+                : `Only ${item.product.available_stock} left in stock. Reduce the quantity to continue to checkout.`}
+            </p>
+          </div>
+        )}
+
+        {isLowStock && !exceedsAvailableStock && (
           <div className="flex items-center gap-1.5">
             <BsExclamationTriangle className="w-3 h-3 text-warning shrink-0" />
             <p className="text-xs text-warning font-medium">

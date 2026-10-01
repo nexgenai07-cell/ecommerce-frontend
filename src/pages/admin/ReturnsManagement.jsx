@@ -747,6 +747,22 @@ const ReturnsManagement = () => {
   // APPROVE / REJECT — both the buttons inside the detail modal and the
   // confirm modal funnel through the same decisionTarget state.
   // --------------------------------------------------
+  // Approving a return restocks the products and refunds the payment, so
+  // beyond the returns list the order views, product stock, dashboard and
+  // every revenue and profit report must be refetched too.
+  const refreshAfterReturnDecision = () => {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ADMIN_ORDERS });
+    queryClient.invalidateQueries({ queryKey: ["adminOrders"] });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_SUMMARY });
+    queryClient.invalidateQueries({ queryKey: ["salesReport"] });
+    queryClient.invalidateQueries({ queryKey: ["revenueReport"] });
+    queryClient.invalidateQueries({ queryKey: ["profitReport"] });
+    queryClient.invalidateQueries({ queryKey: ["productsPerformance"] });
+    queryClient.invalidateQueries({ queryKey: ["adminCustomers"] });
+  };
+
   const decisionMutation = useMutation({
     mutationFn: () =>
       updateReturnStatus(decisionTarget.returnItem.id, {
@@ -758,7 +774,7 @@ const ReturnsManagement = () => {
           ? "Return approved."
           : "Return rejected.",
       );
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
+      refreshAfterReturnDecision();
       setDecisionTarget(null);
       // Also closes the detail modal, if the decision was made from there —
       // the decision is final, so the Approve/Reject controls must not stay
@@ -852,7 +868,7 @@ const ReturnsManagement = () => {
             `${failures.length} return${failures.length === 1 ? "" : "s"} could not be updated.`,
         );
       }
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.RETURNS });
+      refreshAfterReturnDecision();
       setSelectedReturnIds([]);
       setTableResetKey((key) => key + 1);
       setBulkAction(null);

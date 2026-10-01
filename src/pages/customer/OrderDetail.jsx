@@ -395,7 +395,7 @@ const OrderDetail = () => {
                   status={order.status}
                   canCancel={order.can_cancel !== false} // backend flag — Cancel Order is unavailable only when explicitly false
                   canTrack={order.can_track !== false} // backend flag — Track Order is unavailable only when explicitly false
-                  hasReturn={!!orderReturn} // convert to boolean — true if a return exists
+                  canReturn={order.can_return === true} // backend flag — Return Items is available only while the order is returnable
                   onCancel={() => setShowCancelModal(true)} // opens the confirmation modal instead of cancelling immediately
                 />
               </div>

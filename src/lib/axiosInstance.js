@@ -20,16 +20,19 @@ const axiosInstance = axios.create({
 });
 
 // =============================================
-// GUEST CART SESSION BOOTSTRAP LOCK
+// GUEST SESSION BOOTSTRAP LOCK
 // =============================================
+// A visitor who is not logged in is identified by a guest session key.
+// The same key identifies both the guest cart and the guest wishlist.
+//
 // Problem this solves: if two or more requests go out at nearly the same
-// moment (e.g. the navbar's GET /cart/ on page load racing a customer's
-// "Add to Cart" click) and NEITHER has a cartSessionKey yet, both leave
-// with no X-Cart-Session header. The backend then treats EACH one as a
-// brand-new guest and hands back two DIFFERENT session keys — whichever
-// response's session_key is saved last "wins", silently orphaning
-// whatever the other request just did (e.g. an item that was just added
-// vanishes from the cart moments later).
+// moment (e.g. the navbar's cart and wishlist requests on page load
+// racing a customer's "Add to Cart" click) and NEITHER has a
+// cartSessionKey yet, all of them leave with no X-Cart-Session header.
+// The backend then treats EACH one as a brand-new guest and hands back
+// several DIFFERENT session keys — whichever response's session_key is
+// saved last "wins", silently orphaning whatever the other requests just
+// did (e.g. an item that was just added vanishes moments later).
 //
 // Fix (same lock/queue shape as isRefreshing/failedQueue below, just for
 // session bootstrapping instead of token refreshing): only the FIRST
@@ -90,17 +93,17 @@ axiosInstance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`; // attach it so the backend can authenticate the request
     }
 
-    // Guest cart support (backend v3.0): while the customer is browsing/
-    // shopping without an account, the cart lives server-side under an
-    // anonymous "cart session" identified by this header. It's stored in
+    // Guest session: while the customer is browsing without an account,
+    // the cart and the wishlist live server-side under an anonymous
+    // "cart session" identified by this header. It's stored in
     // localStorage the moment the backend first hands one out (see the
     // response interceptor below) and is attached to EVERY request from
-    // then on — not just cart calls — because Login (POST /auth/login/)
-    // and Google Login (POST /auth/google/) both read it too, to merge
-    // the guest cart into the account cart in that same request. It's
-    // cleared from localStorage right after a successful login (see
-    // Login.jsx's completeLogin), so a logged-in user never sends a
-    // stale guest session once they have real tokens.
+    // then on — not just cart and wishlist calls — because Login
+    // (POST /auth/login/) and Google Login (POST /auth/google/) both read
+    // it too, to merge the guest cart and wishlist into the account in
+    // that same request. It's cleared from localStorage right after a
+    // successful login (see Login.jsx's completeLogin), so a logged-in
+    // user never sends a stale guest session once they have real tokens.
     let cartSessionKey = localStorage.getItem("cartSessionKey");
 
     // Only real guests with no session key yet need the bootstrap lock —
@@ -169,11 +172,11 @@ axiosInstance.interceptors.response.use(
     // (if this response carries it) as a toast — see the helper above.
     notifyCouponRemovedIfPresent(response);
 
-    // Guest cart support (backend v3.0): the very first guest cart call
-    // (no Authorization header, no X-Cart-Session sent yet) gets back a
-    // fresh session_key from the backend. Persist it so every request
-    // from here on — via the request interceptor above — identifies the
-    // same guest cart, including across tabs/page reloads.
+    // Guest session: the very first guest cart or wishlist call (no
+    // Authorization header, no X-Cart-Session sent yet) gets back a fresh
+    // session_key from the backend. Persist it so every request from here
+    // on — via the request interceptor above — identifies the same guest
+    // session, including across tabs and page reloads.
     const sessionKey = response?.data?.session_key;
     if (sessionKey) {
       localStorage.setItem("cartSessionKey", sessionKey);
@@ -259,7 +262,7 @@ axiosInstance.interceptors.response.use(
     }
 
     try {
-      // API 4 — request a new access token using the refresh token
+      // Request a new access token using the refresh token
       // Uses the raw axios import (not axiosInstance) to avoid triggering this same interceptor recursively
       const response = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/token/refresh/`,

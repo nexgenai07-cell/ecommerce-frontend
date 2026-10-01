@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineClose } from "react-icons/ai";
 import cn from "../../utils/cn";
@@ -10,7 +10,6 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import useWishlist from "../../hooks/useWishlist";
 import useCart from "../../hooks/useCart";
-import useAuth from "../../hooks/useAuth";
 import useFlyToIcon from "../../hooks/useFlyToIcon";
 import { showSuccess, showError } from "../ui/Toast";
 import { addToCart } from "../../api/cart.api";
@@ -37,11 +36,7 @@ const ProductCard = ({
   // at the cart and the fly-in has nowhere meaningful to fly to.
 }) => {
   const navigate = useNavigate();
-  // The current page, handed to Login so the visitor returns here after signing in
-  const location = useLocation();
   const queryClient = useQueryClient();
-
-  const { isAuthenticated } = useAuth();
 
   // Get cart actions — handleAddItem syncs Redux for instant UI feedback.
   // "items" is needed here too — to check how many units of THIS product
@@ -208,13 +203,15 @@ const ProductCard = ({
       inWishlist
         ? removeFromWishlist(wishlistEntry?.id) // correct: wishlist item id
         : addToWishlist({ product_id: product.id }),
-    onSuccess: () => {
+    onSuccess: (response) => {
       if (inWishlist) {
         handleRemoveFromWishlist(wishlistEntry?.id);
         showSuccess("Removed from wishlist");
       } else {
         handleAddToWishlist({ product });
-        showSuccess("Added to wishlist");
+        // The server answers with 200 both for a newly saved product and
+        // for one that was already saved, so its message is shown as is.
+        showSuccess(response?.data?.message || "Added to wishlist");
       }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
@@ -235,10 +232,8 @@ const ProductCard = ({
   const handleWishlistToggle = (e) => {
     e.stopPropagation(); // Prevent the click from also triggering card navigation
 
-    if (!isAuthenticated) {
-      navigate(ROUTES.LOGIN, { state: { from: location } });
-      return;
-    }
+    // The wishlist is available to guests as well as signed-in customers,
+    // so no login check is needed before saving or removing a product.
 
     // Fires immediately, before the network call — this card stays on
     // screen either way (we're on a listing page, not the Wishlist page
@@ -268,10 +263,10 @@ const ProductCard = ({
   const handleAddToCart = (e) => {
     e.stopPropagation(); // Prevent the click from also triggering card navigation
 
-    // Guest cart support (backend v3.0): adding to cart no longer requires
-    // login — GET/POST /api/v1/cart/... all work for anonymous visitors via
-    // a server-side guest session (see axiosInstance.js's X-Cart-Session
-    // header). Login/registration is only enforced later, at checkout.
+    // Adding to the cart does not require login — cart requests work for
+    // anonymous visitors through a server-side guest session (see the
+    // X-Cart-Session header in axiosInstance.js). Login is only enforced
+    // later, at checkout.
     if (isOutOfStock) return;
 
     // Stop here — before any network request — if the customer's cart

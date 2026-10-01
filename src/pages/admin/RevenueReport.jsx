@@ -28,8 +28,9 @@ import RevenueYearComparisonChart from "../../components/admin-analytics/Revenue
 import RevenueHeatmap from "../../components/admin-analytics/RevenueHeatmap";
 
 // STATUS_OPTIONS — the same status filter as the Sales Report. "sold" is the
-// default and shows paid orders only; the other options show cancelled or
-// refunded orders, or lift the filter entirely with "all".
+// default and shows paid orders that were not refunded; the other options
+// show cancelled orders or refunded orders (cancelled orders and returned
+// delivered orders), or lift the filter entirely with "all".
 const STATUS_OPTIONS = [
   { value: "sold", label: "Sold" },
   { value: "cancelled", label: "Cancelled" },

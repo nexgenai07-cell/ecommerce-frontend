@@ -78,6 +78,14 @@ import ChatProvider from "./components/chat-assistant/ChatProvider";
 // jump to the dedicated full-page chat routes below, which
 // deliberately render OUTSIDE CustomerLayout/AdminLayout.
 
+import LiveUpdatesProvider from "./components/live/LiveUpdatesProvider";
+// LiveUpdatesProvider — mounted once, inside the Redux, TanStack Query and
+// Router providers. Owns the single store-wide WebSocket that pushes live
+// changes (product prices and stock, order and payment status, returns,
+// complaints, cart badge, notifications, admin alerts) into the query
+// cache, so screens refresh without a page reload. It reconnects
+// automatically when the user logs in, logs out or the token changes.
+
 import ScrollToTop from "./components/shared/ScrollToTop";
 // ScrollToTop — renders no UI, only runs a side effect: on every route
 // change it resets window scroll position to the top. Must be rendered
@@ -119,6 +127,8 @@ const Cart = lazy(() => import("./pages/customer/Cart"));
 const Checkout = lazy(() => import("./pages/customer/Checkout"));
 const PaymentResult = lazy(() => import("./pages/customer/PaymentResult"));
 const Wishlist = lazy(() => import("./pages/customer/Wishlist"));
+// Wishlist — served at two routes: the public ROUTES.WISHLIST for guests
+// and the account-layout ROUTES.ACCOUNT_WISHLIST for signed-in customers.
 
 // ============================================================
 // LAZY LOADED PAGES — AI Chat full-page views
@@ -382,6 +392,20 @@ const AppRoutes = () => {
             element={
               <Suspense fallback={<PageLoader />}>
                 <Cart />
+              </Suspense>
+            }
+          />
+
+          {/* WISHLIST — reachable without an account. A guest keeps a
+              server-side wishlist under the same guest session used by the
+              cart, and it is merged into the account wishlist at login.
+              Signed-in customers normally use ROUTES.ACCOUNT_WISHLIST
+              inside the account layout; both routes render the same page. */}
+          <Route
+            path={ROUTES.WISHLIST}
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <Wishlist />
               </Suspense>
             }
           />
@@ -1089,42 +1113,44 @@ function App() {
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <ChatProvider>
-            {/* ChatProvider wraps the routes (not the other way around)
-                so its session-init effect and WebSocket connection are
-                created ONCE and never torn down just because the user
-                navigated from, say, "/" to "/chat" or "/admin/dashboard"
-                to "/admin/chat". */}
-            <FlyToIconProvider>
-              <AppRoutes />
+          <LiveUpdatesProvider>
+            <ChatProvider>
+              {/* ChatProvider wraps the routes (not the other way around)
+                  so its session-init effect and WebSocket connection are
+                  created ONCE and never torn down just because the user
+                  navigated from, say, "/" to "/chat" or "/admin/dashboard"
+                  to "/admin/chat". */}
+              <FlyToIconProvider>
+                <AppRoutes />
 
-              <Toaster
-                position="top-right"
-                toastOptions={{
-                  duration: 3000,
-                  style: {
-                    fontSize: "14px",
-                    fontFamily: "Inter, sans-serif",
-                  },
-                  success: {
+                <Toaster
+                  position="top-right"
+                  toastOptions={{
+                    duration: 3000,
                     style: {
-                      background: "#ecfdf5",
-                      color: "#065f46",
-                      border: "1px solid #a7f3d0",
+                      fontSize: "14px",
+                      fontFamily: "Inter, sans-serif",
                     },
-                  },
-                  error: {
-                    duration: 4000,
-                    style: {
-                      background: "#fef2f2",
-                      color: "#991b1b",
-                      border: "1px solid #fecaca",
+                    success: {
+                      style: {
+                        background: "#ecfdf5",
+                        color: "#065f46",
+                        border: "1px solid #a7f3d0",
+                      },
                     },
-                  },
-                }}
-              />
-            </FlyToIconProvider>
-          </ChatProvider>
+                    error: {
+                      duration: 4000,
+                      style: {
+                        background: "#fef2f2",
+                        color: "#991b1b",
+                        border: "1px solid #fecaca",
+                      },
+                    },
+                  }}
+                />
+              </FlyToIconProvider>
+            </ChatProvider>
+          </LiveUpdatesProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </Provider>

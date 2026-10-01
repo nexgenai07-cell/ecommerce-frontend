@@ -1,131 +1,101 @@
 // ============================================================
 // FOOTER COMPONENT
-// This footer will be shown on the customer-facing side of the site.
-// It has 3 stacked sections (layers):
-//   1. Main columns (Brand / Quick Links / Categories / Support)
-//   2. Trust badges (Secure Checkout, Free Delivery, etc.)
-//   3. Bottom bar (copyright + legal links)
-// On mobile, the main columns collapse into an accordion (expand/collapse).
-// The "Categories" column data comes from a real backend API call.
-// The whole layout is responsive (adjusts for mobile vs desktop).
-// Icons are coming from the "react-icons" library.
 // ============================================================
+// Site-wide footer for the customer-facing pages.
+//
+// Structure:
+//   1. Main columns: brand, quick links, categories and support.
+//      Tablet and desktop spread them across the full content width,
+//      so the first column sits on the left edge and the last column
+//      sits on the right edge. Mobile shows them as collapsible
+//      accordion sections.
+//   2. Bottom bar: copyright notice and legal links.
+//
+// The background is an interactive gravity-star field. Categories are
+// loaded from the backend, and icons come from "react-icons".
 
-import { useState } from "react"; // React hook to store simple local state (accordion open/close)
-import { Link } from "react-router-dom"; // Used instead of <a> for internal app navigation (no full page reload)
-import { useQuery } from "@tanstack/react-query"; // Hook to fetch (GET) data from an API and cache it
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
-// Icons used for social media, trust badges, accordion arrow, and AI chat button
 import {
   BsFacebook,
   BsInstagram,
   BsTwitterX,
-  BsShieldCheck,
-  BsTruck,
-  BsStar,
-  BsHeadset,
   BsChevronDown,
   BsRobot,
   BsArrowUpRight,
 } from "react-icons/bs";
 
-import cn from "../../utils/cn"; // Small helper function to combine/merge CSS class names conditionally
-import { ROUTES } from "../../constants/routes"; // Centralized list of app route paths (e.g. "/products")
-import { QUERY_KEYS } from "../../constants/queryKeys"; // Centralized list of unique keys used to identify cached queries
-import { getCategories } from "../../api/categories.api"; // Function that actually calls the backend API to get categories
-import extractListData from "../../utils/extractListData"; // Defensive normalizer — see file for why this exists (backend/docs contract drift on the categories endpoint)
-import Container from "./Container"; // Wrapper component that applies consistent max-width/padding to content
+import cn from "../../utils/cn";
+import { ROUTES } from "../../constants/routes";
+import { QUERY_KEYS } from "../../constants/queryKeys";
+import { getCategories } from "../../api/categories.api";
+import extractListData from "../../utils/extractListData";
+import useChat from "../../hooks/useChat";
+import Container from "./Container";
+import GravityStarsBackground from "../ui/GravityStarsBackground";
 
-// =============================================
-// QUICK LINKS — Static navigation links
-// These are hardcoded (not from an API) and shown in the "Quick Links" column
-// =============================================
+// Static navigation links shown in the "Quick Links" column.
 const QUICK_LINKS = [
-  { label: "Home", route: ROUTES.HOME }, // Link to homepage
-  { label: "Products", route: ROUTES.PRODUCTS }, // Link to all products page
-  { label: "Best Sellers", route: `${ROUTES.PRODUCTS}?sort=best` }, // Products page filtered/sorted by best sellers
-  { label: "New Arrivals", route: `${ROUTES.PRODUCTS}?sort=new` }, // Products page filtered/sorted by newest items
+  { label: "Home", route: ROUTES.HOME },
+  { label: "Products", route: ROUTES.PRODUCTS },
+  { label: "Best Sellers", route: `${ROUTES.PRODUCTS}?sort=best` },
+  { label: "New Arrivals", route: `${ROUTES.PRODUCTS}?sort=new` },
 ];
 
-// =============================================
-// SUPPORT LINKS
-// Static legal/help links shown in the "Support" column
-// =============================================
+// Static legal and help links shown in the "Support" column.
 const SUPPORT_LINKS = [
   { label: "Privacy Policy", route: "/privacy" },
   { label: "Terms of Service", route: "/terms" },
   { label: "Help Center", route: "/help" },
 ];
 
-// =============================================
-// TRUST BADGES
-// Small icons + labels shown in Layer 2, meant to build customer trust
-// (e.g. "Secure Checkout", "Free Delivery")
-// =============================================
-const TRUST_BADGES = [
-  {
-    icon: <BsShieldCheck className="w-5 h-5" />, // Shield icon = security
-    label: "Secure Checkout",
-  },
-  {
-    icon: <BsTruck className="w-5 h-5" />, // Truck icon = delivery
-    label: "Free Delivery",
-  },
-  {
-    icon: <BsStar className="w-5 h-5" />, // Star icon = quality
-    label: "Quality Guaranteed",
-  },
-  {
-    icon: <BsHeadset className="w-5 h-5" />, // Headset icon = customer support
-    label: "24/7 Support",
-  },
-];
-
-// Social links kept in one place so both desktop + mobile render from the same source
+// Social profiles, shared by the desktop and mobile layouts.
 const SOCIAL_LINKS = [
   { icon: BsFacebook, href: "https://facebook.com", label: "Facebook" },
   { icon: BsInstagram, href: "https://instagram.com", label: "Instagram" },
   { icon: BsTwitterX, href: "https://twitter.com", label: "Twitter/X" },
 ];
 
-// =============================================
-// FOOTER LINK — small reusable component with an animated underline on hover
-// =============================================
+// Number of categories listed in the footer.
+const MAX_FOOTER_CATEGORIES = 5;
+
+// Link with an animated underline that expands on hover.
 const FooterLink = ({ to, children }) => (
   <Link
     to={to}
-    className="group relative w-fit text-sm text-gray-400 hover:text-white transition-colors duration-200"
+    className="group relative w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
   >
     {children}
     <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-300 group-hover:w-full" />
   </Link>
 );
 
-// =============================================
-// MOBILE ACCORDION SECTION
-// Reusable component used only on mobile.
-// Shows a clickable title bar; clicking it shows/hides the content below it.
-// =============================================
+// Collapsible section used by the mobile layout. The title and the links
+// are centered, and the arrow stays on the right edge of the header. The
+// header toggles the content, and the height change is animated with a
+// grid-row transition.
 const AccordionSection = ({ title, children }) => {
-  const [isOpen, setIsOpen] = useState(false); // tracks whether this section is expanded or collapsed
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="border-b border-white/10">
-      {/* Clickable header bar — clicking this toggles open/closed state */}
       <button
-        onClick={() => setIsOpen(!isOpen)} // flips isOpen true <-> false on every click
-        className="flex items-center justify-between w-full py-4 text-sm font-semibold text-white uppercase tracking-wider active:scale-[0.99] transition-transform"
+        type="button"
+        onClick={() => setIsOpen((previous) => !previous)}
+        aria-expanded={isOpen}
+        className="relative flex w-full items-center justify-center py-3 text-xs font-semibold uppercase tracking-wider text-white transition-transform active:scale-[0.99]"
       >
-        {title /* section heading text, e.g. "Quick Links" */}
+        {title}
         <BsChevronDown
           className={cn(
-            "w-4 h-4 text-gray-400 transition-transform duration-300",
-            isOpen && "rotate-180 text-primary", // rotates the arrow icon upside down when section is open
+            "absolute right-0 h-3.5 w-3.5 text-gray-200 transition-transform duration-300",
+            isOpen && "rotate-180 text-primary",
           )}
         />
       </button>
 
-      {/* The actual links/content — animated height so it doesn't feel like it "pops" open */}
       <div
         className={cn(
           "grid overflow-hidden transition-all duration-300 ease-in-out",
@@ -133,10 +103,8 @@ const AccordionSection = ({ title, children }) => {
         )}
       >
         <div className="overflow-hidden">
-          <div className="pb-5 flex flex-col gap-3">
-            {
-              children /* whatever links were passed in between <AccordionSection> tags */
-            }
+          <div className="flex flex-col items-center gap-2.5 pb-4">
+            {children}
           </div>
         </div>
       </div>
@@ -144,182 +112,74 @@ const AccordionSection = ({ title, children }) => {
   );
 };
 
-const Footer = () => {
-  const currentYear = new Date().getFullYear(); // always shows the correct copyright year
+// Placeholder lines displayed while the categories are loading.
+const CategorySkeleton = ({ lines, gap }) => (
+  <div className={cn("flex flex-col", gap)}>
+    {Array.from({ length: lines }, (_, index) => (
+      <div
+        key={index}
+        className="h-3.5 w-24 animate-pulse rounded bg-white/5"
+      />
+    ))}
+  </div>
+);
 
-  // =============================================
-  // CATEGORIES API CALL
-  // Fetches the list of product categories to display in the "Categories" footer column
-  // =============================================
+const Footer = () => {
+  const currentYear = new Date().getFullYear();
+  const { handleOpenChat } = useChat();
+
+  // Category list for the "Categories" column, cached for ten minutes.
   const { data: categoriesData } = useQuery({
-    queryKey: QUERY_KEYS.CATEGORIES, // unique cache key so react-query knows how to cache/reuse this data
-    queryFn: ({ signal }) => getCategories(undefined, signal), // the actual function that hits the backend API
-    staleTime: 1000 * 60 * 10, // data is considered "fresh" for 10 minutes before refetching
+    queryKey: QUERY_KEYS.CATEGORIES,
+    queryFn: ({ signal }) => getCategories(undefined, signal),
+    staleTime: 1000 * 60 * 10,
   });
 
-  // Safely pull out the categories array; falls back to an empty array if data isn't loaded yet
-  // API_Documentation_Final.pdf (API 11) documents this endpoint as a
-  // flat array, but real responses show a DRF-paginated object — a
-  // backend/docs contract mismatch. extractListData() safely handles
-  // either shape.
+  // The endpoint may return either a plain array or a paginated object,
+  // so the response is normalized to an array before use.
   const categories = extractListData(categoriesData);
+  const visibleCategories = categories.slice(0, MAX_FOOTER_CATEGORIES);
 
   return (
-    <footer className="relative bg-[#0d1b2a] text-white overflow-hidden">
-      {/* Decorative ambient glow — purely visual, sits behind everything */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-150 h-20 bg-primary/10 blur-[120px] rounded-full" />
+    <footer className="relative overflow-hidden bg-black text-white">
+      {/* Interactive gravity-star background, rendered behind all footer content */}
+      <GravityStarsBackground
+        starsCount={55}
+        starsSize={3}
+        starsOpacity={0.9}
+        movementSpeed={0.5}
+      />
 
-      {/* Thin gradient hairline across the very top of the footer, signals "new section" */}
-      <div className="h-px w-full bg-linear-to-r from-transparent via-primary/40 to-transparent" />
+      {/* Soft emerald glow along the top edge */}
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-20 w-150 max-w-full -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]" />
 
-      {/* =============================================
-          LAYER 1 — MAIN FOOTER COLUMNS
-          On desktop screens: shown as 4 side-by-side columns.
-          On mobile screens: shown as a collapsible accordion list instead.
-          ============================================= */}
-      <div className="relative  border-white/10">
+      {/* Gradient hairline that separates the footer from the page above */}
+      <div className="relative z-10 h-px w-full bg-linear-to-r from-transparent via-primary/40 to-transparent" />
+
+      {/* ==========================================================
+          MAIN COLUMNS
+          Mobile: accordion. Tablet: brand row above three columns.
+          Desktop: four columns spread edge to edge with equal gaps.
+          ========================================================== */}
+      <div className="relative z-10">
         <Container>
-          <div className="pt-0 pb-0 md:pt-16 md:pb-8">
-            {/* ===== DESKTOP VERSION — hidden on mobile, visible from "md" breakpoint up ===== */}
-            <div className="hidden md:grid grid-cols-12 gap-10 lg:gap-14">
-              {/* ---- Column 1: Brand info (logo, description, social icons) ---- */}
-              <div className="col-span-4 flex flex-col gap-6">
+          <div className="pb-2 pt-6 md:pb-4 md:pt-8">
+            {/* ===== TABLET AND DESKTOP LAYOUT ===== */}
+            <div className="hidden gap-x-8 gap-y-6 md:flex md:flex-wrap md:justify-between lg:flex-nowrap lg:gap-x-10">
+              {/* Brand: logo, description and social links */}
+              <div className="flex flex-col gap-4 md:basis-full md:flex-row md:items-center md:justify-between lg:basis-auto lg:flex-col lg:items-start lg:justify-start">
                 <Link
                   to={ROUTES.HOME}
-                  className="inline-flex items-baseline gap-0.5 font-extrabold text-2xl tracking-tight text-white w-fit"
+                  className="inline-flex w-fit items-baseline gap-0.5 text-lg font-extrabold tracking-tight text-white"
                 >
                   ZYRON
-                  <span className="text-primary text-2xl leading-none">.</span>
+                  <span className="text-lg leading-none text-primary">.</span>
                 </Link>
-                <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
+                <p className="max-w-xs text-xs leading-relaxed text-gray-100">
                   Precision-engineered for modern retail. Experience the future
                   of AI-powered SaaS commerce.
                 </p>
 
-                {/* Social media icon links */}
-                <div className="flex items-center gap-3">
-                  {SOCIAL_LINKS.map(({ icon: Icon, href, label }) => (
-                    <a
-                      key={label}
-                      href={href}
-                      target="_blank" // opens in a new browser tab
-                      rel="noopener noreferrer" // security best practice when using target="_blank"
-                      aria-label={label} // accessibility label for screen readers
-                      className="
-                        w-9 h-9 rounded-lg bg-white/5 border border-white/10
-                        flex items-center justify-center text-gray-400
-                        hover:text-white hover:border-primary/50 hover:bg-primary/10
-                        hover:-translate-y-0.5 transition-all duration-200
-                      "
-                    >
-                      <Icon className="w-4 h-4" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-
-              {/* ---- Column 2: Quick Links (static list defined above) ---- */}
-              <div className="col-span-2 flex flex-col gap-5">
-                <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-widest">
-                  Quick Links
-                </h4>
-                <div className="flex flex-col gap-3.5">
-                  {QUICK_LINKS.map((link) => (
-                    <FooterLink key={link.label} to={link.route}>
-                      {link.label}
-                    </FooterLink>
-                  ))}
-                </div>
-              </div>
-
-              {/* ---- Column 3: Categories — pulled live from the API, only first 5 shown ---- */}
-              <div className="col-span-3 flex flex-col gap-5">
-                <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-widest">
-                  Categories
-                </h4>
-                <div className="flex flex-col gap-3.5">
-                  {categories.length > 0 ? (
-                    categories.slice(0, 5).map(
-                      (
-                        cat, // only show the first 5 categories from the API
-                      ) => (
-                        <FooterLink
-                          key={cat.id}
-                          to={`${ROUTES.PRODUCTS}?category_id=${cat.id}`} // links to products page filtered by this category
-                        >
-                          {cat.name}
-                        </FooterLink>
-                      ),
-                    )
-                  ) : (
-                    // Lightweight skeleton so the column doesn't look broken while categories load
-                    <div className="flex flex-col gap-3.5">
-                      {[...Array(4)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="h-3.5 w-24 rounded bg-white/5 animate-pulse"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ---- Column 4: Support links + phone number + AI chat button ---- */}
-              <div className="col-span-3 flex flex-col gap-5">
-                <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-widest">
-                  Support
-                </h4>
-                <div className="flex flex-col gap-3.5">
-                  {SUPPORT_LINKS.map((link) => (
-                    <FooterLink key={link.label} to={link.route}>
-                      {link.label}
-                    </FooterLink>
-                  ))}
-
-                  {/* Clickable phone number — "tel:" link opens the phone dialer on mobile devices */}
-                  <a
-                    href="tel:+92300000000"
-                    className="text-sm text-gray-400 hover:text-white transition-colors duration-200 w-fit"
-                  >
-                    +1 (555) ZYRON-88
-                  </a>
-                </div>
-
-                {/* Button to open the AI chat widget — logic not implemented yet (empty function) */}
-                <button
-                  onClick={() => {}} // TODO: this should open the AI chat widget when clicked
-                  className="
-                    group flex items-center gap-2 px-4 py-2.5 rounded-lg
-                    bg-linear-to-r from-primary/15 to-primary/5 border border-primary/25
-                    text-primary text-sm font-medium
-                    hover:border-primary/50 hover:from-primary/25 hover:to-primary/10
-                    hover:-translate-y-0.5 transition-all duration-200 w-fit
-                  "
-                >
-                  <BsRobot className="w-4 h-4" />{" "}
-                  {/* robot icon to represent AI */}
-                  Chat with Zyron AI
-                  <BsArrowUpRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
-                </button>
-              </div>
-            </div>
-
-            {/* ===== MOBILE VERSION — visible only below "md" breakpoint, hidden on desktop ===== */}
-            <div className="md:hidden flex flex-col">
-              {/* Brand section on mobile — always visible (not part of the accordion) */}
-              <div className="flex flex-col gap-5 pb-7 border-b border-white/10 mb-1">
-                <Link
-                  to={ROUTES.HOME}
-                  className="inline-flex items-baseline gap-0.5 font-extrabold text-xl text-white w-fit"
-                >
-                  ZYRON
-                  <span className="text-primary text-xl leading-none">.</span>
-                </Link>
-                <p className="text-sm text-gray-400 leading-relaxed">
-                  Precision-engineered for modern retail.
-                </p>
-                {/* Social icons — built dynamically by looping over the shared array */}
                 <div className="flex items-center gap-3">
                   {SOCIAL_LINKS.map(({ icon: Icon, href, label }) => (
                     <a
@@ -328,20 +188,111 @@ const Footer = () => {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={label}
-                      className="
-                        w-9 h-9 rounded-lg bg-white/5 border border-white/10
-                        flex items-center justify-center text-gray-400
-                        active:scale-95 active:text-white active:border-primary/50
-                        transition-all duration-150
-                      "
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-100 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:text-white"
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className="h-3.5 w-3.5" />
                     </a>
                   ))}
                 </div>
               </div>
 
-              {/* Quick Links — collapsible accordion section */}
+              {/* Quick links */}
+              <div className="flex flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-widest text-white">
+                  Quick Links
+                </h4>
+                <div className="flex flex-col gap-2.5">
+                  {QUICK_LINKS.map((link) => (
+                    <FooterLink key={link.label} to={link.route}>
+                      {link.label}
+                    </FooterLink>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categories loaded from the API */}
+              <div className="flex min-w-36 flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-widest text-white">
+                  Categories
+                </h4>
+                <div className="flex flex-col gap-2.5">
+                  {visibleCategories.length > 0 ? (
+                    visibleCategories.map((category) => (
+                      <FooterLink
+                        key={category.id}
+                        to={`${ROUTES.PRODUCTS}?category_id=${category.id}`}
+                      >
+                        {category.name}
+                      </FooterLink>
+                    ))
+                  ) : (
+                    <CategorySkeleton lines={4} gap="gap-2.5" />
+                  )}
+                </div>
+              </div>
+
+              {/* Support links, phone number and AI assistant shortcut */}
+              <div className="flex flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-widest text-white">
+                  Support
+                </h4>
+                <div className="flex flex-col gap-2.5">
+                  {SUPPORT_LINKS.map((link) => (
+                    <FooterLink key={link.label} to={link.route}>
+                      {link.label}
+                    </FooterLink>
+                  ))}
+
+                  <a
+                    href="tel:+92300000000"
+                    className="w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
+                  >
+                    +1 (555) ZYRON-88
+                  </a>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenChat}
+                  className="group flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-linear-to-r from-primary/15 to-primary/5 px-4 py-2 text-xs font-medium text-primary transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:from-primary/25 hover:to-primary/10"
+                >
+                  <BsRobot className="h-3.5 w-3.5" />
+                  Chat with Zyron AI
+                  <BsArrowUpRight className="h-3 w-3 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />
+                </button>
+              </div>
+            </div>
+
+            {/* ===== MOBILE LAYOUT ===== */}
+            <div className="flex flex-col md:hidden">
+              {/* Brand block stays visible and is not part of the accordion */}
+              <div className="mb-1 flex flex-col items-center gap-3 border-b border-white/10 pb-4 text-center">
+                <Link
+                  to={ROUTES.HOME}
+                  className="inline-flex w-fit items-baseline gap-0.5 text-base font-extrabold text-white"
+                >
+                  ZYRON
+                  <span className="text-base leading-none text-primary">.</span>
+                </Link>
+                <p className="text-xs leading-relaxed text-gray-100">
+                  Precision-engineered for modern retail.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  {SOCIAL_LINKS.map(({ icon: Icon, href, label }) => (
+                    <a
+                      key={label}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={label}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-100 transition-all duration-150 active:scale-95 active:border-primary/50 active:text-white"
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+
               <AccordionSection title="Quick Links">
                 {QUICK_LINKS.map((link) => (
                   <FooterLink key={link.label} to={link.route}>
@@ -350,30 +301,21 @@ const Footer = () => {
                 ))}
               </AccordionSection>
 
-              {/* Categories — collapsible accordion section, same API data as desktop column */}
               <AccordionSection title="Categories">
-                {categories.length > 0 ? (
-                  categories.slice(0, 5).map((cat) => (
+                {visibleCategories.length > 0 ? (
+                  visibleCategories.map((category) => (
                     <FooterLink
-                      key={cat.id}
-                      to={`${ROUTES.PRODUCTS}?category_id=${cat.id}`}
+                      key={category.id}
+                      to={`${ROUTES.PRODUCTS}?category_id=${category.id}`}
                     >
-                      {cat.name}
+                      {category.name}
                     </FooterLink>
                   ))
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-3.5 w-24 rounded bg-white/5 animate-pulse"
-                      />
-                    ))}
-                  </div>
+                  <CategorySkeleton lines={3} gap="gap-3" />
                 )}
               </AccordionSection>
 
-              {/* Support — collapsible accordion section, includes AI chat button too */}
               <AccordionSection title="Support">
                 {SUPPORT_LINKS.map((link) => (
                   <FooterLink key={link.label} to={link.route}>
@@ -382,20 +324,16 @@ const Footer = () => {
                 ))}
                 <a
                   href="tel:+92300000000"
-                  className="text-sm text-gray-400 hover:text-white transition-colors duration-200 w-fit"
+                  className="w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
                 >
                   +1 (555) ZYRON-88
                 </a>
                 <button
-                  onClick={() => {}} // TODO: this should open the AI chat widget when clicked
-                  className="
-                    flex items-center gap-2 px-3.5 py-2 rounded-lg
-                    bg-primary/10 border border-primary/25
-                    text-primary text-sm font-medium mt-1 w-fit
-                    active:scale-[0.98] transition-transform
-                  "
+                  type="button"
+                  onClick={handleOpenChat}
+                  className="mt-1 flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary transition-transform active:scale-[0.98]"
                 >
-                  <BsRobot className="w-4 h-4" />
+                  <BsRobot className="h-3.5 w-3.5" />
                   Chat with Zyron AI
                 </button>
               </AccordionSection>
@@ -404,35 +342,34 @@ const Footer = () => {
         </Container>
       </div>
 
-      {/* =============================================
-          LAYER 3 — BOTTOM BAR
-          Final row: copyright notice on the left, legal links on the right.
-          ============================================= */}
-      <div className="relative">
+      {/* ==========================================================
+          BOTTOM BAR
+          Copyright notice and legal links. On small screens the
+          links appear first and the notice is stacked below them.
+          ========================================================== */}
+      <div className="relative z-10">
         <Container>
-          <div className="py-6 flex flex-col-reverse sm:flex-row items-center justify-between gap-4">
-            {/* Copyright notice — year is computed dynamically so it's always current */}
-            <p className="text-xs text-gray-500 text-center sm:text-left">
+          <div className="flex flex-col-reverse items-center justify-between gap-2 py-3 sm:flex-row sm:gap-4">
+            <p className="text-center text-[11px] text-gray-200 sm:text-left">
               © {currentYear} Zyron Commerce. All rights reserved.
             </p>
 
-            {/* Legal/bottom links */}
-            <div className="flex items-center gap-5 sm:gap-6">
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-6">
               <Link
                 to="/privacy"
-                className="text-xs text-gray-500 hover:text-gray-200 transition-colors duration-200"
+                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
               >
                 Privacy
               </Link>
               <Link
                 to="/payments"
-                className="text-xs text-gray-500 hover:text-gray-200 transition-colors duration-200"
+                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
               >
                 Payments
               </Link>
               <Link
                 to="/terms"
-                className="text-xs text-gray-500 hover:text-gray-200 transition-colors duration-200"
+                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
               >
                 Terms
               </Link>

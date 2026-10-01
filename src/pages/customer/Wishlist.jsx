@@ -8,15 +8,16 @@ import {
   getWishlist,
   removeFromWishlist,
   bulkRemoveFromWishlist,
-} from "../../api/wishlist.api"; // API functions: fetch the wishlist, delete a specific item by id, and delete several items in one request (API 54.1)
+  clearWishlist,
+} from "../../api/wishlist.api"; // API functions: fetch the wishlist, delete a specific item by id, delete several items in one request, and empty the whole wishlist
 import { addToCart } from "../../api/cart.api"; // API function — adds a product to the cart with a given quantity
-import useAuth from "../../hooks/useAuth"; // Custom hook that exposes isAuthenticated — wishlist query is skipped for guests
 import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAddItem to sync the local cart UI state immediately
 import useFlyToIcon from "../../hooks/useFlyToIcon"; // flyToCart — fires the "fly into the cart" animation for a given image element + photo
 import { showSuccess, showError } from "../../components/ui/Toast"; // Toast notification helpers for mutation feedback
 import Button from "../../components/ui/Button"; // Shared button component — used by the bulk-select action bar
+import ConfirmModal from "../../components/ui/ConfirmModal"; // Confirmation dialog shown before the whole wishlist is cleared
 import Container from "../../components/layouts/Container"; // Consistent max-width + horizontal padding wrapper
-import WishlistHeader from "../../components/wishlist/WishlistHeader"; // Page heading + item count pill + Share and Add All to Cart buttons
+import WishlistHeader from "../../components/wishlist/WishlistHeader"; // Page heading + item count pill + Add All to Cart and Clear Wishlist buttons
 import WishlistCard from "../../components/wishlist/WishlistCard"; // Single product card with remove, add to cart, stock status, price
 import WishlistAIBanner from "../../components/wishlist/WishlistAIBanner"; // AI recommendation banner shown below the grid
 import EmptyState from "../../components/ui/EmptyState"; // Generic empty state UI with a configurable action button
@@ -25,7 +26,6 @@ import { SkeletonCard } from "../../components/ui/Skeleton"; // Animated placeho
 const Wishlist = () => {
   const navigate = useNavigate(); // used by the empty state button to send the user to the products listing page
   const queryClient = useQueryClient(); // used to invalidate wishlist and cart caches after mutations
-  const { isAuthenticated } = useAuth(); // wishlist API should only fire for logged-in users
   const { handleAddItem } = useCart(); // syncs local cart state immediately after a successful add-to-cart mutation
   const { flyToCart } = useFlyToIcon(); // triggers the "fly into the cart" animation
 
@@ -62,6 +62,7 @@ const Wishlist = () => {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
   const [isAddingSelected, setIsAddingSelected] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false); // controls the "Clear wishlist?" confirmation dialog
 
   const startLoading = (productId) =>
     setLoadingProductIds((prev) => new Set(prev).add(productId));
@@ -74,16 +75,17 @@ const Wishlist = () => {
     });
 
   // =============================================
-  // WISHLIST API
-  // API 39 — GET /api/v1/wishlist/
+  // WISHLIST
+  // GET /api/v1/wishlist/
   // =============================================
 
-  // enabled: isAuthenticated — skips the query entirely for unauthenticated visitors
+  // The wishlist works for guests too: a guest's requests are identified
+  // by the X-Cart-Session header that the shared axios instance attaches,
+  // so the query runs for every visitor.
   // staleTime 5 min — wishlist changes less frequently than orders or notifications
   const { data: wishlistData, isLoading } = useQuery({
     queryKey: QUERY_KEYS.WISHLIST,
     queryFn: ({ signal }) => getWishlist(signal),
-    enabled: isAuthenticated, // prevents unnecessary API calls for guest users
     staleTime: 1000 * 60 * 5,
   });
 
@@ -126,7 +128,7 @@ const Wishlist = () => {
 
   // =============================================
   // REMOVE FROM WISHLIST
-  // API 41 — DELETE /api/v1/wishlist/remove/{id}/
+  // DELETE /api/v1/wishlist/remove/{id}/
   // =============================================
 
   const removeMutation = useMutation({
@@ -176,13 +178,10 @@ const Wishlist = () => {
 
   // =============================================
   // BULK REMOVE FROM WISHLIST
-  // API 54.1 — POST /api/v1/wishlist/bulk-remove/
+  // POST /api/v1/wishlist/bulk-remove/
   // =============================================
-  // Replaces the old "loop removeMutation once per selected item"
-  // approach that used to power handleRemoveSelected below — that loop
-  // was exactly why selected wishlist cards used to disappear one by
-  // one instead of together whenever more than one was selected. This
-  // sends every selected item's id in a SINGLE request instead.
+  // Sends every selected item's id in a SINGLE request, so the selected
+  // cards leave the grid together instead of one by one.
   const bulkRemoveMutation = useMutation({
     mutationFn: (itemIds) => bulkRemoveFromWishlist(itemIds), // one call, every selected id at once
 
@@ -232,8 +231,45 @@ const Wishlist = () => {
   });
 
   // =============================================
+  // CLEAR WISHLIST
+  // DELETE /api/v1/wishlist/clear/
+  // =============================================
+  // Empties the whole wishlist in one request. The cache is emptied
+  // straight away so the page switches to its empty state at once, and
+  // is restored if the request fails.
+  const clearMutation = useMutation({
+    mutationFn: () => clearWishlist(),
+
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.WISHLIST });
+      const previousWishlist = queryClient.getQueryData(QUERY_KEYS.WISHLIST);
+
+      queryClient.setQueryData(QUERY_KEYS.WISHLIST, (old) => {
+        if (!old?.data?.items) return old;
+        return { ...old, data: { ...old.data, items: [] } };
+      });
+
+      return { previousWishlist };
+    },
+
+    onSuccess: (response) => {
+      setSelectedIds(new Set());
+      setIsClearConfirmOpen(false);
+      showSuccess(response?.data?.message || "Wishlist cleared");
+    },
+
+    onError: (_err, _vars, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData(QUERY_KEYS.WISHLIST, context.previousWishlist);
+      }
+      setIsClearConfirmOpen(false);
+      showError("Failed to clear wishlist.");
+    },
+  });
+
+  // =============================================
   // ADD TO CART
-  // API 33 — POST /api/v1/cart/add/
+  // POST /api/v1/cart/add/
   // =============================================
 
   const addToCartMutation = useMutation({
@@ -393,8 +429,7 @@ const Wishlist = () => {
   const selectedItems = wishlistItems.filter((i) => selectedIds.has(i.id));
 
   // handleRemoveSelected — removes every selected wishlist entry in a
-  // SINGLE request via bulkRemoveMutation (API 54.1) instead of the
-  // previous one-request-per-item loop, so the selected cards leave
+  // SINGLE request via bulkRemoveMutation, so the selected cards leave
   // the grid together as one batch rather than disappearing one by one.
   const handleRemoveSelected = async () => {
     setIsBulkRemoving(true);
@@ -460,12 +495,13 @@ const Wishlist = () => {
         {/* Outer flex column — stacks all page sections vertically with consistent gaps */}
         <div className="flex flex-col gap-8">
           {/* ── Page header ────────────────────────────────────────────────────────
-              Title + item count pill + Share and Add All to Cart buttons
+              Title + item count pill + Add All to Cart and Clear Wishlist buttons
               Buttons are hidden inside WishlistHeader when wishlistItems is empty  */}
           <WishlistHeader
             itemCount={wishlistItems.length} // drives the count pill and button visibility
             onAddAllToCart={handleAddAllToCart} // fires the sequential add-all loop on click
             isAddingAll={isAddingAll} // true ONLY during the "Add All" flow itself — unaffected by a single card's own click
+            onClearWishlist={() => setIsClearConfirmOpen(true)} // opens the confirmation dialog before the whole wishlist is emptied
           />
 
           {/* ── Loading skeleton ────────────────────────────────────────────────────
@@ -577,6 +613,20 @@ const Wishlist = () => {
           {!isLoading && wishlistItems.length > 0 && <WishlistAIBanner />}
         </div>
       </Container>
+
+      {/* Confirmation before the whole wishlist is emptied — clearing is
+          irreversible, so it is never triggered by a single click. */}
+      <ConfirmModal
+        isOpen={isClearConfirmOpen}
+        onClose={() => setIsClearConfirmOpen(false)}
+        onConfirm={() => clearMutation.mutate()}
+        title="Clear wishlist?"
+        message="This removes every saved product from your wishlist. This action cannot be undone."
+        confirmLabel="Clear Wishlist"
+        cancelLabel="Keep Items"
+        variant="danger"
+        isLoading={clearMutation.isPending}
+      />
     </div>
   );
 };

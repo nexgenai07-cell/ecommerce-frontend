@@ -199,32 +199,362 @@ body::-webkit-scrollbar {
 
 /* ================================================================ */
 /* HOME PAGE COMPONENT STYLES                                        */
-/* Everything below used to live inside inline <style>{`...`}</style> */
-/* tags (or inline style={{...}} attributes with fixed/static values) */
-/* directly inside the Home page JSX files. That is the wrong place   */
-/* for CSS in this project — only Tailwind utility classes and truly  */
-/* per-render DYNAMIC values (computed from state/props, e.g. a       */
-/* count-up animation's font-size) are allowed inline in JSX. Static  */
-/* CSS — keyframes, classes, media queries — always belongs here.     */
+/* Static styles of the Home page components are defined in this      */
+/* section: keyframes, classes and media queries. The components      */
+/* themselves use Tailwind utility classes in their JSX and refer to  */
+/* the classes below for anything Tailwind cannot express.            */
 /* ================================================================ */
 
 /* ---------------------------------------------------------------- */
-/* WhyZyron.jsx — the stacked-photo-deck card on the left needs a    */
-/* CSS "perspective" so its 3D rotate/scale/opacity transitions      */
-/* (applied per-photo via framer-motion) actually look 3D instead of */
-/* flat. Was previously: style={{ perspective: "1000px" }} inline.   */
+/* InteractiveBook.jsx / WhyZyron.jsx — 3D page-flip book.            */
+/* The book sizes itself from the width of its wrapper using          */
+/* container query units, so it fits every screen from a small phone  */
+/* to a wide desktop without media-query size tables or inline        */
+/* styles. Motion is driven by data-open / data-flipped attributes.   */
 /* ---------------------------------------------------------------- */
-.why-zyron-perspective {
-  perspective: 1000px; /* Gives the child photo layers a 3D space to rotate/scale within */
+
+/* Outer wrapper: makes its own width the reference for every "cqw" unit used by the book */
+.zyron-book-stage {
+  width: 100%; /* Takes the full width of the section container */
+  container-type: inline-size; /* Lets descendants size themselves from this width with cqw units */
+}
+
+/* Scene: holds the 3D perspective, the size variables and room for the book and its controls */
+.zyron-book-scene {
+  --book-w: min(13rem, 45cqw); /* Width of one page; a small book on large screens, and two pages side by side always stay well inside the wrapper width on phones */
+  --book-h: calc(var(--book-w) * 1.85); /* Page height; tall proportions on phones leave room for the text */
+  --book-paper: #fdfbf7; /* Warm paper color of every page */
+  --book-paper-hover: #fcfaf5; /* Slightly darker paper shown while a page is hovered */
+  --book-open-duration: 1.5s; /* Time the cover takes to swing open */
+  --book-open-ease: cubic-bezier(0.25, 0, 0, 1); /* Soft start and long, gentle finish for the cover */
+  --book-flip-duration: 0.6s; /* Time a single page takes to turn */
+  --book-flip-ease: cubic-bezier(0.645, 0.045, 0.355, 1); /* Ease-in-out curve that feels like paper */
+  position: relative; /* Anchor for the close button and the hint */
+  display: flex; /* Centers the book horizontally and vertically */
+  align-items: center; /* Vertical centering */
+  justify-content: center; /* Horizontal centering */
+  width: 100%; /* Full wrapper width */
+  height: calc(var(--book-h) + 6.5rem); /* Book height plus space above and below for the close button, shadow and hint */
+  perspective: 2000px; /* Depth of field for every 3D rotation inside the scene */
+}
+
+/* Slightly wider pages on larger phones and small tablets */
+@media (min-width: 480px) {
+  .zyron-book-scene {
+    --book-h: calc(var(--book-w) * 1.6); /* Slightly less tall than on phones because the pages are wider */
+  }
+}
+
+/* Classic book proportions from tablets upward */
+@media (min-width: 640px) {
+  .zyron-book-scene {
+    --book-h: calc(var(--book-w) * 1.45); /* Standard portrait book ratio */
+  }
+}
+
+/* In a 3D scene an element's own transparent box is hit-tested in front of children that sit slightly behind it, such as the back cover and its button. The structural containers therefore ignore the pointer and only the visible parts receive it. */
+.zyron-book-tilt,
+.zyron-book,
+.zyron-book__cover,
+.zyron-book__pages,
+.zyron-book__rear {
+  pointer-events: none; /* Containers and the hidden rear face never capture clicks */
+}
+.zyron-book__face,
+.zyron-book__page,
+.zyron-book__back-cover {
+  pointer-events: auto; /* The visible faces, sheets and back cover receive clicks normally */
+}
+
+/* Close button: anchored to the top-right corner of the open two-page spread, whose right edge lies one page width to the right of the scene center */
+.zyron-book__close {
+  position: absolute; /* Positioned relative to the scene */
+  left: calc(50% + var(--book-w) - 1rem); /* Right edge of the open spread, pulled in so the button overlaps the corner */
+  top: calc(50% - var(--book-h) / 2 - 1rem); /* Top edge of the book, raised so the button overlaps the corner */
+  z-index: 10; /* Above the book */
+}
+
+/* On tablets and desktops there is room for the button to sit further outside the corner, clear of the page number */
+@media (min-width: 640px) {
+  .zyron-book__close {
+    left: calc(50% + var(--book-w) - 0.35rem); /* Slightly outside the right edge of the spread */
+    top: calc(50% - var(--book-h) / 2 - 1.1rem); /* Slightly above the top edge of the book */
+  }
+}
+
+/* Tilt wrapper: holds the book's resting pose and its entrance animation, separate from the book so the open/close transitions never interfere with it */
+.zyron-book-tilt {
+  position: relative; /* Anchor for the book */
+  width: var(--book-w); /* One page wide, like the book */
+  height: var(--book-h); /* One page tall, like the book */
+  transform-style: preserve-3d; /* Passes the 3D space of the scene on to the book */
+}
+.zyron-book-tilt[data-revealed="false"] {
+  transform: translateY(2.5rem) rotateZ(-16deg) rotateX(18deg) rotateY(-22deg) scale(0.85); /* Resting pose before the section is seen: leaning and turned away */
+}
+.zyron-book-tilt[data-revealed="true"] {
+  animation: zyronBookSpinIn 1.15s cubic-bezier(0.2, 0.75, 0.25, 1) 1; /* Fast entrance spin that ends upright */
+}
+
+/* Entrance: the book whirls through two full turns, overshoots in size and tilt, then lands straight. Every keyframe uses the same list of transform functions so the values interpolate smoothly, and -720deg is visually identical to the upright pose. */
+@keyframes zyronBookSpinIn {
+  0% {
+    transform: translateY(2.5rem) rotateZ(-16deg) rotateX(18deg) rotateY(-22deg) scale(0.85); /* Matches the resting pose so there is no jump */
+  }
+  30% {
+    transform: translateY(-2rem) rotateZ(14deg) rotateX(-14deg) rotateY(-280deg) scale(1.12); /* Lifted, spinning and leaning the other way */
+  }
+  60% {
+    transform: translateY(-0.5rem) rotateZ(-8deg) rotateX(8deg) rotateY(-540deg) scale(1.08); /* Second turn, leaning back */
+  }
+  82% {
+    transform: translateY(0.4rem) rotateZ(3deg) rotateX(-3deg) rotateY(-700deg) scale(0.98); /* Nearly upright with a small overshoot */
+  }
+  100% {
+    transform: translateY(0) rotateZ(0deg) rotateX(0deg) rotateY(-720deg) scale(1); /* Upright and settled */
+  }
+}
+
+/* The book: the closed cover is centered, and the open spread is shifted right by half a page so it stays centered */
+.zyron-book {
+  position: relative; /* Anchor for the absolutely positioned cover and pages */
+  width: var(--book-w); /* One page wide */
+  height: var(--book-h); /* One page tall */
+  transform-style: preserve-3d; /* Keeps the cover and pages in the same 3D space */
+  transition: transform var(--book-open-duration) var(--book-open-ease); /* Slides in sync with the cover opening */
+}
+.zyron-book[data-open="true"] {
+  transform: translateX(calc(var(--book-w) / 2)); /* Moves the spine to the center of the scene */
+}
+
+/* While the book turns itself back after being left alone, every movement runs much faster so the return is quick and clearly visible */
+.zyron-book[data-rewinding="true"] {
+  --book-flip-duration: 0.3s; /* Pages snap back one after another */
+  --book-open-duration: 0.7s; /* The cover closes briskly */
+}
+
+/* Front cover: hinged on its left edge */
+.zyron-book__cover {
+  position: absolute; /* Covers the first page exactly */
+  inset: 0; /* Same size as a page */
+  z-index: 100; /* Above every page while the book is closed */
+  transform-origin: left center; /* Hinge along the spine */
+  transform-style: preserve-3d; /* Lets the outside and inside faces sit back to back */
+  transition:
+    transform var(--book-open-duration) var(--book-open-ease),
+    z-index 0s linear calc(var(--book-open-duration) * 0.4); /* Closing: the cover returns on top shortly before it lands */
+}
+.zyron-book[data-open="true"] .zyron-book__cover {
+  z-index: 0; /* Drops below the pages once it has swung past the vertical position */
+  transform: rotateY(-180deg); /* Swings fully open to the left */
+  transition:
+    transform var(--book-open-duration) var(--book-open-ease),
+    z-index 0s linear calc(var(--book-open-duration) * 0.6); /* Opening: the stacking change waits until the cover is edge-on */
+}
+
+/* On devices with a real pointer the cover lifts slightly when the book is hovered */
+@media (hover: hover) {
+  .zyron-book[data-open="false"]:hover .zyron-book__cover {
+    transform: rotateY(-15deg); /* Small peek that invites a click */
+  }
+}
+
+/* Stack of sheets and the back cover */
+.zyron-book__pages {
+  position: absolute; /* Sits exactly on top of the book area */
+  inset: 0; /* Same size as a page */
+  z-index: 0; /* Creates the stacking context that orders the sheets */
+  transform-style: preserve-3d; /* Keeps the sheets in the shared 3D space */
+}
+
+/* One sheet of paper, hinged on its left edge */
+.zyron-book__page {
+  position: absolute; /* Every sheet lies on the same spot */
+  inset: 0; /* Same size as a page */
+  transform-origin: left center; /* Hinge along the spine */
+  transform-style: preserve-3d; /* Lets the front and back faces sit back to back */
+  background: var(--book-paper); /* Paper color visible on the sheet edge */
+  border: 1px solid var(--color-gray-100); /* Hairline that separates stacked sheets */
+  border-radius: var(--radius-sm) var(--radius-md) var(--radius-md) var(--radius-sm); /* Softer outer corners, tighter spine corners */
+  box-shadow: var(--shadow-sm); /* Subtle depth between sheets */
+  transition:
+    transform var(--book-flip-duration) var(--book-flip-ease),
+    z-index var(--book-flip-duration) var(--book-flip-ease); /* The stacking order changes in step with the turn so the moving sheet stays on top */
+}
+.zyron-book__page[data-flipped="true"] {
+  transform: rotateY(-180deg); /* Turned over to the left side of the spine */
+}
+
+/* Printable side of a sheet or of the cover */
+.zyron-book__face {
+  position: absolute; /* Fills its sheet */
+  inset: 0; /* Same size as the sheet */
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Clips content and rounded corners */
+  container-type: size; /* Makes the face the reference for the cqw units used by its content */
+  -webkit-backface-visibility: hidden; /* Safari: hides the face when it points away from the viewer */
+  backface-visibility: hidden; /* Only the side facing the viewer is drawn */
+}
+.zyron-book__face--front {
+  transform: translateZ(0.5px); /* Lifted slightly to avoid flickering against the sheet body */
+}
+.zyron-book__face--back {
+  transform: rotateY(180deg) translateZ(0.5px); /* Printed on the reverse side of the sheet */
+}
+
+/* Faces that are clickable pages */
+.zyron-book__face--paper {
+  background: var(--book-paper); /* Paper color */
+  cursor: pointer; /* Signals that clicking turns the page */
+  transition: background-color 0.2s ease; /* Smooth hover tint */
+}
+.zyron-book__face--paper:hover {
+  background: var(--book-paper-hover); /* Slightly darker paper under the pointer */
+}
+
+/* Left-hand pages have a fine edge line along the outside of the spread */
+.zyron-book__face--left {
+  border-right: 1px solid var(--color-gray-200); /* Edge line next to the spine */
+}
+
+/* Back cover: a hardcover in the brand colors that sits behind every sheet and is revealed on the right at the end */
+.zyron-book__back-cover {
+  position: absolute; /* Lies exactly behind the stack of sheets */
+  inset: 0; /* Same size as a page */
+  z-index: -1; /* Behind the sheets inside the stack */
+  transform: translateZ(-1px); /* Pushed slightly back in 3D space */
+  -webkit-backface-visibility: hidden; /* Safari: never drawn mirrored when seen from behind */
+  backface-visibility: hidden; /* Never drawn mirrored when seen from behind */
+  container-type: size; /* Makes the cover the reference for the cqw units used by its content */
+  overflow: hidden; /* Clips the decorative circles and the shine */
+  background: linear-gradient(135deg, #064e3b 0%, var(--color-primary-dark) 55%, var(--color-primary) 100%); /* Deep emerald to bright emerald, matching the front cover */
+  border-radius: var(--radius-sm) var(--radius-md) var(--radius-md) var(--radius-sm); /* Same corner shape as the sheets */
+  box-shadow: var(--shadow-xl); /* Grounds the whole book */
+}
+
+/* Outside of the back cover: only visible when the book is seen from behind, for example during the entrance spin, so the text of the inner back cover is never shown mirrored */
+.zyron-book__rear {
+  position: absolute; /* Lies exactly behind the back cover */
+  inset: 0; /* Same size as a page */
+  z-index: -2; /* Behind the back cover inside the stack */
+  transform: rotateY(180deg) translateZ(1.5px); /* Faces away from the front and sits just behind the back cover */
+  -webkit-backface-visibility: hidden; /* Safari: hidden while the book is seen from the front */
+  backface-visibility: hidden; /* Hidden while the book is seen from the front */
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 45%, #064e3b 100%); /* Same brand colors as the covers */
+  border-radius: var(--radius-md) var(--radius-sm) var(--radius-sm) var(--radius-md); /* Corner shape mirrored to match its rotated position */
+  box-shadow: var(--shadow-xl); /* Depth when seen from behind */
+}
+
+/* Light band that slowly sweeps across the back cover like light on a glossy hardcover */
+@keyframes zyronBookShine {
+  0% {
+    transform: translateX(-160%) skewX(-20deg); /* Starts outside the left edge */
+  }
+  55%,
+  100% {
+    transform: translateX(360%) skewX(-20deg); /* Leaves past the right edge and rests there before the next pass */
+  }
+}
+.zyron-book__shine {
+  animation: zyronBookShine 6s ease-in-out infinite; /* Slow, repeating pass */
+}
+
+/* Soft ring that pulses outward from the icon badge on the closing page */
+@keyframes zyronBookPulse {
+  0% {
+    transform: scale(1); /* Same size as the badge */
+    opacity: 0.55; /* Clearly visible at the start */
+  }
+  100% {
+    transform: scale(1.7); /* Expanded well beyond the badge */
+    opacity: 0; /* Faded out completely */
+  }
+}
+.zyron-book__pulse {
+  animation: zyronBookPulse 2.4s ease-out infinite; /* Continuous, calm pulse */
+}
+
+/* Light band that sweeps across the call-to-action button */
+@keyframes zyronBookSweep {
+  0% {
+    transform: translateX(-140%) skewX(-20deg); /* Starts outside the left edge of the button */
+  }
+  60%,
+  100% {
+    transform: translateX(340%) skewX(-20deg); /* Leaves past the right edge and waits before the next pass */
+  }
+}
+.zyron-book__sweep {
+  animation: zyronBookSweep 3.2s ease-in-out infinite; /* Repeating glint that draws attention to the button */
+}
+
+/* Dotted texture used as a decorative corner on text pages; fades out toward the middle of the page */
+.zyron-book__dots {
+  background-image: radial-gradient(var(--color-primary) 1px, transparent 1.3px); /* One dot per grid cell */
+  background-size: 0.9em 0.9em; /* Spacing of the dots, proportional to the page text size */
+  opacity: 0.35; /* Kept subtle so it never competes with the text */
+  -webkit-mask-image: radial-gradient(circle at top right, #000 15%, transparent 70%); /* Safari: fade toward the page center */
+  mask-image: radial-gradient(circle at top right, #000 15%, transparent 70%); /* Fade toward the page center */
+}
+
+/* Base font size of a page: grows with the page width but never becomes unreadable or oversized. Every text size, gap and icon inside a page is written in em units, so the whole layout scales together. */
+.zyron-book__type {
+  font-size: clamp(0.6rem, 4.6cqw, 1rem); /* Minimum keeps small phones legible; maximum stops the text growing too large on desktop */
+}
+
+/* Inner spacing of a text page, proportional to the page width */
+.zyron-book__pad {
+  padding: 8cqw 7cqw; /* Vertical and horizontal margins */
+}
+
+/* Tighter frame for photo pages so the picture stays large */
+.zyron-book__pad--photo {
+  padding: 5cqw 5cqw 4cqw; /* Even frame with a slightly smaller bottom margin for the page number */
+}
+
+/* Hint below the closed book: fades in one second after the section appears */
+@keyframes zyronBookHintIn {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translateY(10px); /* Slightly lower than its resting position */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translateY(0); /* Resting position */
+  }
+}
+.zyron-book__hint {
+  animation: zyronBookHintIn 1s ease-out 1s both; /* One second delay, one second fade; "both" keeps it hidden during the delay */
+}
+
+/* Motion-sensitive users get instant page changes and a static hint */
+@media (prefers-reduced-motion: reduce) {
+  .zyron-book-tilt[data-revealed="true"] {
+    animation: none; /* No entrance spin */
+  }
+  .zyron-book-tilt[data-revealed="false"] {
+    transform: none; /* No tilted resting pose either */
+  }
+  .zyron-book,
+  .zyron-book__cover,
+  .zyron-book__page {
+    transition-duration: 0.01ms; /* Effectively instant movement */
+    transition-delay: 0s; /* No waiting before stacking changes */
+  }
+  .zyron-book__hint,
+  .zyron-book__shine,
+  .zyron-book__pulse,
+  .zyron-book__sweep {
+    animation: none; /* Hint is simply visible and the decorative loops stay still */
+  }
 }
 
 /* ---------------------------------------------------------------- */
 /* FlashSaleSection.jsx (SandTimer) — the tiny falling sand grain     */
-/* that streams through the hourglass neck while the countdown runs. */
-/* Was previously an inline <style> tag re-declared on every re-render */
-/* (since SandTimer re-renders every second from the countdown tick), */
-/* plus a separate inline style={{ top, height }} on the <span>.      */
-/* Both are now merged into this single static class.                */
+/* that streams through the hourglass neck while the countdown runs.  */
+/* Position, size and animation live in this single static class, so  */
+/* nothing has to be re-declared in the DOM on every countdown tick.  */
 /* ---------------------------------------------------------------- */
 @keyframes sandStreamFall {
   0% {
@@ -248,9 +578,7 @@ body::-webkit-scrollbar {
 /* ---------------------------------------------------------------- */
 /* FlashSaleSection.jsx (SandTimer) — the two SVG <rect> sand levels  */
 /* (top bulb draining, bottom bulb filling) animate smoothly instead  */
-/* of jumping every second. Was previously an inline                  */
-/* style={{ transition: "y 0.9s linear, height 0.9s linear" }}        */
-/* repeated on both <rect> elements.                                  */
+/* of jumping once per second when the countdown ticks.               */
 /* ---------------------------------------------------------------- */
 .sand-fill-rect {
   transition:
@@ -259,12 +587,350 @@ body::-webkit-scrollbar {
 }
 
 /* ---------------------------------------------------------------- */
+/* FlashSaleSection.jsx (hanging hourglass) — the rope and the gentle */
+/* pendulum swing of the hourglass that hangs at the right edge of    */
+/* the sale content, beside the "Shop the Sale" button and countdown. */
+/* ---------------------------------------------------------------- */
+
+/* Pendulum motion — a small rotation to either side of the vertical, played back and forth */
+@keyframes hangingTimerSwing {
+  from {
+    transform: rotate(-2.5deg); /* Leaning slightly to the left at one end of the swing */
+  }
+  to {
+    transform: rotate(2.5deg); /* Leaning slightly to the right at the other end of the swing */
+  }
+}
+
+/* Wrapper around the rope + hourglass — swings around the point where the rope is fixed */
+.hanging-timer-swing {
+  transform-origin: top center; /* The pivot is the rope's fixed top end, exactly like a real hanging object */
+  animation: hangingTimerSwing 3.6s ease-in-out infinite alternate; /* Slow, smooth back-and-forth swing that eases at both ends */
+  will-change: transform; /* Lets the browser promote the swinging block to its own compositor layer */
+}
+
+/* Twisted hemp rope — diagonal light and dark stripes give it a braided look */
+.hanging-rope {
+  background: repeating-linear-gradient(
+    -55deg,
+    #92400e 0,
+    #92400e 2px,
+    #d6a85c 2px,
+    #d6a85c 4px
+  ); /* Alternating dark-brown and tan diagonal bands every 2px */
+  border-radius: 9999px; /* Softly rounded rope ends */
+}
+
+/* Motion-sensitive users get a still hourglass instead of a continuous swing */
+@media (prefers-reduced-motion: reduce) {
+  .hanging-timer-swing {
+    animation: none; /* Stops the pendulum motion entirely */
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* FlashSaleFolder.jsx — a compact 3D folder that holds the three     */
+/* flash sale product cards. When it opens, the front cover tilts     */
+/* forward and the cards slide out of the pocket and fan apart with a */
+/* spring motion. Every size is written in "cqw" units (a share of    */
+/* the folder's own width), so the whole folder scales smoothly from  */
+/* small phones to wide desktops without media-query size tables or   */
+/* inline styles. Motion is driven by the data-open attribute.        */
+/* ---------------------------------------------------------------- */
+
+/* Stage: caps the folder to a compact size and makes its own width the reference for every "cqw" unit inside */
+.flash-folder-stage {
+  width: 100%; /* Takes the full width of its column */
+  max-width: 11rem; /* Compact folder on regular phones */
+  margin-inline: auto; /* Centers the folder inside its column */
+  container-type: inline-size; /* Lets descendants size themselves from this width with cqw units */
+}
+
+/* Very narrow phones: a slightly smaller folder keeps the fanned-out side cards clear of the screen edges */
+@media (max-width: 359px) {
+  .flash-folder-stage {
+    max-width: 9.5rem; /* A little smaller than the standard folder */
+  }
+}
+
+/* Large phones and tablets: the folder is the only content of its column, so it grows to stay in proportion with the sale copy */
+@media (min-width: 640px) {
+  .flash-folder-stage {
+    max-width: 13rem; /* Mid-sized folder */
+  }
+}
+
+/* Laptops and desktops: the widest column, so the folder reaches its largest size */
+@media (min-width: 1024px) {
+  .flash-folder-stage {
+    max-width: 15rem; /* Largest folder */
+  }
+}
+
+/* Scene: holds the size variables, the perspective, and the room the risen cards need */
+.flash-folder-scene {
+  --ff-body-h: 48cqw; /* Height of the folder body */
+  --ff-card-w: 42cqw; /* Width of one paper card */
+  --ff-card-h: 52cqw; /* Height of one paper card, short enough that its bottom edge always stays hidden behind the front cover while the folder is closed */
+  --ff-peek: 7cqw; /* How far the tip of a card shows above the pocket while the folder is closed */
+  --ff-rise: 52cqw; /* How far the middle card stands above the pocket while the folder is open, enough to lift the whole card clear of the front cover */
+  --ff-closed-shift: 26cqw; /* How far the folder sits higher while closed, so it stays visually centered in the reserved space */
+  --ff-duration: 0.8s; /* Length of the opening and closing motion */
+  --ff-spring: cubic-bezier(0.34, 1.45, 0.64, 1); /* Ease curve that overshoots slightly and settles, like a spring */
+  position: relative; /* Anchor for the glow and the tilt layer */
+  width: 100%; /* Full stage width */
+  height: calc(var(--ff-body-h) + var(--ff-rise) + 6cqw); /* Body height plus the risen cards plus a little room for their tilt */
+  perspective: 700px; /* Depth of field for the pointer tilt */
+  cursor: pointer; /* The folder can be opened by clicking anywhere on it */
+}
+
+/* Placeholder look while the products are loading */
+.flash-folder-scene[data-loading="true"] {
+  opacity: 0.6; /* Dimmed folder */
+  cursor: default; /* Nothing can be opened yet */
+  animation: flashFolderPulse 1.4s ease-in-out infinite; /* Gentle pulse that shows the section is loading */
+}
+@keyframes flashFolderPulse {
+  0%,
+  100% {
+    opacity: 0.6; /* Dim end of the pulse */
+  }
+  50% {
+    opacity: 0.35; /* Faintest point of the pulse */
+  }
+}
+
+/* Tilt layer: fills the scene and receives the pointer lean. The layer ignores the pointer so only the visible folder parts take clicks. */
+.flash-folder-tilt {
+  position: absolute; /* Covers the whole scene */
+  inset: 0;
+  pointer-events: none; /* Structural layer, never captures clicks */
+}
+
+/* Group: holds every folder part, and moves down as the folder opens */
+.flash-folder-group {
+  position: absolute; /* Covers the whole scene */
+  inset: 0;
+  transform: translateY(calc(var(--ff-closed-shift) * -1)); /* Closed: lifted so the small closed folder sits in the middle */
+  transition: transform var(--ff-duration) var(--ff-spring); /* Settles back down together with the cards rising */
+}
+.flash-folder-scene[data-open="true"] .flash-folder-group {
+  transform: translateY(0); /* Open: rests at the bottom of the scene, with the risen cards above it */
+}
+
+/* Back panel of the folder, with its tab on the left */
+.flash-folder-back {
+  position: absolute; /* Anchored to the bottom of the scene */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--ff-body-h); /* Full body height */
+  border-radius: 0 3.5cqw 3.5cqw 3.5cqw; /* Square top-left corner, because the tab continues from it */
+  background: linear-gradient(180deg, #047857 0%, #065f46 100%); /* Deep emerald, darker than the front cover so the inside reads as shaded */
+  box-shadow: 0 4cqw 7cqw -2cqw rgba(0, 0, 0, 0.55); /* Soft shadow under the folder */
+  pointer-events: auto; /* The visible panel receives clicks */
+}
+.flash-folder-back::before {
+  content: ""; /* Draws the tab as a pseudo-element */
+  position: absolute;
+  left: 0;
+  bottom: 100%; /* Sits directly on top of the panel */
+  width: 38cqw; /* Tab length */
+  height: 5.5cqw; /* Tab height */
+  border-radius: 2.5cqw 0 0 0; /* Rounded outer corner of the tab */
+  background: #047857; /* Same color as the top of the panel, so the tab flows out of it */
+  clip-path: polygon(0 0, 82% 0, 100% 100%, 0 100%); /* Slanted right edge, like a real folder tab */
+}
+
+/* Cards layer: covers the scene so each card can be positioned from the bottom of the folder */
+.flash-folder-cards {
+  position: absolute; /* Covers the whole scene */
+  inset: 0;
+  pointer-events: none; /* Only the cards themselves receive clicks, and only while the folder is open */
+}
+
+/* One paper card. It starts inside the pocket with only its tip showing, and each slot below moves it out. */
+.flash-folder-card {
+  position: absolute; /* Placed from the bottom center of the folder */
+  left: 50%;
+  bottom: calc(var(--ff-body-h) - var(--ff-card-h) + var(--ff-peek)); /* Closed: only the top "peek" part of the card is above the pocket */
+  width: var(--ff-card-w); /* Card width */
+  height: var(--ff-card-h); /* Card height */
+  margin-left: calc(var(--ff-card-w) / -2); /* Centers the card on the folder's middle line */
+  transform-origin: 50% 90%; /* Cards swing around a point near their bottom edge, like paper held in a hand */
+  transition: transform var(--ff-duration) var(--ff-spring) var(--ff-delay, 0s); /* Spring motion with a per-card delay for the staggered fan */
+  will-change: transform; /* Lets the browser move the cards on their own layer */
+  pointer-events: none; /* Closed cards ignore the pointer, so the folder receives the click instead */
+}
+.flash-folder-scene[data-open="true"] .flash-folder-card {
+  pointer-events: auto; /* Open cards can be clicked */
+}
+
+/* Closed pose: cards lean slightly, like papers stacked untidily in a pocket */
+.flash-folder-card[data-slot="left"] {
+  z-index: 1; /* Behind the middle card */
+  transform: translate(-3cqw, 0) rotate(-4deg);
+}
+.flash-folder-card[data-slot="center"] {
+  z-index: 3; /* On top of the side cards */
+  transform: translate(0, -1cqw) rotate(0deg);
+}
+.flash-folder-card[data-slot="right"] {
+  z-index: 2; /* Behind the middle card */
+  transform: translate(3cqw, 0) rotate(4deg);
+}
+
+/* Closing order: right card goes first, then left, then the middle card last */
+.flash-folder-scene[data-open="false"] .flash-folder-card[data-slot="right"] {
+  --ff-delay: 0s;
+}
+.flash-folder-scene[data-open="false"] .flash-folder-card[data-slot="left"] {
+  --ff-delay: 0.04s;
+}
+.flash-folder-scene[data-open="false"] .flash-folder-card[data-slot="center"] {
+  --ff-delay: 0.08s;
+}
+
+/* Open pose: the middle card rises straight up, the side cards spread out and lean away from it */
+.flash-folder-scene[data-open="true"] .flash-folder-card[data-slot="left"] {
+  --ff-delay: 0.12s; /* Second to move */
+  transform: translate(-38cqw, calc(var(--ff-rise) * -0.94 + var(--ff-peek))) rotate(-8deg);
+}
+.flash-folder-scene[data-open="true"] .flash-folder-card[data-slot="center"] {
+  --ff-delay: 0.04s; /* First to move */
+  transform: translate(0, calc(var(--ff-rise) * -1 + var(--ff-peek))) rotate(0deg);
+}
+.flash-folder-scene[data-open="true"] .flash-folder-card[data-slot="right"] {
+  --ff-delay: 0.2s; /* Last to move */
+  transform: translate(38cqw, calc(var(--ff-rise) * -0.94 + var(--ff-peek))) rotate(8deg);
+}
+
+/* Front cover of the folder: a button that lies in front of the cards and hides their lower part */
+.flash-folder-front {
+  position: absolute; /* Anchored to the bottom of the scene */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4; /* In front of every card */
+  height: calc(var(--ff-body-h) - 1cqw); /* Slightly shorter than the back panel, so a strip of the back shows above it */
+  padding: 0; /* Buttons carry default padding */
+  border: 0; /* Buttons carry a default border */
+  border-radius: 3.5cqw; /* Rounded corners */
+  background: linear-gradient(165deg, #34d399 0%, #10b981 42%, #059669 100%); /* Brand emerald with a light-to-dark sweep */
+  box-shadow:
+    inset 0 0.7cqw 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1.4cqw 2.4cqw rgba(4, 120, 87, 0.5),
+    0 -0.8cqw 1.8cqw rgba(0, 0, 0, 0.28); /* Bright top edge, shaded bottom, and a shadow cast onto the cards behind it */
+  cursor: pointer; /* Shows that the cover can be clicked */
+  pointer-events: auto; /* The visible cover receives clicks */
+  transform-origin: 50% 100%; /* The cover is hinged along its bottom edge */
+  transform: perspective(260cqw) rotateX(0deg); /* Closed: lies flat in front of the cards */
+  transition: transform var(--ff-duration) var(--ff-spring); /* Spring motion in sync with the cards */
+}
+.flash-folder-front:disabled {
+  cursor: default; /* Nothing to click while the products load */
+}
+.flash-folder-front::after {
+  content: ""; /* Dashed stitching line along the inside of the cover edge */
+  position: absolute;
+  inset: 2.2cqw;
+  border: 0.6cqw dashed rgba(255, 255, 255, 0.35);
+  border-radius: 2.2cqw;
+  pointer-events: none; /* Decoration only */
+}
+.flash-folder-scene[data-open="true"] .flash-folder-front {
+  transform: perspective(260cqw) rotateX(-10deg); /* Open: the top edge swings towards the viewer */
+}
+
+/* On devices with a real hover, a closed folder lifts its cover and its paper tips a little to invite a click */
+@media (hover: hover) {
+  .flash-folder-scene[data-open="false"]:not([data-loading="true"]):hover .flash-folder-front {
+    transform: perspective(260cqw) rotateX(-4deg); /* Cover leans forward slightly */
+  }
+  .flash-folder-scene[data-open="false"]:not([data-loading="true"]):hover .flash-folder-card[data-slot="left"] {
+    transform: translate(-3cqw, -3cqw) rotate(-5deg); /* Left paper tip rises a little */
+  }
+  .flash-folder-scene[data-open="false"]:not([data-loading="true"]):hover .flash-folder-card[data-slot="center"] {
+    transform: translate(0, -4cqw) rotate(0deg); /* Middle paper tip rises the most */
+  }
+  .flash-folder-scene[data-open="false"]:not([data-loading="true"]):hover .flash-folder-card[data-slot="right"] {
+    transform: translate(3cqw, -3cqw) rotate(5deg); /* Right paper tip rises a little */
+  }
+}
+
+/* Motion-sensitive users get the folder without spring motion, staggering, pulsing or the hover lift */
+@media (prefers-reduced-motion: reduce) {
+  .flash-folder-group,
+  .flash-folder-card,
+  .flash-folder-front {
+    transition-duration: 0.01s; /* Changes state instantly instead of animating */
+    transition-delay: 0s; /* No staggering between the cards */
+  }
+  .flash-folder-scene[data-loading="true"] {
+    animation: none; /* Stops the loading pulse */
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* FlashSaleSection.jsx — the dot grid texture behind the section,    */
+/* the looping promo ribbon along its top edge, and the shine that    */
+/* sweeps across the "Shop the Sale" button.                          */
+/* ---------------------------------------------------------------- */
+
+/* Fine dot grid laid over the dark section background, fading out towards the edges */
+.flash-sale-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.2px); /* One faint dot per grid cell */
+  background-size: 22px 22px; /* Spacing between the dots */
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 35%, transparent 80%); /* Safari prefix for the same fade */
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 80%); /* Dots are strongest in the middle and vanish at the edges */
+}
+
+/* Ribbon loop — the track holds two identical halves, so sliding by 50% lands exactly on the start again */
+@keyframes flashSaleMarquee {
+  from {
+    transform: translateX(0); /* Start position */
+  }
+  to {
+    transform: translateX(-50%); /* One full half has passed, which looks identical to the start */
+  }
+}
+.flash-sale-marquee {
+  animation: flashSaleMarquee 45s linear infinite; /* Slow, constant scroll */
+  will-change: transform; /* Lets the browser move the ribbon on its own layer */
+}
+
+/* Call-to-action shine — a slanted light band parked off the left edge that slides across on hover */
+.flash-sale-cta::after {
+  content: ""; /* Draws the band as a pseudo-element */
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%; /* Waits outside the button */
+  width: 30%; /* Narrow band */
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent); /* Soft white highlight */
+  transform: translateX(0) skewX(-18deg); /* Slanted like a light reflection */
+  transition: transform 0.7s ease; /* Slow sweep */
+  pointer-events: none; /* Decoration only */
+}
+.flash-sale-cta:hover::after {
+  transform: translateX(480%) skewX(-18deg); /* Travels past the right edge of the button */
+}
+
+/* Motion-sensitive users get a still ribbon and no button shine */
+@media (prefers-reduced-motion: reduce) {
+  .flash-sale-marquee {
+    animation: none; /* The ribbon stays put */
+  }
+  .flash-sale-cta::after {
+    transition: none; /* The highlight never moves */
+  }
+}
+
+/* ---------------------------------------------------------------- */
 /* StatsBar.jsx — "Animated 3D Layered Number" cards (uiverse.io      */
 /* "Animated 3D Layered 6" by Thomas-Cabrit, recolored to the         */
 /* project's emerald brand palette). Three stacked, depth-offset text */
 /* layers wobble continuously in 3D to create a holographic effect.   */
-/* Was previously a full inline <style> tag at the bottom of the      */
-/* StatsBar component, re-declared on every mount.                    */
 /* ---------------------------------------------------------------- */
 
 /* Perspective wrapper — equivalent to the original .card-6. Gives the wobbling element below a 3D space to rotate in. */
@@ -405,9 +1071,7 @@ body::-webkit-scrollbar {
 
 /* ---------------------------------------------------------------- */
 /* Testimonials.jsx — the moving/animated gradient border shown only */
-/* on the ACTIVE testimonial card in the carousel. Was previously an  */
-/* inline <style> tag re-declared on every render of the Testimonials */
-/* section.                                                            */
+/* on the ACTIVE testimonial card in the carousel.                    */
 /* ---------------------------------------------------------------- */
 
 /* Keyframes shift the gradient's background-position back and forth, which — combined with an oversized background-size below — creates the illusion of the gradient colors flowing/moving around the border. */
@@ -642,4 +1306,521 @@ body::-webkit-scrollbar {
    briefly visible mid-flight where it should be fully hidden instead. */
 .fly-to-icon-clone--instant {
   transition: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* NewsletterCTA.jsx — the category tile cluster on the call-to-     */
+/* action section. Each tile drifts gently up and down, and the      */
+/* highlighted center tile has a halo that slowly pulses. Static     */
+/* keyframes and classes live here; Tailwind utilities in the JSX    */
+/* handle everything else.                                            */
+/* ---------------------------------------------------------------- */
+
+/* Slow vertical drift that makes the tiles feel like they float */
+@keyframes ctaTileFloat {
+  0%,
+  100% {
+    transform: translateY(0); /* Resting position at the start and end of every cycle */
+  }
+  50% {
+    transform: translateY(-3px); /* Highest point of the drift at the middle of the cycle */
+  }
+}
+
+/* Slow brightness pulse for the halo behind the center tile */
+@keyframes ctaGlowPulse {
+  0%,
+  100% {
+    opacity: 0.45; /* Dimmest point of the halo */
+  }
+  50% {
+    opacity: 0.9; /* Brightest point of the halo */
+  }
+}
+
+/* Applied to every tile wrapper to start the floating motion */
+.cta-tile-float {
+  animation: ctaTileFloat 6s ease-in-out infinite; /* Continuous, calm loop */
+}
+
+/* Negative delays start each tile at a different point of the cycle, so neighbouring tiles never move in unison */
+.cta-tile-delay-1 {
+  animation-delay: -1.5s;
+}
+.cta-tile-delay-2 {
+  animation-delay: -3s;
+}
+.cta-tile-delay-3 {
+  animation-delay: -4.5s;
+}
+
+/* Applied to the halo element behind the center tile */
+.cta-glow-pulse {
+  animation: ctaGlowPulse 4s ease-in-out infinite; /* Continuous, calm loop */
+}
+
+/* Motion-sensitive users get static tiles and a steady halo */
+@media (prefers-reduced-motion: reduce) {
+  .cta-tile-float,
+  .cta-glow-pulse {
+    animation: none; /* Turns off both loops */
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* NewsletterCTA.jsx — the card's border is a multi-stop gradient     */
+/* ring in dark and bright emerald shades that slowly flows around    */
+/* the card. It is drawn by a pseudo-element that is masked so only   */
+/* the 2px ring stays visible, which keeps the card's own translucent */
+/* background untouched. Rounded corners follow the card's radius.    */
+/* ---------------------------------------------------------------- */
+.cta-gradient-border::before {
+  content: ""; /* Required for the pseudo-element to render */
+  position: absolute; /* Covers the whole card without affecting its layout */
+  inset: 0; /* Stretches to all four edges of the card */
+  border-radius: inherit; /* Ring follows the card's rounded corners */
+  padding: 2px; /* Thickness of the visible border ring */
+  background: linear-gradient(
+    120deg,
+    #064e3b 0%,
+    var(--color-primary-dark) 20%,
+    var(--color-primary-light) 40%,
+    #047857 60%,
+    var(--color-primary) 80%,
+    #064e3b 100%
+  ); /* Dark green to bright emerald stops for a strongly graded ring */
+  background-size: 300% 300%; /* Oversized gradient so its movement is visible */
+  animation: gradientBorderMove 8s linear infinite; /* Slow, continuous flow of the colors around the ring */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0); /* Two full-size mask layers: one limited to the content box, one covering the whole box */
+  -webkit-mask-composite: xor; /* Subtracts the content box so only the padding ring remains (Safari, Chrome) */
+  mask-composite: exclude; /* Standard version of the subtraction above */
+  pointer-events: none; /* Purely decorative, must never intercept clicks */
+}
+
+/* Motion-sensitive users get a static gradient ring */
+@media (prefers-reduced-motion: reduce) {
+  .cta-gradient-border::before {
+    animation: none; /* Turns off the flowing movement */
+  }
+}
+
+/* ================================================================ */
+/* Testimonials.jsx — "Our Stories" chain carousel                   */
+/* One featured card (text on the left, framed photo on the right)   */
+/* sits in the center and framed portrait cards of decreasing size   */
+/* line up on both sides of it, like a chain. Every card is stacked  */
+/* in the same grid cell and is sized and positioned only through    */
+/* the data-offset attribute set from JS (0 = featured, 1 / -1 =     */
+/* medium neighbours, 2 / -2 = small outer cards, 3 / -3 = hidden).  */
+/* Every measurement is a multiple of one unit (1% of the featured   */
+/* card width), so the chain keeps the same proportions on every     */
+/* screen and stays fully responsive without resize listeners and    */
+/* without inline styles in the JSX.                                  */
+/* ================================================================ */
+
+/* Geometry tokens of the chain (phones); each breakpoint below only overrides the values that must change */
+.story-chain {
+  --story-wa: calc(100vw - 5rem); /* Width of the featured card; on phones a strip of each neighbour stays visible at the screen edges */
+  --story-u: calc(var(--story-wa) / 100); /* One proportional unit: 1% of the featured card width */
+  --story-hr: 80; /* Featured card height expressed in units; phones need a taller ratio so the text fits in the narrow card */
+  --story-h: calc(var(--story-u) * var(--story-hr)); /* Height of the featured card; it also drives the height of the whole chain so the section never jumps between slides */
+  --story-wm: calc(var(--story-u) * 18); /* Width of a medium neighbour card */
+  --story-ws: calc(var(--story-u) * 11.9); /* Width of a small outer card */
+  --story-gap: calc(var(--story-u) * 2); /* Space between neighbouring cards */
+  --story-mw: calc(var(--story-u) * 36); /* Width of the photo column on the featured card */
+  --story-pad: max(0.4rem, calc(var(--story-u) * 1.9)); /* White frame around the photo of the featured card */
+  --story-frame: max(0.3rem, calc(var(--story-u) * 1)); /* White frame around the photo of a side card */
+  --story-r: max(1rem, calc(var(--story-u) * 4)); /* Corner radius of the featured card */
+  --story-r-side: max(0.75rem, calc(var(--story-u) * 2.4)); /* Corner radius of a side card */
+  --story-mr: max(0.7rem, calc(var(--story-u) * 2.8)); /* Corner radius of the photo on the featured card */
+  --story-mr-side: max(0.5rem, calc(var(--story-u) * 1.5)); /* Corner radius of the photo on a side card */
+  --story-fs-heading: 1.05rem; /* Font size of the large heading */
+  --story-fs-quote: 0.78rem; /* Font size of the quote */
+  --story-fs-name: 0.8rem; /* Font size of the customer name */
+  --story-fs-role: 0.68rem; /* Font size of the customer role */
+  --story-text-x: calc(var(--story-u) * 5); /* Left padding of the text column */
+  --story-text-r: calc(var(--story-u) * 4); /* Right padding of the text column, which keeps the text clear of the photo */
+  --story-text-y: calc(var(--story-u) * 5.5); /* Top and bottom padding of the text column */
+  --story-author-gap: 0.55rem; /* Space between the dark accent line and the customer name */
+  --story-init-side: 1.1rem; /* Initials size on side cards when no photo is provided */
+  --story-init-main: 2rem; /* Initials size on the featured card when no photo is provided */
+  --story-ease: cubic-bezier(0.22, 1, 0.36, 1); /* Smooth ease-out curve used by every card movement */
+  --story-dur: 0.55s; /* Duration of every card movement; lower it to make the chain move faster */
+  --story-hm: calc(var(--story-h) * 0.68); /* Height of a medium neighbour card, always proportional to the featured card */
+  --story-hs: calc(var(--story-h) * 0.45); /* Height of a small outer card, always proportional to the featured card */
+  --story-shift1: calc(var(--story-wa) / 2 + var(--story-gap) + var(--story-wm) / 2); /* Distance from the center to the middle of a medium neighbour */
+  --story-shift2: calc(var(--story-wa) / 2 + var(--story-gap) * 2 + var(--story-wm) + var(--story-ws) / 2); /* Distance from the center to the middle of a small outer card */
+  height: var(--story-h); /* Fixed chain height so the featured card fits exactly and nothing shifts during transitions */
+}
+
+/* Very small phones (under 360px): a taller ratio and slightly smaller text so the quote still fits in the narrow card */
+@media (max-width: 359px) {
+  .story-chain {
+    --story-hr: 122; /* Taller featured card */
+    --story-mw: calc(var(--story-u) * 33); /* Slightly narrower photo column, which leaves more width for the text */
+    --story-fs-heading: 0.95rem; /* Heading size */
+    --story-fs-quote: 0.72rem; /* Quote size */
+    --story-fs-name: 0.74rem; /* Name size */
+    --story-fs-role: 0.64rem; /* Role size */
+  }
+}
+
+/* Large phones and tablets: the whole chain fits on the screen */
+@media (min-width: 640px) {
+  .story-chain {
+    --story-wa: min(56vw, 28rem); /* Featured card width, small enough that both neighbour layers stay on screen */
+    --story-hr: 76; /* Slightly wider ratio than phones because the text column is wider */
+    --story-mw: calc(var(--story-u) * 38.4); /* Photo column width */
+    --story-text-x: calc(var(--story-u) * 7); /* Left padding of the text column */
+    --story-text-r: calc(var(--story-u) * 7); /* Right padding of the text column */
+    --story-text-y: calc(var(--story-u) * 6); /* Vertical padding of the text column */
+    --story-fs-heading: 1.2rem; /* Heading size */
+    --story-fs-quote: 0.82rem; /* Quote size */
+    --story-fs-name: 0.85rem; /* Name size */
+    --story-fs-role: 0.72rem; /* Role size */
+    --story-author-gap: 0.7rem; /* Space next to the dark accent line */
+    --story-init-side: 1.4rem; /* Initials size on side cards */
+    --story-init-main: 2.5rem; /* Initials size on the featured card */
+  }
+}
+
+/* Desktops: a slightly larger card whose text scales with the card itself */
+@media (min-width: 1280px) {
+  .story-chain {
+    --story-wa: min(40vw, 40rem); /* Featured card width: 40% of the screen, capped on very wide monitors */
+    --story-hr: 72.2; /* Height ratio of the reference design */
+    --story-text-x: calc(var(--story-u) * 8); /* Left padding of the text column */
+    --story-text-r: calc(var(--story-u) * 9); /* Right padding of the text column */
+    --story-text-y: calc(var(--story-u) * 8); /* Vertical padding of the text column */
+    --story-fs-heading: max(1.4rem, calc(var(--story-u) * 5.4)); /* Heading scales with the card but never gets unreadably small */
+    --story-fs-quote: max(0.9rem, calc(var(--story-u) * 3.1)); /* Quote scales with the card */
+    --story-fs-name: max(0.85rem, calc(var(--story-u) * 2.2)); /* Name scales with the card */
+    --story-fs-role: max(0.75rem, calc(var(--story-u) * 2)); /* Role scales with the card */
+    --story-author-gap: calc(var(--story-u) * 2.2); /* Space next to the dark accent line */
+    --story-init-side: 1.5rem; /* Initials size on side cards */
+    --story-init-main: 2.75rem; /* Initials size on the featured card */
+  }
+}
+
+/* Base state shared by every card; it is also the resting state of the small outer cards */
+.story-card {
+  width: var(--story-ws); /* Small outer cards are narrow and show only their framed photo */
+  height: var(--story-hs); /* Small outer cards are the shortest */
+  border-radius: var(--story-r-side); /* Rounded corners of a side card */
+  transition:
+    width var(--story-dur) var(--story-ease),
+    height var(--story-dur) var(--story-ease),
+    border-radius var(--story-dur) var(--story-ease),
+    transform var(--story-dur) var(--story-ease),
+    opacity 0.5s ease; /* Cards resize and glide between positions smoothly */
+  will-change: transform; /* Hints the browser to promote each card to its own layer for smoother movement */
+  z-index: 0; /* Lowest layer, used by hidden cards */
+}
+
+/* Featured card in the center of the chain */
+.story-card[data-offset="0"] {
+  width: var(--story-wa); /* Full featured width */
+  height: var(--story-h); /* Full featured height */
+  border-radius: var(--story-r); /* Large rounded corners */
+  transform: translateX(0); /* Centered */
+  z-index: 30; /* Always above every other card */
+}
+
+/* Medium neighbour on the right */
+.story-card[data-offset="1"] {
+  width: var(--story-wm); /* Medium width */
+  height: var(--story-hm); /* Medium height */
+  transform: translateX(var(--story-shift1)); /* Placed right next to the featured card */
+  z-index: 20; /* Below the featured card */
+  cursor: pointer; /* Signals that the card can be clicked to bring it forward */
+}
+
+/* Medium neighbour on the left */
+.story-card[data-offset="-1"] {
+  width: var(--story-wm); /* Medium width */
+  height: var(--story-hm); /* Medium height */
+  transform: translateX(calc(var(--story-shift1) * -1)); /* Mirror position on the left */
+  z-index: 20; /* Below the featured card */
+  cursor: pointer; /* Signals that the card can be clicked to bring it forward */
+}
+
+/* Small outer card on the right */
+.story-card[data-offset="2"] {
+  transform: translateX(var(--story-shift2)); /* Placed next to the medium neighbour */
+  z-index: 10; /* Below the medium neighbour */
+  cursor: pointer; /* Clickable like the medium neighbour */
+}
+
+/* Small outer card on the left */
+.story-card[data-offset="-2"] {
+  transform: translateX(calc(var(--story-shift2) * -1)); /* Mirror position on the left */
+  z-index: 10; /* Below the medium neighbour */
+  cursor: pointer; /* Clickable like the medium neighbour */
+}
+
+/* Hidden slot on the right: cards wait here invisibly before sliding into the chain */
+.story-card[data-offset="3"] {
+  transform: translateX(var(--story-shift2)); /* Same position as the small outer card */
+  opacity: 0; /* Fully transparent so it never shows */
+  pointer-events: none; /* Cannot be clicked while hidden */
+}
+
+/* Hidden slot on the left */
+.story-card[data-offset="-3"] {
+  transform: translateX(calc(var(--story-shift2) * -1)); /* Same position as the left outer card */
+  opacity: 0; /* Fully transparent so it never shows */
+  pointer-events: none; /* Cannot be clicked while hidden */
+}
+
+/* Photo panel: fills the card inside a white frame by default (side cards) */
+.story-card__media {
+  position: absolute; /* Positioned against the card edges */
+  top: var(--story-frame); /* White frame above the photo */
+  left: var(--story-frame); /* White frame left of the photo */
+  right: var(--story-frame); /* White frame right of the photo */
+  height: calc(100% - var(--story-frame) * 2); /* Photo height that leaves the frame at the bottom as well */
+  border-radius: var(--story-mr-side); /* Rounded corners of the photo on a side card */
+  transition:
+    top var(--story-dur) var(--story-ease),
+    left var(--story-dur) var(--story-ease),
+    right var(--story-dur) var(--story-ease),
+    height var(--story-dur) var(--story-ease),
+    border-radius var(--story-dur) var(--story-ease); /* Photo reshapes smoothly when its card becomes the featured one */
+}
+
+/* On the featured card the photo becomes the right column inside a wider white frame */
+.story-card[data-offset="0"] .story-card__media {
+  top: var(--story-pad); /* White frame above the photo */
+  right: var(--story-pad); /* White frame right of the photo */
+  left: calc(100% - var(--story-mw) - var(--story-pad)); /* Left edge of the photo column */
+  height: calc(100% - var(--story-pad) * 2); /* Full height minus the frame above and below */
+  border-radius: var(--story-mr); /* Rounded corners of the featured photo */
+}
+
+/* Initials shown on the gradient artwork when no photo is provided */
+.story-card__initials {
+  font-size: var(--story-init-side); /* Compact size that fits the narrow side cards */
+  transition: font-size var(--story-dur) var(--story-ease); /* Grows smoothly when the card becomes the featured one */
+}
+
+/* Initials on the featured card are larger */
+.story-card[data-offset="0"] .story-card__initials {
+  font-size: var(--story-init-main); /* Prominent size on the featured artwork */
+}
+
+/* Chip on the photo: hidden on side cards so only the portrait shows */
+.story-card__badge {
+  opacity: 0; /* Invisible by default */
+  transition: opacity 0.3s ease; /* Fades out quickly when the card leaves the center */
+}
+
+/* Chip appears once the card is featured */
+.story-card[data-offset="0"] .story-card__badge {
+  opacity: 1; /* Fully visible on the featured card */
+  transition-delay: 0.3s; /* Waits for the card to settle before appearing */
+}
+
+/* Text column: fills the left part of the card, invisible on side cards */
+.story-card__content {
+  position: absolute; /* Positioned against the card edges */
+  top: 0; /* Starts at the top edge of the card */
+  left: 0; /* Pinned to the left edge */
+  width: calc(var(--story-wa) - var(--story-mw) - var(--story-pad)); /* Everything left of the photo column; fixed to the featured size so the text never reflows while the card resizes */
+  height: 100%; /* Full card height */
+  padding: var(--story-text-y) var(--story-text-r) var(--story-text-y) var(--story-text-x); /* Inner spacing of the text */
+  opacity: 0; /* Invisible on side cards */
+  transform: translateY(0.75rem); /* Starts slightly lower so it rises into place when revealed */
+  pointer-events: none; /* Hidden text must not intercept clicks */
+  transition:
+    opacity 0.3s ease,
+    transform var(--story-dur) var(--story-ease); /* Quick fade-out, smooth rise */
+}
+
+/* Text column revealed on the featured card */
+.story-card[data-offset="0"] .story-card__content {
+  opacity: 1; /* Fully visible */
+  transform: translateY(0); /* Rests in its final position */
+  pointer-events: auto; /* Text can be selected again */
+  transition-delay: 0.2s; /* Appears just after the card starts moving into the center */
+}
+
+/* Large light-weight heading that highlights the customer's result */
+.story-heading {
+  font-size: var(--story-fs-heading); /* Scales with the card */
+  font-weight: 400; /* Light look matching the reference design */
+  line-height: 1.1; /* Tight leading for a large heading */
+  letter-spacing: -0.02em; /* Slightly tightened letters for large text */
+  color: var(--color-gray-900); /* Dark text for strong contrast */
+}
+
+/* Lower text block that groups the quote and the customer identity */
+.story-body {
+  display: flex; /* Stacks the quote above the identity */
+  flex-direction: column; /* Vertical stacking */
+  gap: calc(var(--story-fs-quote) * 1.1); /* Space between the quote and the identity that scales with the quote size */
+}
+
+/* Customer quote */
+.story-quote {
+  font-size: var(--story-fs-quote); /* Scales with the card */
+  font-weight: 400; /* Regular weight matching the reference design */
+  line-height: 1.4; /* Comfortable reading rhythm */
+  letter-spacing: -0.01em; /* Slightly tightened letters */
+  color: var(--color-gray-900); /* Dark text for strong contrast */
+}
+
+/* Customer identity block with the dark vertical accent line on its left */
+.story-author {
+  border-left: 2px solid var(--color-gray-900); /* Dark accent line */
+  padding-left: var(--story-author-gap); /* Space between the line and the text */
+  min-width: 0; /* Lets the truncated text shrink inside the flex column */
+}
+
+/* Customer name */
+.story-name {
+  font-size: var(--story-fs-name); /* Scales with the card */
+  font-weight: 500; /* Medium weight so the name stands out from the role */
+  line-height: 1.35; /* Compact leading */
+  color: var(--color-gray-900); /* Dark text */
+}
+
+/* Customer role */
+.story-role {
+  font-size: var(--story-fs-role); /* Scales with the card */
+  line-height: 1.4; /* Compact leading */
+  color: var(--color-gray-500); /* Muted secondary text */
+}
+
+/* Progress marker fill: counts down the autoplay delay of the featured story */
+@keyframes storyProgressFill {
+  from {
+    transform: scaleX(0); /* Bar starts empty */
+  }
+  to {
+    transform: scaleX(1); /* Bar ends completely filled, at which point autoplay moves on */
+  }
+}
+
+/* Applied to the active marker; the animation duration is the autoplay delay of each story */
+.story-progress-fill {
+  transform: scaleX(0); /* Starts empty before the animation begins */
+  animation: storyProgressFill 3.5s linear forwards; /* Three and a half seconds per story; the bar stays full after finishing */
+}
+
+/* Freezes the countdown while the user hovers, focuses or drags the carousel */
+.story-progress-fill--paused {
+  animation-play-state: paused; /* Keeps the bar exactly where it is until interaction ends */
+}
+
+/* Motion-sensitive users get instant card changes and no automatic advancing */
+@media (prefers-reduced-motion: reduce) {
+  /* Removes all movement and fades from the chain */
+  .story-card,
+  .story-card__media,
+  .story-card__initials,
+  .story-card__badge,
+  .story-card__content {
+    transition-duration: 0.01ms; /* Effectively instant changes */
+    transition-delay: 0s; /* No staggering */
+  }
+
+  /* Disables the countdown, so autoplay never triggers and the user navigates manually */
+  .story-progress-fill {
+    animation: none; /* No countdown animation */
+    transform: scaleX(1); /* Active marker simply shows as filled */
+  }
+}
+
+/* ================================================================ */
+/* CURATED COLLECTIONS — SLICE ENTRANCE                              */
+/* Each slice of the home page carousel flies in from its own        */
+/* direction and settles into place when the carousel scrolls into   */
+/* view. The starting offset, tilt, scale and delay of every slice   */
+/* come from the numbered variant classes below.                     */
+/* ================================================================ */
+
+/* Holds every slice invisible until the carousel is on screen */
+.collection-slice-hidden {
+  opacity: 0; /* Not drawn before the entrance starts */
+}
+
+/* Runs the fly-in. The backwards fill keeps the slice at its starting pose during its delay. */
+.collection-slice-enter {
+  animation: collectionSliceFlyIn 1000ms cubic-bezier(0.22, 1, 0.36, 1) backwards; /* Fast start, long soft landing */
+  animation-delay: var(--fly-delay, 0ms); /* Stagger set by the variant class */
+}
+
+/* Variant 0 — flies in from the left */
+.collection-slice-enter-0 {
+  --fly-x: -160px;
+  --fly-y: 0px;
+  --fly-rotate: -8deg;
+  --fly-scale: 0.9;
+  --fly-delay: 0ms;
+}
+
+/* Variant 1 — drops in from above */
+.collection-slice-enter-1 {
+  --fly-x: 0px;
+  --fly-y: -140px;
+  --fly-rotate: 4deg;
+  --fly-scale: 0.92;
+  --fly-delay: 90ms;
+}
+
+/* Variant 2 — rises from below */
+.collection-slice-enter-2 {
+  --fly-x: 0px;
+  --fly-y: 160px;
+  --fly-rotate: -5deg;
+  --fly-scale: 0.88;
+  --fly-delay: 180ms;
+}
+
+/* Variant 3 — flies in from the right */
+.collection-slice-enter-3 {
+  --fly-x: 160px;
+  --fly-y: 0px;
+  --fly-rotate: 8deg;
+  --fly-scale: 0.9;
+  --fly-delay: 270ms;
+}
+
+/* Variant 4 — sweeps in from the lower left */
+.collection-slice-enter-4 {
+  --fly-x: -120px;
+  --fly-y: 130px;
+  --fly-rotate: -10deg;
+  --fly-scale: 0.85;
+  --fly-delay: 360ms;
+}
+
+/* Variant 5 — sweeps in from the upper right */
+.collection-slice-enter-5 {
+  --fly-x: 120px;
+  --fly-y: -130px;
+  --fly-rotate: 10deg;
+  --fly-scale: 0.85;
+  --fly-delay: 450ms;
+}
+
+@keyframes collectionSliceFlyIn {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translate(var(--fly-x), var(--fly-y)) rotate(var(--fly-rotate))
+      scale(var(--fly-scale)); /* Offset, tilted and slightly smaller */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translate(0, 0) rotate(0deg) scale(1); /* Settled in its final place */
+  }
+}
+
+/* Visitors who prefer reduced motion see the slices in place immediately */
+@media (prefers-reduced-motion: reduce) {
+  .collection-slice-enter {
+    animation: none; /* No fly-in */
+  }
 }

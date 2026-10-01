@@ -274,7 +274,7 @@ const Login = () => {
   }, [isAuthenticated, role, navigate, safeFrom, fromState]);
 
   // Shared success handler — used both by a normal (no-2FA) login AND by the
-  // 2FA verify step (API 10), since both ultimately return { user, tokens }.
+  // 2FA verify step, since both ultimately return { user, tokens }.
   const completeLogin = (user, tokens) => {
     if (document.getElementById("rememberMe")?.checked) {
       localStorage.setItem("rememberedEmail", user.email);
@@ -282,15 +282,16 @@ const Login = () => {
       localStorage.removeItem("rememberedEmail");
     }
 
-    // Guest cart support (backend v3.0): if a guest cart session was
-    // attached to the login request (via the X-Cart-Session header — see
-    // axiosInstance.js), the backend has just merged it into this user's
-    // account cart as part of this same login response. The guest
-    // session_key is now meaningless, so drop it from localStorage and
-    // throw away any cached (pre-merge) cart data so the next read of
-    // the cart hits the backend again and shows the merged result.
+    // If a guest session was attached to the login request (via the
+    // X-Cart-Session header — see axiosInstance.js), the backend has just
+    // merged the guest cart and the guest wishlist into this user's
+    // account as part of this same login response. The guest session_key
+    // is now meaningless, so drop it from localStorage and throw away any
+    // cached (pre-merge) cart and wishlist data so the next read of each
+    // hits the backend again and shows the merged result.
     localStorage.removeItem("cartSessionKey");
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
 
     login({ user, tokens });
     showSuccess(`Welcome back, ${user.name}!`);

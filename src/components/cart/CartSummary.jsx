@@ -46,6 +46,9 @@ import { showSuccess, showError } from "../ui/Toast";
 // notification in the corner of the screen to give the user quick feedback.
 
 import formatPrice from "../../utils/formatPrice";
+// Finds cart lines whose quantity is higher than the stock available right now,
+// so the customer cannot proceed to checkout with items that cannot be fulfilled.
+import getCartStockIssues from "../../utils/getCartStockIssues";
 // Utility function that turns a raw number like 1200 into a nicely formatted
 // currency string like "Rs. 1,200" for display purposes.
 
@@ -95,6 +98,10 @@ const CartSummary = ({ cart }) => {
   // Pulls out the coupon object currently applied to this cart (if any).
   // This will be undefined/null when no coupon has been applied yet.
   const appliedCoupon = cart?.coupon;
+
+  // True while at least one cart line asks for more units than are available.
+  // Checkout stays blocked until the customer adjusts or removes those lines.
+  const hasStockIssues = getCartStockIssues(cart?.items).length > 0;
 
   // Flat shipping rate everywhere in the app — no free-shipping threshold.
   // This mirrors the Standard Delivery rate selected on the Checkout page
@@ -412,14 +419,18 @@ const CartSummary = ({ cart }) => {
       <motion.button
         // Navigates to the Checkout route when clicked
         onClick={() => navigate(ROUTES.CHECKOUT)}
+        // Disabled while any cart line exceeds the available stock
+        disabled={hasStockIssues}
         // Gives a subtle "press down" scale effect while the button is being tapped/clicked
-        whileTap={{ scale: 0.98 }}
+        whileTap={hasStockIssues ? undefined : { scale: 0.98 }}
         className="
           w-full flex items-center justify-center gap-2
           py-3.5 px-6 rounded-xl
           bg-linear-to-r from-primary to-primary-dark text-white text-sm font-bold
           shadow-md shadow-primary/20
           hover:shadow-lg hover:shadow-primary/30 hover:brightness-105 active:scale-[0.98]
+          disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none
+          disabled:hover:brightness-100 disabled:active:scale-100
           transition-all duration-200
         "
       >
@@ -428,6 +439,14 @@ const CartSummary = ({ cart }) => {
         {/* Right arrow icon at the end of the button */}
         <AiOutlineArrowRight className="w-4 h-4" />
       </motion.button>
+
+      {/* Explains why checkout is blocked when a cart line exceeds the available stock */}
+      {hasStockIssues && (
+        <p role="alert" className="text-xs text-center text-danger -mt-2">
+          Some items exceed the available stock. Adjust or remove them to
+          continue.
+        </p>
+      )}
 
       {/* ─── Payment Method Icons ─── */}
       {/* Static row of small pill badges showing which payment methods this

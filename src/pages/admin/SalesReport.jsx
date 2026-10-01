@@ -31,9 +31,10 @@ import SalesOverTimeChart from "../../components/admin-analytics/SalesOverTimeCh
 import DailyBreakdownTable from "../../components/admin-analytics/DailyBreakdownTable";
 
 // STATUS_OPTIONS — the status filter of the Sales Report. "sold" is the
-// default and shows paid orders only — the other options let an admin look
-// at cancelled or refunded orders instead, or lift the filter entirely with
-// "all". The exact same value is also sent to the CSV export so the
+// default and shows paid orders that were not refunded — the other options
+// let an admin look at cancelled orders or at refunded orders (cancelled
+// orders and returned delivered orders) instead, or lift the filter
+// entirely with "all". The exact same value is also sent to the CSV export so the
 // downloaded file always matches the screen.
 const STATUS_OPTIONS = [
   { value: "sold", label: "Sold" },

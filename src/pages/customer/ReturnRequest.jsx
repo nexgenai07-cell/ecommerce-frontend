@@ -68,8 +68,8 @@ const ReturnRequest = () => {
   const [showSuccess, setShowSuccess] = useState(false);
 
   // =============================================
-  // ORDER DETAIL API — selected order ke items
-  // API 44 — GET /api/v1/orders/{order_number}/
+  // ORDER DETAIL API — items of the selected order
+  // GET /api/v1/orders/{order_number}/
   // =============================================
   // Fetch the full order detail (including items) for whichever order was selected in step 1
   const { data: orderData } = useQuery({
@@ -88,7 +88,7 @@ const ReturnRequest = () => {
 
   // =============================================
   // SUBMIT RETURN MUTATION
-  // API 50 — POST /api/v1/orders/{order_number}/return/
+  // POST /api/v1/orders/{order_number}/return/
   // =============================================
   // Set up a react-query mutation for submitting the final return request
   const returnMutation = useMutation({
@@ -109,15 +109,25 @@ const ReturnRequest = () => {
       // Also invalidate the separately-cached full paginated order
       // history used by OrderHistory.jsx, for the same reason
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
+      // The order itself carries can_return, which is now false
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.ORDER_DETAIL(selectedOrder),
+      });
     },
 
     // Callback executed when the mutation fails
     onError: (error) => {
-      // Show an error toast, using the server's error message if available, otherwise a generic fallback message
+      // The backend reports a refused return under an "error" key, for
+      // example when a return already exists for the order or the return
+      // window has passed. The orders are refreshed so the dropdown no
+      // longer offers an order that cannot be returned.
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to submit return request. Please try again.",
       );
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });
     },
   });
 
@@ -376,9 +386,10 @@ const ReturnRequest = () => {
                   <span className="font-semibold text-gray-700">
                     Policy Note:
                   </span>{" "}
-                  Returns must be initiated within 30 days of delivery. Items
-                  must be in original condition with tags. Final sale items are
-                  not eligible for return. For more details, visit our{" "}
+                  Returns must be requested within 7 days of delivery, and only
+                  one return request can be made per order. Items must be in
+                  original condition with tags. Final sale items are not
+                  eligible for return. For more details, visit our{" "}
                   <Link
                     to="/terms"
                     className="text-primary font-medium hover:underline"

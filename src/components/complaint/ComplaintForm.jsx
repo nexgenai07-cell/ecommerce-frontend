@@ -16,10 +16,18 @@ import { BsRobot } from "react-icons/bs";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that fetches the logged-in user's own orders
 import { getMyOrders } from "../../api/orders.api";
+// Import the API function that fetches the logged-in user's return requests
+import { getReturns } from "../../api/returns.api";
+// Import a normalizer that handles both a plain array and a paginated response
+import extractListData from "../../utils/extractListData";
 // Import the API function that sends a new complaint submission to the backend
 import { submitComplaint } from "../../api/complaints.api";
 // Import the COMPLAINT_TYPE constant object containing the fixed complaint category values used by the API
-import { COMPLAINT_TYPE } from "../../constants/statusTypes";
+import {
+  COMPLAINT_TYPE,
+  ORDER_STATUS,
+  RETURN_STATUS,
+} from "../../constants/statusTypes";
 // Import success and error toast notification helper functions for user feedback
 import { showSuccess, showError } from "../ui/Toast";
 // Import the reusable Button component so Cancel/Submit match the project's shared button styles
@@ -108,8 +116,8 @@ const ComplaintForm = ({ onSuccess }) => {
   });
 
   // =============================================
-  // MY ORDERS — related order dropdown ke liye
-  // API 43
+  // MY ORDERS — feeds the related order dropdown
+  // GET /api/v1/orders/
   // =============================================
   // Fetch the user's own orders so they can optionally be linked to this complaint via the "Related Order" dropdown
   const { data: ordersData } = useQuery({
@@ -121,20 +129,37 @@ const ComplaintForm = ({ onSuccess }) => {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Safely extract the orders array from the nested API response shape, defaulting to an empty array if data isn't available yet
-  const orders = ordersData?.data?.results || [];
+  // The customer's return requests, used to recognize orders that were delivered and then returned
+  const { data: returnsData } = useQuery({
+    queryKey: QUERY_KEYS.RETURNS,
+    queryFn: ({ signal }) => getReturns(undefined, signal),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Order numbers whose return was approved. A pending or rejected return does not block a complaint.
+  const returnedOrderNumbers = new Set(
+    extractListData(returnsData)
+      .filter((returnItem) => returnItem.status === RETURN_STATUS.APPROVED)
+      .map((returnItem) => returnItem.order_number),
+  );
+
+  // Complaints cannot be filed for a cancelled order or an order with an approved return, so those orders are not offered in the dropdown
+  const orders = (ordersData?.data?.results || []).filter(
+    (order) =>
+      order.status !== ORDER_STATUS.CANCELLED &&
+      !returnedOrderNumbers.has(order.order_number),
+  );
 
   // =============================================
   // SUBMIT COMPLAINT MUTATION
-  // API 54 — POST /api/v1/complaints/
+  // POST /api/v1/complaints/
   // =============================================
   // Set up a mutation (a non-GET, data-changing API call) for submitting the complaint form
   const submitMutation = useMutation({
     // The function that actually performs the API call when mutate() is triggered, receiving the validated form data
-    // UPDATED: "priority" and "attachment" are now real backend fields (see
-    // BACKEND_SPEC_complaint_priority_attachment.md) instead of being faked
-    // by concatenating text into "message". Subject is still folded into the
-    // message text since the backend has no separate "subject" column.
+    // "priority" and "attachment" are real backend fields. The subject is
+    // folded into the message text because the backend has no separate
+    // "subject" column.
     mutationFn: (data) =>
       submitComplaint({
         // Pass along the selected complaint type
@@ -166,8 +191,10 @@ const ComplaintForm = ({ onSuccess }) => {
     // Callback executed when the mutation fails
     onError: (error) => {
       // Show an error toast, preferring the specific message returned by the API, falling back to a generic message
+      // The backend reports refusals (invalid, cancelled or returned order) under an "error" key
       showError(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to submit complaint. Please try again.",
       );
     },
@@ -175,9 +202,8 @@ const ComplaintForm = ({ onSuccess }) => {
 
   // File handlers
   // Function to validate and set the selected/dropped file into attachedFiles state
-  // NOTE: backend "attachment" field supports only ONE file per complaint (see
-  // BACKEND_SPEC_complaint_priority_attachment.md), so a newly picked file
-  // REPLACES the previous one rather than appending to a list.
+  // The backend "attachment" field supports only ONE file per complaint, so
+  // a newly picked file REPLACES the previous one rather than appending to a list.
   const handleFileSelect = (files) => {
     // Convert the FileList into a real array, filter out anything larger than 10MB, and keep only the first valid file
     const valid = Array.from(files).filter((f) => f.size <= 10 * 1024 * 1024);
