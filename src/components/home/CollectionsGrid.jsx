@@ -34,7 +34,7 @@ const FALLBACK_GRADIENTS = [
 // Overall size and direction of the carousel, shared by the loading state and the real carousel.
 // Slices stack vertically on phones and sit side by side from tablets upward.
 const CAROUSEL_LAYOUT_CLASSES =
-  "flex h-104 flex-col gap-2 sm:gap-3 md:h-80 md:flex-row lg:h-96";
+  "flex h-88 flex-col gap-2 sm:gap-3 md:h-72 md:flex-row lg:h-80";
 
 // Shared sizing and motion classes of every slice, real or placeholder.
 // The width (or height on phones) of a slice comes from its flex-grow value,
@@ -329,12 +329,12 @@ const CollectionsGrid = () => {
   return (
     // Outer section — vertical padding around the whole block.
     // overflow-x-clip stops slices that start beyond the screen edge from widening the page during the entrance.
-    <section className="overflow-x-clip py-14">
+    <section className="overflow-x-clip py-6 sm:py-8">
       <Container>
         {/* Vertical stack: header block, then the carousel */}
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4 sm:gap-5">
           {/* ============ SECTION HEADER ============ */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-0.5">
             {/* Main section title — scales from mobile to desktop */}
             <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-3xl lg:text-4xl">
               Curated Collections
@@ -357,7 +357,7 @@ const CollectionsGrid = () => {
             <SliceCarousel categories={categories} />
           ) : (
             // ---- EMPTY STATE: no categories returned ----
-            <div className="py-12 text-center text-sm text-gray-400">
+            <div className="py-6 text-center text-sm text-gray-400">
               Collections coming soon
             </div>
           )}

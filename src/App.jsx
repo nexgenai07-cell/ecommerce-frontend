@@ -58,6 +58,7 @@ import { store } from "./store/index";
 //         created once here and injected via <Provider>
 
 import { ROUTES } from "./constants/routes";
+import { prefetchHeroData } from "./utils/heroData"; // Starts the homepage hero requests at boot
 // ROUTES — an object of all URL path constants, e.g.:
 //          ROUTES.HOME = "/"
 //          ROUTES.LOGIN = "/login"
@@ -332,6 +333,13 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Start loading the homepage hero's categories, products and first pictures
+// right now, before the Home page code has finished loading. Only when the
+// visitor actually lands on the homepage.
+if (typeof window !== "undefined" && window.location.pathname === ROUTES.HOME) {
+  prefetchHeroData(queryClient);
+}
 
 // ============================================================
 // APP ROUTES COMPONENT
@@ -1129,7 +1137,6 @@ function App() {
                     duration: 3000,
                     style: {
                       fontSize: "14px",
-                      fontFamily: "Inter, sans-serif",
                     },
                     success: {
                       style: {

@@ -224,7 +224,7 @@ const NewsletterCTA = () => {
   const rows = splitIntoRows(isLoading ? SKELETON_TILES : categories);
 
   return (
-    <section className="py-8">
+    <section className="py-4 sm:py-6">
       {/* Narrow container so the card stays compact on wide screens */}
       <Container className="max-w-6xl">
         {/* Floating rounded card — a translucent emerald gradient with a soft glow around it.

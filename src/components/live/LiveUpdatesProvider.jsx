@@ -83,13 +83,21 @@ const buildAdminAlert = (kind, data) => {
 
 // Shows a toast that opens the given page when it is clicked. When no link is
 // available the toast is informational only.
-const showLiveToast = ({ id, title, message, link, onNavigate }) => {
+const showLiveToast = ({
+  id,
+  title,
+  message,
+  customerName,
+  link,
+  onNavigate,
+}) => {
   toast.custom(
     (toastInstance) => (
       <LiveToast
         toastInstance={toastInstance}
         title={title}
         message={message}
+        customerName={customerName}
         onClick={
           link
             ? () => {
@@ -141,6 +149,9 @@ const LiveUpdatesProvider = ({ children }) => {
           id: `live-notification-${notification.id}`,
           title: notification.title || "New notification",
           message: notification.message,
+          // customer_name is only sent to admin recipients, and is null when
+          // no customer is behind the notification.
+          customerName: notification.customer_name,
           link,
           onNavigate: goTo,
         });

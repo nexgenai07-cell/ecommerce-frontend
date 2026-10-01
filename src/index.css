@@ -56,11 +56,11 @@
 
   /* ========================= */
   /* FONTS */
-  /* Inter — main readable font for the entire project */
-  /* JetBrains Mono — for code blocks */
+  /* Times New Roman is the single typeface of the entire project */
   /* ========================= */
-  --font-sans: "Inter", sans-serif;             /* font-sans */
-  --font-mono: "JetBrains Mono", monospace;     /* font-mono */
+  --font-sans: "Times New Roman", Times, serif;   /* font-sans, also the default page font */
+  --font-serif: "Times New Roman", Times, serif;  /* font-serif */
+  --font-mono: "Times New Roman", Times, serif;   /* font-mono */
 
   /* ========================= */
   /* BORDER RADIUS */
@@ -223,6 +223,8 @@ body::-webkit-scrollbar {
 .zyron-book-scene {
   --book-w: min(13rem, 45cqw); /* Width of one page; a small book on large screens, and two pages side by side always stay well inside the wrapper width on phones */
   --book-h: calc(var(--book-w) * 1.85); /* Page height; tall proportions on phones leave room for the text */
+  --book-pad-top: 1.25rem; /* Space above the book that holds the close button overhang */
+  --book-pad-bottom: 2rem; /* Space below the book that holds the hint text and the shadow */
   --book-paper: #fdfbf7; /* Warm paper color of every page */
   --book-paper-hover: #fcfaf5; /* Slightly darker paper shown while a page is hovered */
   --book-open-duration: 1.5s; /* Time the cover takes to swing open */
@@ -234,7 +236,10 @@ body::-webkit-scrollbar {
   align-items: center; /* Vertical centering */
   justify-content: center; /* Horizontal centering */
   width: 100%; /* Full wrapper width */
-  height: calc(var(--book-h) + 6.5rem); /* Book height plus space above and below for the close button, shadow and hint */
+  height: calc(var(--book-h) + var(--book-pad-top) + var(--book-pad-bottom)); /* Book height plus the compact space above and below */
+  padding-top: var(--book-pad-top); /* Reserves the top space without centering the book in it */
+  padding-bottom: var(--book-pad-bottom); /* Reserves the bottom space without centering the book in it */
+  box-sizing: border-box; /* Padding is part of the scene height above */
   perspective: 2000px; /* Depth of field for every 3D rotation inside the scene */
 }
 
@@ -270,7 +275,7 @@ body::-webkit-scrollbar {
 .zyron-book__close {
   position: absolute; /* Positioned relative to the scene */
   left: calc(50% + var(--book-w) - 1rem); /* Right edge of the open spread, pulled in so the button overlaps the corner */
-  top: calc(50% - var(--book-h) / 2 - 1rem); /* Top edge of the book, raised so the button overlaps the corner */
+  top: calc(var(--book-pad-top) - 1rem); /* Top edge of the book, raised so the button overlaps the corner */
   z-index: 10; /* Above the book */
 }
 
@@ -278,7 +283,7 @@ body::-webkit-scrollbar {
 @media (min-width: 640px) {
   .zyron-book__close {
     left: calc(50% + var(--book-w) - 0.35rem); /* Slightly outside the right edge of the spread */
-    top: calc(50% - var(--book-h) / 2 - 1.1rem); /* Slightly above the top edge of the book */
+    top: calc(var(--book-pad-top) - 1.1rem); /* Slightly above the top edge of the book */
   }
 }
 
@@ -923,149 +928,6 @@ body::-webkit-scrollbar {
   }
   .flash-sale-cta::after {
     transition: none; /* The highlight never moves */
-  }
-}
-
-/* ---------------------------------------------------------------- */
-/* StatsBar.jsx — "Animated 3D Layered Number" cards (uiverse.io      */
-/* "Animated 3D Layered 6" by Thomas-Cabrit, recolored to the         */
-/* project's emerald brand palette). Three stacked, depth-offset text */
-/* layers wobble continuously in 3D to create a holographic effect.   */
-/* ---------------------------------------------------------------- */
-
-/* Perspective wrapper — equivalent to the original .card-6. Gives the wobbling element below a 3D space to rotate in. */
-.stats-holo-perspective {
-  width: 100%; /* Fills the stat card's available width */
-  display: flex; /* Used purely to center the holo box inside this wrapper */
-  align-items: center; /* Vertically centers the holo box */
-  justify-content: center; /* Horizontally centers the holo box */
-  perspective: 900px; /* Same depth-of-field value as the original uiverse.io card */
-  margin: 6px 0; /* Reduced from the original standalone 34px 0, since this now sits tightly inside a compact stat card instead of alone on a page */
-}
-
-/* Equivalent to the original .card-6__holo — the element that physically wobbles via rotateX/rotateY, and hosts the three stacked depth layers. Resized from the original fixed 140px square (built for one giant digit) into a shorter, wider box that comfortably fits multi-character stat text. */
-.stats-holo-6 {
-  position: relative; /* Anchors the absolutely-positioned depth layers inside it */
-  width: 100%; /* Fills the perspective wrapper */
-  max-width: 168px; /* Keeps it from stretching too wide on bigger screens */
-  height: 58px; /* Shorter box since our text is wider-than-tall, unlike the original square digit */
-  border-radius: 22px; /* Close to the original 26px, scaled slightly down to match the smaller box */
-  transform-style: preserve-3d; /* Required so the child layers' translateZ values actually create depth instead of flattening */
-  display: flex; /* Used to center the layers */
-  align-items: center; /* Vertically centers the layers */
-  justify-content: center; /* Horizontally centers the layers */
-  pointer-events: none; /* Purely decorative, must never intercept clicks/hovers meant for the card */
-  animation: stats-holo-wobble 6.2s ease-in-out infinite; /* Identical timing to the original card's continuous wobble */
-}
-
-/* Identical wobble keyframes to the original — same rotateX/rotateY degrees and timing, unchanged */
-@keyframes stats-holo-wobble {
-  0% {
-    transform: rotateX(16deg) rotateY(-18deg); /* Starting tilt */
-  }
-  50% {
-    transform: rotateX(18deg) rotateY(18deg); /* Opposite tilt at the midpoint of the loop */
-  }
-  100% {
-    transform: rotateX(16deg) rotateY(-18deg); /* Returns to the starting tilt, so the loop repeats seamlessly */
-  }
-}
-
-/* Base styling shared by all three depth layers — equivalent to the original .card-6__layer, recolored to emerald and with explicit centering added (top/left/translate) so it reliably overlaps correctly for ANY text length, not just one digit. */
-.stats-holo-layer {
-  position: absolute; /* Stacks all three layers on top of each other inside .stats-holo-6 */
-  top: 50%; /* Explicit vertical centering point (added vs. the original, which assumed one fixed digit) */
-  left: 50%; /* Explicit horizontal centering point (added vs. the original) */
-  font-weight: 900; /* Same extra-bold weight as the original */
-  letter-spacing: -1px; /* Much less negative than the original's -6px, since that value was tuned for one giant 108px digit — for full words/strings a small negative spacing avoids awkward gaps without causing characters to collide */
-  line-height: 1; /* Prevents extra vertical space above/below the text from affecting centering */
-  white-space: nowrap; /* Keeps the whole stat text on a single line, never wraps mid-string */
-  -webkit-text-stroke: 1px rgba(16, 185, 129, 0.7); /* Emerald outline stroke on the text — same width/opacity pattern as the original, recolored */
-  background: linear-gradient(
-    90deg,
-    rgba(16, 185, 129, 0.18) 0%,
-    rgba(16, 185, 129, 0.92) 35%,
-    rgba(52, 211, 153, 0.7) 60%,
-    rgba(16, 185, 129, 0.22) 100%
-  ); /* Same 4-stop holographic gradient shape as the original, recolored from blue to emerald/emerald-light */
-  -webkit-background-clip: text; /* Clips the gradient to the visible text shape (Safari/Chrome) */
-  background-clip: text; /* Standard property version of the line above */
-  color: transparent; /* Hides the fallback solid fill so only the gradient shows through the text */
-  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.55)); /* Identical dark drop-shadow to the original, gives the "floating" 3D depth cue */
-  opacity: 0.95; /* Slight transparency so the layers blend together */
-  transform-style: preserve-3d; /* Lets each layer's own translateZ (below) actually offset it in 3D space */
-}
-
-/* Back layer — furthest depth, most transparent/blurred (identical values to the original, only color changed above) */
-.stats-holo-layer--back {
-  opacity: 0.18; /* Most transparent of the three layers */
-  filter: blur(1px); /* Soft blur to sell the "furthest away" depth */
-  transform: translate(-50%, -50%) translateZ(-70px); /* translate(-50%,-50%) centers it; translateZ(-70px) is the original's exact depth value */
-  -webkit-text-stroke: 1px rgba(52, 211, 153, 0.45); /* Emerald-light stroke, mirrors the original's lighter/thinner-looking back stroke */
-}
-
-/* Mid layer — halfway depth (identical values to the original, only color changed) */
-.stats-holo-layer--mid {
-  opacity: 0.42; /* Halfway opacity between the back and front layers */
-  filter: blur(0.4px); /* Very slight blur — less than the back layer, more than the front */
-  transform: translate(-50%, -50%) translateZ(-34px); /* Same centering fix + original -34px depth value */
-  -webkit-text-stroke: 1px rgba(16, 185, 129, 0.55); /* Medium-strength emerald stroke */
-}
-
-/* Front layer — closest to viewer, fully sharp (identical values to the original, only color changed) */
-.stats-holo-layer--front {
-  opacity: 0.98; /* Nearly fully opaque — this is the main readable layer */
-  transform: translate(-50%, -50%) translateZ(0px); /* Same centering fix + original translateZ(0) */
-  -webkit-text-stroke: 1px rgba(5, 150, 105, 0.78); /* Emerald-dark stroke for the front layer, mirrors the original's strongest/most saturated stroke */
-}
-
-/* Soft radial glow behind the whole holo number — identical structure to the original .card-6__holo::before, recolored to emerald */
-.stats-holo-6::before {
-  content: ""; /* Required for a ::before pseudo-element to render */
-  position: absolute; /* Sits behind the number, filling the parent box */
-  inset: 0; /* Shorthand for top/right/bottom/left: 0 — fills the parent exactly */
-  border-radius: 22px; /* Matches the parent box's rounded corners */
-  background: radial-gradient(
-    circle at 40% 35%,
-    rgba(16, 185, 129, 0.14),
-    rgba(0, 0, 0, 0) 62%
-  ); /* Soft emerald glow fading to nothing */
-  filter: blur(8px); /* Blurs the glow so it reads as ambient light, not a hard shape */
-  opacity: 0.9; /* Slight transparency so it blends into the card background */
-  transform: translateZ(-80px); /* Identical depth value to the original, pushes it visually behind the number */
-}
-
-/* Thin glossy border + faint highlight sweep — identical structure to the original .card-6__holo::after, colors kept theme-neutral (white highlight) with an emerald-tinted border to match the brand */
-.stats-holo-6::after {
-  content: ""; /* Required for an ::after pseudo-element to render */
-  position: absolute; /* Sits on top of the number as a border/highlight overlay */
-  inset: 0; /* Fills the parent box exactly */
-  border-radius: 22px; /* Matches the parent box's rounded corners */
-  border: 1px solid rgba(16, 185, 129, 0.16); /* Faint emerald-tinted border */
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0.01) 45%,
-    rgba(0, 0, 0, 0)
-  ); /* Faint diagonal white highlight sweep, like glass reflecting light */
-  opacity: 0.55; /* Keeps the highlight subtle */
-  transform: translateZ(-45px); /* Identical depth value to the original */
-}
-
-/* Responsive shrink for small phones — same intent as the original's max-width:600px block, sized down to fit our smaller card layout */
-@media (max-width: 600px) {
-  .stats-holo-6 {
-    width: 100%; /* Still fills its parent on small phones */
-    max-width: 132px; /* Smaller cap than the desktop 168px, so it fits narrow stat cards */
-    height: 48px; /* Shorter box to match the smaller width */
-    border-radius: 18px; /* Slightly smaller radius to match the smaller box */
-  }
-}
-
-/* Respect users who've asked their OS to reduce motion — turns off the continuous wobble for accessibility, identical to the original card's behaviour */
-@media (prefers-reduced-motion: reduce) {
-  .stats-holo-6 {
-    animation: none !important; /* Fully disables the wobble animation for motion-sensitive users */
   }
 }
 
@@ -1734,6 +1596,65 @@ body::-webkit-scrollbar {
 }
 
 /* ================================================================ */
+/* TRENDING NOW — CARD ENTRANCE                                      */
+/* TrendingSection.jsx plays these keyframes through Tailwind        */
+/* animation classes. The first two product cards travel in from the */
+/* left and the last two from the right, and the category chips      */
+/* alternate between both sides, each starting a little later than   */
+/* the one before it. Distances scale with the screen width, so the  */
+/* motion stays proportional from small phones to wide desktops      */
+/* without media queries.                                            */
+/* ================================================================ */
+
+/* Card slides in from the left edge and settles into its place */
+@keyframes trendingFromLeft {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translateX(calc(-1 * clamp(3rem, 24vw, 20rem))) scale(0.94); /* Far to the left and slightly smaller */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translateX(0) scale(1); /* Resting position */
+  }
+}
+
+/* Card slides in from the right edge and settles into its place */
+@keyframes trendingFromRight {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translateX(clamp(3rem, 24vw, 20rem)) scale(0.94); /* Far to the right and slightly smaller */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translateX(0) scale(1); /* Resting position */
+  }
+}
+
+/* Category chip slides in from the left inside its scrolling row */
+@keyframes trendingPillFromLeft {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translateX(calc(-1 * clamp(1.5rem, 8vw, 4rem))) scale(0.85); /* A short distance to the left and smaller */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translateX(0) scale(1); /* Resting position */
+  }
+}
+
+/* Category chip slides in from the right inside its scrolling row */
+@keyframes trendingPillFromRight {
+  from {
+    opacity: 0; /* Invisible at the start */
+    transform: translateX(clamp(1.5rem, 8vw, 4rem)) scale(0.85); /* A short distance to the right and smaller */
+  }
+  to {
+    opacity: 1; /* Fully visible */
+    transform: translateX(0) scale(1); /* Resting position */
+  }
+}
+
+/* ================================================================ */
 /* CURATED COLLECTIONS — SLICE ENTRANCE                              */
 /* Each slice of the home page carousel flies in from its own        */
 /* direction and settles into place when the carousel scrolls into   */
@@ -1877,7 +1798,7 @@ body::-webkit-scrollbar {
   top: 4rem; /* Sits directly below the 4rem navbar */
   height: calc(100vh - 4rem); /* Fills the rest of the screen */
   height: calc(100svh - 4rem); /* Same, measured against the small viewport */
-  padding-block: 0.75rem; /* Breathing room above and below the stage */
+  padding: 0; /* Full-bleed: no gap above, below or on the sides */
 }
 
 .hero-stage {
@@ -1885,15 +1806,49 @@ body::-webkit-scrollbar {
   height: 100%; /* Fill the pinned wrapper */
   overflow: hidden; /* Clip flying elements at the rounded edge */
   isolation: isolate; /* Keep the stage's layers in their own stacking context */
-  border-radius: 1.5rem; /* Soft rounded card, matching the rest of the page */
-  border: 1px solid rgb(255 255 255 / 0.08); /* Hairline edge on the dark card */
+  border-radius: 0; /* Square edges: the hero runs edge to edge */
+  border: 0; /* No outline, so nothing separates it from the screen edges */
   background-color: rgb(var(--hero-base)); /* Dark base shown until WebGL paints */
   background-image: radial-gradient(
     ellipse at center,
     rgb(var(--hero-tint-0) / 0.28),
     transparent 70%
   ); /* Soft glow used as the no-WebGL fallback */
-  box-shadow: 0 25px 60px -20px rgb(0 0 0 / 0.45); /* Lifts the stage off the page */
+}
+
+/* ---------- Compact hero: phones and tablets ---------- */
+/* Instead of a full screen pinned while scrolling, the hero is a normal block */
+/* of limited height whose categories change by themselves (see HeroSection.jsx). */
+@media (max-width: 1023px) {
+  :root {
+    --hero-h-compact: clamp(29rem, 130vw, 34rem); /* Phones: scales with the width, never taller than 34rem */
+  }
+  .hero-track-1,
+  .hero-track-2,
+  .hero-track-3 {
+    height: auto; /* No extra scroll distance: nothing is pinned */
+  }
+  .hero-sticky {
+    position: relative; /* Scrolls away with the page like any other section */
+    top: auto; /* No pinning offset */
+    height: var(--hero-h-compact); /* Compact height */
+  }
+  .hero-stage .hero-scroll-hint {
+    display: none; /* Nothing to scroll through, so no hint (selector is specific so it wins over the base rule) */
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --hero-h-compact: 36rem; /* Tablets: a little taller than phones */
+  }
+  /* Tablets: the short hero would feel crowded with 12 cards, so the four in the
+     middle of the top and bottom edges are left out, keeping the title area clear */
+  .hero-slot-3,
+  .hero-slot-4,
+  .hero-slot-9,
+  .hero-slot-10 {
+    display: none;
+  }
 }
 
 /* Gentle pulse while categories are still loading */
@@ -1972,8 +1927,8 @@ body::-webkit-scrollbar {
   opacity: 1; /* Fully visible once settled */
   transform: none; /* Rests exactly in its own place */
   transition:
-    transform 1.25s cubic-bezier(0.16, 1, 0.3, 1) var(--fd),
-    opacity 0.6s ease var(--fd); /* Smooth fly-in with a per-element delay */
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--fd),
+    opacity 0.35s ease var(--fd); /* Quick fly-in with a short per-element delay */
 }
 
 /* Twelve different directions, rotations, sizes and delays */
@@ -1989,77 +1944,77 @@ body::-webkit-scrollbar {
   --fy: -35vh;
   --fr: 150deg;
   --fs: 0.4;
-  --fd: 50ms;
+  --fd: 25ms;
 }
 .hero-fly-3 {
   --fx: -30vw;
   --fy: 70vh;
   --fr: 210deg;
   --fs: 0.3;
-  --fd: 100ms;
+  --fd: 50ms;
 }
 .hero-fly-4 {
   --fx: 55vw;
   --fy: 60vh;
   --fr: -190deg;
   --fs: 0.5;
-  --fd: 150ms;
+  --fd: 75ms;
 }
 .hero-fly-5 {
   --fx: -75vw;
   --fy: 15vh;
   --fr: 120deg;
   --fs: 0.35;
-  --fd: 200ms;
+  --fd: 100ms;
 }
 .hero-fly-6 {
   --fx: 40vw;
   --fy: -70vh;
   --fr: -140deg;
   --fs: 0.45;
-  --fd: 250ms;
+  --fd: 125ms;
 }
 .hero-fly-7 {
   --fx: -45vw;
   --fy: -65vh;
   --fr: 180deg;
   --fs: 0.3;
-  --fd: 300ms;
+  --fd: 150ms;
 }
 .hero-fly-8 {
   --fx: 80vw;
   --fy: 10vh;
   --fr: -160deg;
   --fs: 0.4;
-  --fd: 350ms;
+  --fd: 175ms;
 }
 .hero-fly-9 {
   --fx: -20vw;
   --fy: -75vh;
   --fr: 230deg;
   --fs: 0.55;
-  --fd: 400ms;
+  --fd: 200ms;
 }
 .hero-fly-10 {
   --fx: 25vw;
   --fy: 75vh;
   --fr: -210deg;
   --fs: 0.35;
-  --fd: 450ms;
+  --fd: 225ms;
 }
 .hero-fly-11 {
   --fx: -80vw;
   --fy: -20vh;
   --fr: -120deg;
   --fs: 0.45;
-  --fd: 500ms;
+  --fd: 250ms;
 }
 .hero-fly-12 {
   --fx: 60vw;
   --fy: -60vh;
   --fr: 170deg;
   --fs: 0.3;
-  --fd: 550ms;
+  --fd: 275ms;
 }
 
 /* ---------- Centre block: label, title, description, button ---------- */
@@ -2076,19 +2031,6 @@ body::-webkit-scrollbar {
   padding-inline: 2.25rem; /* Keeps text clear of the stage edges and the progress dots */
   text-align: center; /* Centre multi-line text */
   pointer-events: none; /* Lets clicks pass through to the product tiles */
-}
-
-.hero-kicker {
-  margin: 0; /* No default paragraph margin */
-  padding: 0.35rem 0.9rem; /* Pill padding */
-  border: 1px solid rgb(255 255 255 / 0.25); /* Hairline pill outline */
-  border-radius: 999px; /* Fully rounded pill */
-  background: rgb(255 255 255 / 0.06); /* Faint glass fill */
-  color: rgb(226 232 240 / 0.85); /* Soft silver text */
-  font-size: 0.7rem; /* Small label size */
-  font-weight: 600; /* Semi bold */
-  letter-spacing: 0.28em; /* Wide, elegant tracking */
-  text-transform: uppercase; /* Capital letters */
 }
 
 .hero-title {
@@ -2154,26 +2096,62 @@ body::-webkit-scrollbar {
 }
 
 .hero-cta {
+  position: relative; /* Anchor for the shine sweep */
   display: inline-flex; /* Text and arrow side by side */
   align-items: center; /* Vertically centre the content */
-  gap: 0.5rem; /* Space between text and arrow */
-  padding: 0.8rem 1.6rem; /* Comfortable tap target */
-  border-radius: 999px; /* Fully rounded button */
-  background: rgb(var(--scene-tint, var(--hero-tint-0))); /* Category accent colour */
+  overflow: hidden; /* Keeps the shine inside the button */
+  padding: 0.62rem 1.3rem; /* Compact rectangular button */
+  border: 1px solid rgb(255 255 255 / 0.4); /* Crisp light edge */
+  border-radius: 6px; /* Slightly rounded corners (a rectangle, not a pill) */
+  background: linear-gradient(
+    135deg,
+    rgb(var(--scene-tint, var(--hero-tint-0))) 0%,
+    rgb(var(--scene-tint, var(--hero-tint-0)) / 0.72) 100%
+  ); /* Category accent colour with a subtle gradient */
   color: rgb(255 255 255); /* White label */
-  font-size: 0.95rem; /* Label size */
+  font-size: 0.78rem; /* Small label */
   font-weight: 700; /* Bold label */
+  letter-spacing: 0.14em; /* Wide, confident tracking */
+  text-transform: uppercase; /* Capital letters for a sharp look */
   pointer-events: auto; /* The button stays clickable inside the click-through block */
-  box-shadow: 0 10px 30px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.7); /* Coloured glow */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 8px 22px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.85); /* Top highlight plus coloured glow */
   transition:
     transform 0.25s ease,
     box-shadow 0.25s ease; /* Smooth hover feedback */
 }
 
+/* Light streak that sweeps across the button on hover */
+.hero-cta::before {
+  content: ""; /* Decorative element only */
+  position: absolute; /* Sits on top of the button */
+  top: 0; /* Full height */
+  bottom: 0;
+  left: -70%; /* Starts outside the button, on the left */
+  width: 45%; /* Width of the streak */
+  background: linear-gradient(
+    105deg,
+    transparent,
+    rgb(255 255 255 / 0.55),
+    transparent
+  ); /* Soft white streak */
+  transform: skewX(-20deg); /* Slanted streak */
+  transition: left 0.6s ease; /* Smooth sweep */
+  pointer-events: none; /* Never blocks clicks */
+}
+
 .hero-cta:hover,
 .hero-cta:focus-visible {
-  transform: translateY(-2px) scale(1.04); /* Lift on hover and focus */
-  box-shadow: 0 16px 38px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.9); /* Stronger glow */
+  transform: translateY(-2px); /* Lift on hover and focus */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 14px 30px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 1); /* Stronger glow */
+}
+
+.hero-cta:hover::before,
+.hero-cta:focus-visible::before {
+  left: 130%; /* Streak travels across to the right */
 }
 
 /* ---------- Product sprinkles ---------- */
@@ -2190,29 +2168,29 @@ body::-webkit-scrollbar {
 
 .hero-spark {
   position: absolute; /* Placed by its slot class */
-  width: calc(var(--spark-size) * var(--spark-scale)); /* Size comes from the slot class */
-  height: calc(var(--spark-size) * var(--spark-scale)); /* Square tile */
-  margin-left: calc(var(--spark-size) * var(--spark-scale) / -2); /* Centre the tile on its left coordinate */
-  margin-top: calc(var(--spark-size) * var(--spark-scale) / -2); /* Centre the tile on its top coordinate */
+  width: calc(var(--spark-size) * 1.15 * var(--spark-scale)); /* Card width comes from the slot class */
+  margin-left: calc(var(--spark-size) * 1.15 * var(--spark-scale) / -2); /* Centre the card on its left coordinate */
+  translate: 0 var(--spark-ay, -50%); /* Vertical anchor: -50% centred, 0 hangs from the top, -100% sits on the bottom */
 }
 
 .hero-spark-link {
-  position: relative; /* Anchor for the hover label */
-  display: block; /* Fill the tile */
-  width: 100%; /* Full tile width */
-  height: 100%; /* Full tile height */
-  border-radius: 1.1rem; /* Rounded tile corners */
-  outline: none; /* Focus ring is drawn on the inner tile instead */
+  position: relative; /* Anchor for the focus ring */
+  display: block; /* Fill the card slot */
+  width: 100%; /* Full card width */
+  border-radius: 0.6rem; /* Rounded card corners */
+  outline: none; /* Focus ring is drawn on the inner card instead */
+  container-type: inline-size; /* Lets text scale with the card width (cqw units) */
 }
 
+/* The miniature product card itself */
 .hero-spark-float {
-  display: block; /* Fill the link */
-  width: 100%; /* Full tile width */
-  height: 100%; /* Full tile height */
+  display: flex; /* Image on top, info below */
+  flex-direction: column; /* Stack vertically */
+  width: 100%; /* Full card width */
   overflow: hidden; /* Clip the picture to the rounded corners */
   border-radius: inherit; /* Same rounding as the link */
-  border: 1px solid rgb(255 255 255 / 0.35); /* Glassy edge */
-  background: rgb(255 255 255 / 0.08); /* Faint glass fill behind the picture */
+  border: 1px solid rgb(255 255 255 / 0.55); /* Light edge */
+  background: rgb(255 255 255); /* White product card, like the store cards */
   box-shadow:
     0 10px 30px rgb(0 0 0 / 0.45),
     0 0 28px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.35); /* Depth shadow plus accent glow */
@@ -2222,23 +2200,105 @@ body::-webkit-scrollbar {
 
 .hero-spark-link:hover .hero-spark-float,
 .hero-spark-link:focus-visible .hero-spark-float {
-  border-color: rgb(255 255 255 / 0.9); /* Bright rim on hover and focus */
+  border-color: rgb(var(--scene-tint, var(--hero-tint-0))); /* Accent rim on hover and focus */
   box-shadow:
     0 14px 38px rgb(0 0 0 / 0.5),
     0 0 44px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.75); /* Stronger accent glow */
 }
 
+.hero-card-media {
+  position: relative; /* Anchor for the discount badge */
+  display: block; /* Fill the card width */
+  aspect-ratio: 4 / 3; /* Compact picture area */
+  overflow: hidden; /* Clip the zooming picture */
+  background: rgb(249 250 251); /* Light grey behind the picture */
+}
+
 .hero-spark-image {
   display: block; /* Removes the inline gap under images */
-  width: 100%; /* Fill the tile */
-  height: 100%; /* Fill the tile */
-  object-fit: cover; /* Crop to the square without distortion */
+  width: 100%; /* Fill the picture area */
+  height: 100%; /* Fill the picture area */
+  object-fit: cover; /* Crop without distortion */
   transition: transform 0.5s ease; /* Smooth zoom */
 }
 
 .hero-spark-link:hover .hero-spark-image,
 .hero-spark-link:focus-visible .hero-spark-image {
-  transform: scale(1.12); /* Gentle zoom on hover and focus */
+  transform: scale(1.1); /* Gentle zoom on hover and focus */
+}
+
+.hero-card-badge {
+  position: absolute; /* Top-left corner of the picture */
+  top: 4cqw; /* Scales with the card */
+  left: 4cqw;
+  padding: 1cqw 3.5cqw; /* Tiny pill */
+  border-radius: 999px; /* Fully rounded */
+  background: rgb(239 68 68); /* Danger red, like the store badge */
+  color: rgb(255 255 255); /* White text */
+  font-size: max(0.34rem, 6.5cqw); /* Very small, scales with the card */
+  font-weight: 700; /* Bold */
+  line-height: 1.3; /* Compact */
+}
+
+.hero-card-body {
+  display: flex; /* Stack the info lines */
+  flex-direction: column; /* Vertical */
+  gap: 1.5cqw; /* Tight spacing */
+  padding: 5cqw; /* Compact padding that scales with the card */
+}
+
+.hero-card-category {
+  overflow: hidden; /* Never wraps */
+  text-overflow: ellipsis; /* Ellipsis for long names */
+  white-space: nowrap; /* One line */
+  color: rgb(156 163 175); /* Muted grey */
+  font-size: max(0.34rem, 5.5cqw); /* Smallest line */
+  font-weight: 600; /* Semi bold */
+  letter-spacing: 0.06em; /* Airy caps */
+  text-transform: uppercase; /* Same style as the store cards */
+}
+
+.hero-card-name {
+  white-space: normal; /* The full name is shown, wrapping onto more lines */
+  overflow-wrap: anywhere; /* Very long words wrap instead of overflowing */
+  color: rgb(31 41 55); /* Dark grey title */
+  font-size: max(0.38rem, 7.5cqw); /* Small, scales with the card */
+  font-weight: 600; /* Semi bold */
+  line-height: 1.2; /* Compact */
+}
+
+.hero-card-prices {
+  display: flex; /* Sale and original price side by side */
+  flex-wrap: wrap; /* Original price drops to the next line if it does not fit */
+  align-items: baseline; /* Align the text baselines */
+  column-gap: 2.5cqw; /* Space between the two prices */
+  row-gap: 0; /* No gap when wrapped */
+}
+
+.hero-card-price {
+  color: rgb(17 24 39); /* Near black sale price */
+  font-size: max(0.4rem, 8cqw); /* Small but readable */
+  font-weight: 700; /* Bold */
+  white-space: nowrap; /* Never splits the amount */
+}
+
+.hero-card-original {
+  color: rgb(156 163 175); /* Muted original price */
+  font-size: max(0.34rem, 6cqw); /* Smaller than the sale price */
+  text-decoration: line-through; /* Struck through */
+  white-space: nowrap; /* Never splits the amount */
+}
+
+.hero-card-cta {
+  margin-top: 1.5cqw; /* Small gap above the pill */
+  padding: 2.5cqw 0; /* Slim pill */
+  border-radius: 999px; /* Fully rounded, like the store buttons */
+  background: rgb(var(--scene-tint, var(--hero-tint-0))); /* Category accent colour */
+  color: rgb(255 255 255); /* White text */
+  font-size: max(0.34rem, 6.5cqw); /* Very small */
+  font-weight: 600; /* Semi bold */
+  text-align: center; /* Centred label */
+  line-height: 1.2; /* Compact */
 }
 
 @keyframes heroSparkFloat {
@@ -2251,101 +2311,43 @@ body::-webkit-scrollbar {
   }
 }
 
-/* Name and price label shown beside the tile on devices with a real hover */
-.hero-spark-label {
-  position: absolute; /* Floats next to the tile */
-  left: 50%; /* Centre horizontally on the tile */
-  top: calc(100% + 0.6rem); /* Upper tiles show the label below them */
-  z-index: 5; /* Above neighbouring tiles */
-  display: none; /* Hidden on touch devices */
-  flex-direction: column; /* Name above price */
-  align-items: center; /* Centre both lines */
-  gap: 0.1rem; /* Tight spacing */
-  padding: 0.4rem 0.75rem; /* Label padding */
-  border: 1px solid rgb(255 255 255 / 0.18); /* Hairline outline */
-  border-radius: 0.75rem; /* Rounded label */
-  background: rgb(8 12 16 / 0.85); /* Dark glass */
-  backdrop-filter: blur(8px); /* Frosted effect */
-  white-space: nowrap; /* Keep each line on one row */
-  opacity: 0; /* Invisible until hover */
-  translate: -50% 4px; /* Centred, slightly lowered before it appears */
-  transition:
-    opacity 0.25s ease,
-    translate 0.25s ease; /* Smooth reveal */
-  pointer-events: none; /* Never steals the click from the tile */
-}
-
-.hero-spark-name {
-  max-width: 12rem; /* Long names are truncated */
-  overflow: hidden; /* Hide the overflow */
-  text-overflow: ellipsis; /* Show an ellipsis for long names */
-  color: rgb(255 255 255); /* White product name */
-  font-size: 0.75rem; /* Compact size */
-  font-weight: 600; /* Semi bold */
-}
-
-.hero-spark-price {
-  color: rgb(226 232 240); /* Silver price */
-  font-size: 0.7rem; /* Compact size */
-  font-weight: 700; /* Bold */
-}
-
-/* Lower tiles (slots 7 to 12) show their label above the tile instead */
-.hero-slot-7 .hero-spark-label,
-.hero-slot-8 .hero-spark-label,
-.hero-slot-9 .hero-spark-label,
-.hero-slot-10 .hero-spark-label,
-.hero-slot-11 .hero-spark-label,
-.hero-slot-12 .hero-spark-label {
-  top: auto; /* Cancel the default below-tile placement */
-  bottom: calc(100% + 0.6rem); /* Place the label above the tile */
-}
-
-@media (hover: hover) {
-  .hero-spark-label {
-    display: flex; /* Labels exist only where hovering is possible */
-  }
-  .hero-spark-link:hover .hero-spark-label,
-  .hero-spark-link:focus-visible .hero-spark-label {
-    opacity: 1; /* Reveal on hover and focus */
-    translate: -50% 0; /* Slide into its final position */
-  }
-}
-
 /* ---------- Slots: position, size and float timing of each tile ---------- */
 /* Mobile layout: tiles sit in a top band and a bottom band, leaving the middle for the title */
 
 .hero-slot-1 {
-  left: 16%;
-  top: 9%;
+  left: 17%;
+  top: 2%;
+  --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 3.9rem;
   --float-dur: 6.2s;
   --float-delay: -0.8s;
 }
 .hero-slot-2 {
   left: 50%;
-  top: 7%;
+  top: 2%;
+  --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 4.6rem;
   --float-dur: 7.1s;
   --float-delay: -2.4s;
 }
 .hero-slot-3 {
-  left: 84%;
-  top: 10%;
+  left: 83%;
+  top: 2%;
+  --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 3.3rem;
   --float-dur: 5.6s;
   --float-delay: -1.5s;
 }
 .hero-slot-4 {
-  left: 10%;
-  top: 23%;
+  left: 12%;
+  top: 27%;
   --spark-size: 3.9rem;
   --float-dur: 6.8s;
   --float-delay: -3.1s;
 }
 .hero-slot-5 {
-  left: 90%;
-  top: 26%;
+  left: 88%;
+  top: 25%;
   --spark-size: 4.6rem;
   --float-dur: 5.9s;
   --float-delay: -0.4s;
@@ -2358,8 +2360,9 @@ body::-webkit-scrollbar {
   --float-delay: -4.2s;
 }
 .hero-slot-7 {
-  left: 12%;
-  top: 76%;
+  left: 17%;
+  top: 97%;
+  --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 4.6rem;
   --float-dur: 6.4s;
   --float-delay: -1.9s;
@@ -2372,8 +2375,9 @@ body::-webkit-scrollbar {
   --float-delay: -2.9s;
 }
 .hero-slot-9 {
-  left: 68%;
-  top: 77%;
+  left: 50%;
+  top: 97%;
+  --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 3.3rem;
   --float-dur: 7s;
   --float-delay: -0.2s;
@@ -2386,8 +2390,9 @@ body::-webkit-scrollbar {
   --float-delay: -3.6s;
 }
 .hero-slot-11 {
-  left: 22%;
-  top: 94%;
+  left: 83%;
+  top: 97%;
+  --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
   --spark-size: 3.9rem;
   --float-dur: 6.9s;
   --float-delay: -1.1s;
@@ -2405,26 +2410,31 @@ body::-webkit-scrollbar {
   .hero-slot-1 {
     left: 8%;
     top: 22%;
+    --spark-ay: -50%; /* Centred on its coordinate on desktop */
     --spark-size: clamp(4.2rem, 6.4vw, 6rem);
   }
   .hero-slot-2 {
     left: 22%;
-    top: 12%;
+    top: 5%;
+    --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(5rem, 8vw, 7.5rem);
   }
   .hero-slot-3 {
     left: 40%;
-    top: 9%;
+    top: 3%;
+    --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(3.4rem, 5vw, 4.6rem);
   }
   .hero-slot-4 {
     left: 60%;
-    top: 11%;
+    top: 5%;
+    --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(4.2rem, 6.4vw, 6rem);
   }
   .hero-slot-5 {
     left: 78%;
-    top: 13%;
+    top: 4%;
+    --spark-ay: 0%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(5rem, 8vw, 7.5rem);
   }
   .hero-slot-6 {
@@ -2435,32 +2445,75 @@ body::-webkit-scrollbar {
   .hero-slot-7 {
     left: 90%;
     top: 58%;
+    --spark-ay: -50%; /* Centred on its coordinate on desktop */
     --spark-size: clamp(5rem, 8vw, 7.5rem);
   }
   .hero-slot-8 {
     left: 78%;
-    top: 84%;
+    top: 92%;
+    --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(4.2rem, 6.4vw, 6rem);
   }
   .hero-slot-9 {
     left: 58%;
-    top: 90%;
+    top: 93%;
+    --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(3.4rem, 5vw, 4.6rem);
   }
   .hero-slot-10 {
     left: 36%;
-    top: 88%;
+    top: 92%;
+    --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(5rem, 8vw, 7.5rem);
   }
   .hero-slot-11 {
     left: 18%;
-    top: 82%;
+    top: 91%;
+    --spark-ay: -100%; /* Anchored so the card never gets cut by the stage edge */
     --spark-size: clamp(4.2rem, 6.4vw, 6rem);
   }
   .hero-slot-12 {
     left: 7%;
     top: 56%;
     --spark-size: clamp(3.4rem, 5vw, 4.6rem);
+  }
+}
+
+/* Phones: the compact hero is short, so only four cards are shown, one in each corner */
+@media (max-width: 767px) {
+  .hero-slot-2,
+  .hero-slot-4,
+  .hero-slot-5,
+  .hero-slot-6,
+  .hero-slot-8,
+  .hero-slot-9,
+  .hero-slot-10,
+  .hero-slot-12 {
+    display: none; /* Hidden on phones */
+  }
+  .hero-slot-1 {
+    left: 22%;
+    top: 3%;
+    --spark-ay: 0%;
+    --spark-size: 3.5rem;
+  }
+  .hero-slot-3 {
+    left: 78%;
+    top: 3%;
+    --spark-ay: 0%;
+    --spark-size: 3.5rem;
+  }
+  .hero-slot-7 {
+    left: 22%;
+    top: 97%;
+    --spark-ay: -100%;
+    --spark-size: 3.5rem;
+  }
+  .hero-slot-11 {
+    left: 78%;
+    top: 97%;
+    --spark-ay: -100%;
+    --spark-size: 3.5rem;
   }
 }
 
@@ -2688,7 +2741,7 @@ body::-webkit-scrollbar {
     gap: 0.45rem; /* Tighter spacing between the centre elements */
   }
   .hero-cta {
-    padding: 0.6rem 1.3rem; /* Slimmer button */
+    padding: 0.45rem 1rem; /* Slimmer button */
   }
 }
 

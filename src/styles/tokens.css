@@ -48,8 +48,9 @@
   /* ========================= */
   /* TYPOGRAPHY — Fonts */
   /* ========================= */
-  --font-sans: "Inter", sans-serif;       /* Main font used across the entire project */
-  --font-mono: "JetBrains Mono", monospace; /* For code blocks */
+  --font-sans: "Times New Roman", Times, serif;   /* Main font used across the entire project */
+  --font-serif: "Times New Roman", Times, serif;  /* Serif font, identical to the main font */
+  --font-mono: "Times New Roman", Times, serif;   /* Monospace slot, identical to the main font */
 
   /* ========================= */
   /* FONT SIZES */

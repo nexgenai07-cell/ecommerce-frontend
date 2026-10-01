@@ -16,10 +16,35 @@ import { AiOutlineBell, AiOutlineClose } from "react-icons/ai";
 //                  its `visible` flag drives the enter and exit transition
 // title         -> short bold heading of the message
 // message       -> supporting text, clamped to two lines
+// customerName  -> optional name of the customer the event is about, shown
+//                  on its own line below the message (admin notifications)
 // onClick       -> optional handler that opens the related page
 // onDismiss     -> closes the toast when the close button is pressed
-const LiveToast = ({ toastInstance, title, message, onClick, onDismiss }) => {
+const LiveToast = ({
+  toastInstance,
+  title,
+  message,
+  customerName,
+  onClick,
+  onDismiss,
+}) => {
   const isInteractive = typeof onClick === "function";
+
+  // Shared by the interactive and the plain layout so both render the same
+  // text content.
+  const content = (
+    <>
+      <p className="truncate text-sm font-semibold text-gray-900">{title}</p>
+      {message && (
+        <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{message}</p>
+      )}
+      {customerName && (
+        <p className="mt-0.5 truncate text-xs font-medium text-gray-600">
+          Customer: {customerName}
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -46,26 +71,10 @@ const LiveToast = ({ toastInstance, title, message, onClick, onDismiss }) => {
           onClick={onClick}
           className="min-w-0 flex-1 cursor-pointer text-left"
         >
-          <p className="truncate text-sm font-semibold text-gray-900">
-            {title}
-          </p>
-          {message && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
-              {message}
-            </p>
-          )}
+          {content}
         </button>
       ) : (
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900">
-            {title}
-          </p>
-          {message && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
-              {message}
-            </p>
-          )}
-        </div>
+        <div className="min-w-0 flex-1">{content}</div>
       )}
 
       <button

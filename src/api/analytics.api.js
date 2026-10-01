@@ -268,7 +268,8 @@ export const getInventoryAlerts = (signal) => {
 // - type: which kind of report to export. Accepted values: "sales",
 //   "orders", "discounts", "inventory", "returns", "complaints",
 //   "social_posts", "customers", "revenue", "products", "categories",
-//   "audit_logs", "whatsapp_numbers", "whatsapp_conversation"
+//   "audit_logs", "qr_payments", "whatsapp_numbers",
+//   "whatsapp_conversation"
 // - status: optional, only applies when type is "sales" or "revenue".
 //   Same accepted values as getSalesReport()/getRevenueReport()
 //   ("sold" | "cancelled" | "refunded" | "all" | an exact order
@@ -329,7 +330,19 @@ export const getInventoryAlerts = (signal) => {
 //                            products.api.js)
 //   categories             - search, ordering
 //   audit_logs             - entity, user (its id or its name), action,
-//                            search
+//                            search. The file ends with a Customer column
+//                            (the customer the action was about, the same
+//                            value as customer_name in the audit log list).
+//   qr_payments            - status (under_review | paid | rejected |
+//                            refunded | all; omitted means all), search
+//                            (order number, customer name, phone or email,
+//                            or transaction ID), min_amount, max_amount,
+//                            duplicate (true | false), ordering. Only QR
+//                            payments with a submitted proof are exported,
+//                            and start_date/end_date filter by the day the
+//                            proof was submitted. Send the same filters the
+//                            QR Payments page has applied so the file
+//                            matches what is on screen.
 //   whatsapp_numbers       - search (start_date/end_date are accepted
 //                            but do not filter this type)
 //   whatsapp_conversation  - phone_number (REQUIRED, a 400 is returned

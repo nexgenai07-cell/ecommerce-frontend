@@ -1,214 +1,241 @@
-import { useRef } from "react"; // useRef to attach a DOM reference to the section, used for scroll-visibility detection
-import { motion, useInView } from "framer-motion"; // useInView tells us the exact moment this section scrolls onto the screen (already installed in the project)
-import { FiUsers, FiStar, FiTruck, FiRefreshCw } from "react-icons/fi";
+import { useId, useRef } from "react"; // useId gives every ring gradient its own id; useRef holds the section reference
+import { motion, useInView, useReducedMotion } from "framer-motion"; // Entrance motion, scroll-visibility detection and the visitor's reduced-motion setting
+import { FiUsers, FiStar, FiTruck, FiRefreshCw } from "react-icons/fi"; // One icon per highlight
 import Container from "../layouts/Container"; // Wrapper component for consistent max-width/padding
-import useCountUp from "../../hooks/useCountUp"; // Our custom hook that animates a number counting up once it's visible
+import useCountUp from "../../hooks/useCountUp"; // Animates a number counting up once it is allowed to start
 
 // =============================================
 // STATS DATA
-// Each entry carries the pieces needed to drive the count-up animation
-// instead of one hardcoded display string:
-//   target      -> the final NUMBER to count up to (null if the stat has no number, e.g. "FREE")
-//   decimals    -> how many decimal places to keep (0 for whole numbers, 1 for "4.9")
-//   suffix      -> text glued AFTER the animated number (e.g. "k+", "/5", "-Day")
-//   staticValue -> used only when target is null, rendered as-is with no counting
+//   icon         -> icon component shown inside the circle
+//   target       -> the final NUMBER to count up to (null when the stat has no number, e.g. "FREE")
+//   decimals     -> how many decimal places to keep (0 for whole numbers, 1 for "4.9")
+//   suffix       -> smaller text shown right after the number (e.g. "k+", "/5", "-Day")
+//   staticValue  -> shown as-is when target is null, without counting
+//   label        -> description shown under the value
+//   ringEndClass -> where the ring stops drawing: 0 offset is a full circle, 2 offset is 98% of it
+// The class names are written out in full so Tailwind can detect them.
 // =============================================
 const STATS = [
   {
     icon: FiUsers,
-    target: 120, // counts 0 -> 120 quickly when this section scrolls into view
-    decimals: 0, // whole number, no decimal places
-    suffix: "k+", // appended after the number finishes counting, e.g. "120k+"
+    target: 120,
+    decimals: 0,
+    suffix: "k+",
     label: "Active Customers",
-    iconBg: "bg-gradient-to-br from-primary to-primary-dark",
+    ringEndClass: "[stroke-dashoffset:0]",
   },
   {
     icon: FiStar,
-    target: 4.9, // counts 0 -> 4.9
-    decimals: 1, // keep one decimal place so it lands exactly on "4.9"
-    suffix: "/5", // appended after the number, e.g. "4.9/5"
+    target: 4.9,
+    decimals: 1,
+    suffix: "/5",
     label: "Average Rating",
-    iconBg: "bg-gradient-to-br from-primary-light to-primary",
+    ringEndClass: "[stroke-dashoffset:2]", // 4.9 out of 5 fills 98% of the ring
   },
   {
     icon: FiTruck,
-    target: null, // "FREE" is not a number, so this stat is never passed through the count-up hook
-    staticValue: "FREE", // shown as-is, no counting animation for this one
+    target: null,
+    staticValue: "FREE",
+    suffix: "",
     label: "Delivery on Rs.5000+",
-    iconBg: "bg-gradient-to-br from-primary to-primary-dark",
+    ringEndClass: "[stroke-dashoffset:0]",
   },
   {
     icon: FiRefreshCw,
-    target: 30, // counts 0 -> 30
-    decimals: 0, // whole number
-    suffix: "-Day", // appended after the number, e.g. "30-Day"
+    target: 30,
+    decimals: 0,
+    suffix: "-Day",
     label: "Easy Returns",
-    iconBg: "bg-gradient-to-br from-primary-light to-primary",
+    ringEndClass: "[stroke-dashoffset:0]",
   },
 ];
 
-// =============================================================================
-// getHoloFontSize
-// The original uiverse.io reference card was built for ONE fixed giant digit
-// ("6") inside a fixed 140px square box. Our stats show variable-length text
-// like "120k+" or "30-Day", so the font-size must shrink as the string gets
-// longer, otherwise longer stats would overflow their card. This keeps every
-// stat visually balanced regardless of how many characters it has.
-// =============================================================================
-const getHoloFontSize = (text) => {
-  const len = text.length; // how many characters we need to fit
-  if (len <= 3) return 42; // short strings like "4.9" (rare) get the biggest size
-  if (len === 4) return 36; // e.g. "FREE"
-  if (len === 5) return 31; // e.g. "120k+", "4.9/5"
-  return 26; // e.g. "30-Day" (6 characters) gets the smallest size
-};
+// Length of the count-up in milliseconds; long enough for every step to be seen
+const COUNT_DURATION_MS = 2000;
+
+// Gap between the start of one card and the next, in milliseconds
+const STAGGER_MS = 150;
+
+// Transition delays of the rings, one per card. They match STAGGER_MS (0, 150, 300, 450),
+// so each ring starts drawing at the same moment as its number starts counting.
+const RING_DELAY_CLASSES = [
+  "[transition-delay:0ms]",
+  "[transition-delay:150ms]",
+  "[transition-delay:300ms]",
+  "[transition-delay:450ms]",
+];
 
 // =============================================================================
-// Holo3DNumber
-// This is a faithful recreation of the uiverse.io "Animated 3D Layered 6"
-// card by Thomas-Cabrit — three stacked text layers at different simulated
-// depths (translateZ), wrapped in a wobbling rotateX/rotateY container, with
-// a holographic gradient fill on the text itself. The ONLY changes from the
-// original source are: (1) every blue color value swapped for the project's
-// emerald brand colors, (2) the layers are explicitly centered with
-// top/left/translate so it works correctly with variable-length text instead
-// of a single fixed digit, and (3) font-size is now dynamic (see above).
+// StatCard
+// One highlight: an emerald icon circle wrapped by a progress ring that draws
+// itself, and next to it the value and its label. It is a separate component so
+// useCountUp is called exactly once per card, as the Rules of Hooks require.
 // =============================================================================
-const Holo3DNumber = ({ text }) => {
-  const fontSize = getHoloFontSize(text); // pick a font-size that comfortably fits this specific stat's text length
+const StatCard = ({ stat, isInView, index, shouldReduceMotion }) => {
+  const Icon = stat.icon; // Icon component of this stat, rendered as JSX below
+  const isNumeric = stat.target !== null; // False for stats such as "FREE" that never count
+  const gradientId = `stat-ring-${useId().replace(/[^a-zA-Z0-9]/g, "")}`; // Unique, URL-safe id for this ring's gradient
+  const isActive = isInView || Boolean(shouldReduceMotion); // Visitors who prefer reduced motion see the finished state at once
 
-  return (
-    // Perspective wrapper — gives the 3D rotation below a "3D space" to rotate within, exactly like the reference card's outer .card-6 wrapper
-    <div className="stats-holo-perspective">
-      {/* The element that actually wobbles in 3D via rotateX/rotateY, and holds all three stacked text layers on top of each other */}
-      <div className="stats-holo-6">
-        {/* Back layer — furthest simulated depth (translateZ -70px), most transparent and blurred, creates the "glow behind the number" illusion */}
-        <div
-          className="stats-holo-layer stats-holo-layer--back"
-          style={{ fontSize: `${fontSize}px` }} // inline font-size since it's calculated dynamically per stat, not a fixed value that CSS classes could hardcode
-        >
-          {text}
-        </div>
-        {/* Mid layer — halfway depth (translateZ -34px), medium opacity/blur, fills the visual gap between back and front layers */}
-        <div
-          className="stats-holo-layer stats-holo-layer--mid"
-          style={{ fontSize: `${fontSize}px` }}
-        >
-          {text}
-        </div>
-        {/* Front layer — sits at translateZ 0 (closest to viewer), fully sharp and opaque — this is the layer that's mainly readable */}
-        <div
-          className="stats-holo-layer stats-holo-layer--front"
-          style={{ fontSize: `${fontSize}px` }}
-        >
-          {text}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// =============================================================================
-// StatCard — one full stat block: icon badge on top, the 3D holo number in
-// the middle (with count-up), and the descriptive label at the bottom.
-// Split into its own component so useCountUp is called cleanly once per
-// card, following the Rules of Hooks (can't call hooks conditionally inside
-// a .map() callback in a fragile way).
-// =============================================================================
-const StatCard = ({ stat, isInView, index }) => {
-  const Icon = stat.icon; // grab this stat's icon component so it can be rendered as JSX below
-
-  // Animate the numeric part of this stat. If stat.target is null (the
-  // "FREE" card), the hook does nothing and just returns 0 — irrelevant
-  // since we never use that value for static stats.
+  // Live number while the count-up runs; stays 0 and unused for non-numeric stats
   const animatedNumber = useCountUp(
     stat.target,
-    isInView,
-    1100,
+    isInView && !shouldReduceMotion,
+    COUNT_DURATION_MS,
     stat.decimals || 0,
+    index * STAGGER_MS,
   );
 
-  // Build the exact string to show inside the 3D holo number: either the
-  // live counting number (rounded/fixed to the right decimal places) plus
-  // its suffix, or the static text for stats that have no number (e.g. "FREE")
-  const displayValue =
-    stat.target === null
-      ? stat.staticValue
-      : `${stat.decimals ? animatedNumber.toFixed(stat.decimals) : Math.round(animatedNumber)}${stat.suffix || ""}`;
+  // Number the card shows right now: the final value when motion is reduced, the counting value otherwise
+  const currentNumber = shouldReduceMotion ? stat.target : animatedNumber;
+
+  // Number part shown on screen: the counting value for numeric stats, the fixed text otherwise
+  const visibleNumber = isNumeric
+    ? currentNumber.toFixed(stat.decimals || 0)
+    : stat.staticValue;
+
+  // Final value read by screen readers, so they never announce the intermediate counting numbers
+  const finalValue = isNumeric
+    ? `${stat.target.toFixed(stat.decimals || 0)}${stat.suffix}`
+    : stat.staticValue;
 
   return (
-    // motion.div fades + slides each card in on mount, staggered by index, purely for the entrance — the wobble/holo effect itself is pure CSS below
-    <motion.div
-      initial={{ opacity: 0, y: 16 }} // start slightly lower and invisible
-      animate={isInView ? { opacity: 1, y: 0 } : {}} // animate up into place once the section scrolls into view
-      transition={{ duration: 0.5, delay: index * 0.08 }} // slight stagger per card so all four don't pop in at the exact same instant
-      className="flex flex-col items-center gap-1 text-center transition-transform duration-300 hover:-translate-y-1"
+    // The wrapper carries the entrance motion; the card inside carries the hover effects,
+    // so the two transforms never compete with each other
+    <motion.li
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }} // Starts slightly lower and invisible
+      animate={isInView ? { opacity: 1, y: 0 } : undefined} // Settles into place once the section is on screen
+      transition={{
+        duration: 0.5,
+        delay: (index * STAGGER_MS) / 1000,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      className="list-none"
     >
-      {/* Icon badge — brand-emerald gradient circle, unchanged from the original design */}
-      <div
-        className={`
-          w-11 h-11 sm:w-13 sm:h-13 rounded-full
-          flex items-center justify-center
-          text-white shadow-md
-          ${stat.iconBg}
-        `}
-      >
-        <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+      <div className="group flex h-full items-center gap-2.5 rounded-2xl border border-primary-100 bg-white/80 p-2.5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/15 sm:gap-3.5 sm:p-3.5">
+        {/* Circle: a progress ring that draws itself around an emerald icon disc */}
+        <div className="relative size-10 shrink-0 sm:size-14">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 56 56"
+            className="absolute inset-0 size-full -rotate-90"
+          >
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+                <stop
+                  offset="0%"
+                  className="[stop-color:var(--color-primary-light)]"
+                />
+                <stop
+                  offset="100%"
+                  className="[stop-color:var(--color-primary-dark)]"
+                />
+              </linearGradient>
+            </defs>
+            {/* Faint full circle the ring is drawn on */}
+            <circle
+              cx="28"
+              cy="28"
+              r="25"
+              fill="none"
+              strokeWidth="3.5"
+              className="stroke-primary/15"
+            />
+            {/* The ring itself: it starts empty and draws clockwise once the section is on screen */}
+            <circle
+              cx="28"
+              cy="28"
+              r="25"
+              fill="none"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              pathLength="100"
+              stroke={`url(#${gradientId})`}
+              className={[
+                "[stroke-dasharray:100_200] transition-[stroke-dashoffset,opacity] duration-[2000ms] ease-out motion-reduce:transition-none",
+                RING_DELAY_CLASSES[index],
+                isActive
+                  ? `${stat.ringEndClass} opacity-100`
+                  : "[stroke-dashoffset:100] opacity-0",
+              ].join(" ")}
+            />
+          </svg>
+
+          {/* Emerald disc with the icon, centred inside the ring */}
+          <div className="absolute inset-1 flex items-center justify-center rounded-full bg-linear-to-br from-primary-light to-primary-dark text-white shadow-md shadow-primary/30 transition-transform duration-300 group-hover:scale-105 sm:inset-1.5">
+            <Icon aria-hidden="true" className="size-4 sm:size-5" />
+          </div>
+        </div>
+
+        {/* Value and label */}
+        <div className="flex min-w-0 flex-col">
+          {/* Value: a dark-to-emerald gradient number followed by a smaller suffix */}
+          <p className="flex items-baseline gap-0.5 whitespace-nowrap leading-none tabular-nums">
+            <span
+              aria-hidden="true"
+              className="bg-linear-to-br from-gray-900 via-primary-dark to-primary bg-clip-text text-xl font-extrabold tracking-tight text-transparent sm:text-2xl lg:text-3xl"
+            >
+              {visibleNumber}
+            </span>
+            {stat.suffix && (
+              <span
+                aria-hidden="true"
+                className="text-xs font-bold text-primary sm:text-sm lg:text-base"
+              >
+                {stat.suffix}
+              </span>
+            )}
+            <span className="sr-only">{finalValue}</span>
+          </p>
+
+          {/* Label under the value */}
+          <p className="mt-1 text-[11px] font-medium leading-tight text-gray-500 sm:text-xs lg:text-sm">
+            {stat.label}
+          </p>
+        </div>
       </div>
-
-      {/* The 3D holographic layered number — replaces the old plain <p> number, this is the uiverse-inspired centerpiece */}
-      <Holo3DNumber text={displayValue} />
-
-      {/* Descriptive label below the value — pulled up slightly (-mt-2) since the holo number's perspective wrapper already carries its own vertical margin */}
-      <p className="text-xs sm:text-sm text-gray-600 -mt-2">{stat.label}</p>
-    </motion.div>
+    </motion.li>
   );
 };
 
 const StatsBar = () => {
-  // Ref attached to the section wrapper below — framer-motion's useInView watches this DOM node's position relative to the viewport
+  // Ref attached to the section; framer-motion's useInView watches its position relative to the viewport
   const sectionRef = useRef(null);
 
-  // Flips to true the first time at least 30% of the section is visible on screen, and — because of `once: true` — stays true forever after that. This single flag triggers every card's count-up animation at the same moment.
-  const isInView = useInView(sectionRef, { once: true, amount: 0.3 });
+  // Becomes true the first time most of the section is clearly inside the screen and stays true afterwards,
+  // which starts every card's entrance, ring and count-up. The bottom margin keeps the start from
+  // happening while the section is only peeking in at the screen edge, so the counting is seen from 0.
+  const isInView = useInView(sectionRef, {
+    once: true,
+    amount: 0.6,
+    margin: "0px 0px -60px 0px",
+  });
+
+  // True when the visitor asked their system to minimise motion
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    // Full-width section — NOT wrapped in Container at the section
-    // level, so the light-mint background stretches edge to edge
-    // across the entire viewport. Container is only applied to the
-    // inner content below, to keep the stats themselves centered
-    // and consistently padded with the rest of the page.
+    // Full-width band so the soft mint background reaches both screen edges;
+    // only the content inside is limited by the Container
     <section
-      ref={sectionRef} // attach the visibility-tracking ref to the section itself
-      className="w-full bg-primary-50 py-10 border-y border-primary-100"
+      ref={sectionRef}
+      aria-label="Store highlights"
+      className="w-full border-y border-primary-100 bg-linear-to-b from-primary-50 to-white py-5 sm:py-7"
     >
       <Container>
-        {/* Grid layout for the stats:
-            - grid-cols-2: 2 columns by default (mobile)
-            - md:grid-cols-4: switches to 4 columns on medium screens and above (desktop)
-            - gap-8: spacing between grid items */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-          {/* Loop through each stat in the STATS array and render a card with the 3D holo number for it */}
+        {/* Two columns from phones up to tablets, four columns on desktops */}
+        <ul className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
           {STATS.map((stat, index) => (
             <StatCard
               key={stat.label}
               stat={stat}
               isInView={isInView}
               index={index}
+              shouldReduceMotion={shouldReduceMotion}
             />
           ))}
-        </div>
+        </ul>
       </Container>
-
-      {/* NOTE: the "Animated 3D Layered Number" CSS (stats-holo-perspective,
-          stats-holo-6, stats-holo-layer, wobble keyframes, responsive +
-          reduced-motion media queries) used to be an inline <style> tag
-          right here. It has been moved to src/index.css (see the
-          "HOME PAGE COMPONENT STYLES" section) so the CSS lives in the
-          project's single global stylesheet instead of inside JSX, and
-          so it's declared once instead of being re-inserted into the DOM
-          on every mount of this section. The class names below are
-          unchanged, so nothing about how they look/behave has changed. */}
     </section>
   );
 };

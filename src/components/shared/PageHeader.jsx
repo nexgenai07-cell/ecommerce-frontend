@@ -35,15 +35,11 @@ const PageHeader = ({ icon, title, actions = null }) => {
         {/* Page title only — no subtitle/description line under it,
             intentionally, per the requirement to skip the helper text shown
             in the reference image. */}
-        <h1
-          className="text-lg sm:text-xl font-bold text-gray-900"
-          style={{ fontFamily: '"Times New Roman", Times, serif' }}
-        >
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900">
           {title}
           {/* text-lg on mobile, text-xl from the sm breakpoint up ->
               compact heading that stays proportional to the smaller
-              icon badge next to it. Font set to Times New Roman per
-              request, applied only to this page title text. */}
+              icon badge next to it. */}
         </h1>
       </div>
 

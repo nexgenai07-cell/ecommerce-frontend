@@ -65,7 +65,7 @@ const MAX_FOOTER_CATEGORIES = 5;
 const FooterLink = ({ to, children }) => (
   <Link
     to={to}
-    className="group relative w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
+    className="group relative w-fit text-xs text-primary-light transition-colors duration-200 hover:text-emerald-200"
   >
     {children}
     <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-300 group-hover:w-full" />
@@ -245,7 +245,7 @@ const Footer = () => {
 
                   <a
                     href="tel:+92300000000"
-                    className="w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
+                    className="w-fit text-xs text-primary-light transition-colors duration-200 hover:text-emerald-200"
                   >
                     +1 (555) ZYRON-88
                   </a>
@@ -254,7 +254,7 @@ const Footer = () => {
                 <button
                   type="button"
                   onClick={handleOpenChat}
-                  className="group flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-linear-to-r from-primary/15 to-primary/5 px-4 py-2 text-xs font-medium text-primary transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:from-primary/25 hover:to-primary/10"
+                  className="group flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-linear-to-r from-primary/15 to-primary/5 px-4 py-2 text-xs font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:from-primary/25 hover:to-primary/10"
                 >
                   <BsRobot className="h-3.5 w-3.5" />
                   Chat with Zyron AI
@@ -324,14 +324,14 @@ const Footer = () => {
                 ))}
                 <a
                   href="tel:+92300000000"
-                  className="w-fit text-xs text-gray-100 transition-colors duration-200 hover:text-primary-light"
+                  className="w-fit text-xs text-primary-light transition-colors duration-200 hover:text-emerald-200"
                 >
                   +1 (555) ZYRON-88
                 </a>
                 <button
                   type="button"
                   onClick={handleOpenChat}
-                  className="mt-1 flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary transition-transform active:scale-[0.98]"
+                  className="mt-1 flex w-fit items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-white transition-transform active:scale-[0.98]"
                 >
                   <BsRobot className="h-3.5 w-3.5" />
                   Chat with Zyron AI
@@ -357,19 +357,19 @@ const Footer = () => {
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-6">
               <Link
                 to="/privacy"
-                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
+                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
               >
                 Privacy
               </Link>
               <Link
                 to="/payments"
-                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
+                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
               >
                 Payments
               </Link>
               <Link
                 to="/terms"
-                className="text-[11px] text-gray-200 transition-colors duration-200 hover:text-primary-light"
+                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
               >
                 Terms
               </Link>

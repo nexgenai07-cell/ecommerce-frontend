@@ -10,10 +10,10 @@
 // A scene is switched on and off through the "isActive" prop.
 
 import { Link } from "react-router-dom"; // Client side navigation to products and categories
-import { AiOutlineArrowRight } from "react-icons/ai"; // Arrow icon for the call-to-action
 import { ROUTES } from "../../../constants/routes"; // Central route paths
 import formatPrice from "../../../utils/formatPrice"; // Formats prices as "Rs. 1,50,000"
 import cn from "../../../utils/cn"; // Joins class names conditionally
+import { HERO_MAX_SPARKS } from "../../../utils/heroData"; // Shared maximum number of tiles
 
 // Image shown when a product has no picture or the picture fails to load.
 const FALLBACK_IMAGE = "/placeholder-product.svg";
@@ -28,7 +28,8 @@ const DUST_DOT_COUNT = 16;
 const TINT_COUNT = 3;
 
 // Maximum number of product sprinkles (matches the hero-slot-1 ... hero-slot-12 classes).
-export const HERO_MAX_SPARKS = 12;
+// Defined in utils/heroData.js so the early prefetch can use it too; re-exported for HeroSection.
+export { HERO_MAX_SPARKS };
 
 // Order in which products fill the slots. Alternating between the upper and
 // lower slots spreads even a small number of products evenly around the title
@@ -50,13 +51,20 @@ const getTitleSizeClass = (words) => {
   return "hero-title-lg"; // Normal word: largest type
 };
 
+// Whole-number discount percentage of a product (0 when it has no discount).
+const getDiscountPercent = (product) => {
+  const price = Number(product.price);
+  const original = Number(product.original_price);
+  if (!(original > price) || !(original > 0)) return 0;
+  return Math.round(((original - price) / original) * 100);
+};
+
 // Props:
 //   category - category object from the API ({ id, name, description })
 //   products - array of product objects of that category
 //   index    - zero based position of the category in the hero
-//   total    - total number of categories in the hero
 //   isActive - true while this scene should be visible
-const HeroCategoryScene = ({ category, products, index, total, isActive }) => {
+const HeroCategoryScene = ({ category, products, index, isActive }) => {
   // Break the category name into words so a word never splits across lines.
   const words = String(category.name || "")
     .trim()
@@ -68,10 +76,6 @@ const HeroCategoryScene = ({ category, products, index, total, isActive }) => {
   const wordStartIndexes = words.map((_, wordIndex) =>
     words.slice(0, wordIndex).reduce((sum, word) => sum + word.length, 0),
   );
-
-  // Two digit position label such as "01" and "03".
-  const positionLabel = String(index + 1).padStart(2, "0");
-  const totalLabel = String(total).padStart(2, "0");
 
   // Only the first HERO_MAX_SPARKS products fit around the title.
   const sparkProducts = products.slice(0, HERO_MAX_SPARKS);
@@ -114,29 +118,49 @@ const HeroCategoryScene = ({ category, products, index, total, isActive }) => {
               className="hero-spark-link"
               aria-label={`${product.name} - ${formatPrice(Number(product.price))}`}
             >
-              {/* Inner wrapper carries the endless floating animation */}
+              {/* Inner wrapper carries the endless floating animation; it is a miniature product card */}
               <span className="hero-spark-float">
-                {/* Product picture; falls back to a placeholder when missing or broken */}
-                <img
-                  src={product.primary_image || FALLBACK_IMAGE}
-                  alt=""
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  className="hero-spark-image"
-                  onError={(event) => {
-                    // Swap in the placeholder once, never looping on failure
-                    if (!event.currentTarget.src.endsWith(FALLBACK_IMAGE)) {
-                      event.currentTarget.src = FALLBACK_IMAGE;
-                    }
-                  }}
-                />
-              </span>
+                {/* Picture area with the discount badge on top */}
+                <span className="hero-card-media">
+                  <img
+                    src={product.primary_image || FALLBACK_IMAGE}
+                    alt=""
+                    loading={index === 0 ? "eager" : "lazy"}
+                    fetchPriority={index === 0 ? "high" : "low"} // First category pictures jump the queue
+                    decoding="async"
+                    className="hero-spark-image"
+                    onError={(event) => {
+                      // Swap in the placeholder once, never looping on failure
+                      if (!event.currentTarget.src.endsWith(FALLBACK_IMAGE)) {
+                        event.currentTarget.src = FALLBACK_IMAGE;
+                      }
+                    }}
+                  />
+                  {/* Discount badge, only when a real discount exists */}
+                  {getDiscountPercent(product) > 0 && (
+                    <span className="hero-card-badge">
+                      -{getDiscountPercent(product)}%
+                    </span>
+                  )}
+                </span>
 
-              {/* Name and price label revealed on hover or keyboard focus */}
-              <span className="hero-spark-label">
-                <span className="hero-spark-name">{product.name}</span>
-                <span className="hero-spark-price">
-                  {formatPrice(Number(product.price))}
+                {/* Info area: category, name, price and a tiny action pill */}
+                <span className="hero-card-body">
+                  <span className="hero-card-category">
+                    {product.category?.name || category.name}
+                  </span>
+                  <span className="hero-card-name">{product.name}</span>
+                  <span className="hero-card-prices">
+                    <span className="hero-card-price">
+                      {formatPrice(Number(product.price))}
+                    </span>
+                    {Number(product.original_price) > Number(product.price) && (
+                      <span className="hero-card-original">
+                        {formatPrice(Number(product.original_price))}
+                      </span>
+                    )}
+                  </span>
+                  <span className="hero-card-cta">View</span>
                 </span>
               </span>
             </Link>
@@ -146,11 +170,6 @@ const HeroCategoryScene = ({ category, products, index, total, isActive }) => {
 
       {/* Centre block: position label, category name, description and call-to-action */}
       <div className="hero-center">
-        {/* Small label showing which collection of the total is on screen */}
-        <p className={cn("hero-kicker hero-fly", getFlyClass(index + 2, 4))}>
-          Collection {positionLabel} / {totalLabel}
-        </p>
-
         {/* Category name: the accessible label carries the full name, the letters are decorative */}
         <h2
           className={cn("hero-title", getTitleSizeClass(words))}
@@ -201,7 +220,6 @@ const HeroCategoryScene = ({ category, products, index, total, isActive }) => {
             className="hero-cta"
           >
             <span>Shop {category.name}</span>
-            <AiOutlineArrowRight aria-hidden="true" />
           </Link>
         </div>
       </div>

@@ -829,9 +829,9 @@ const FlashSaleSection = () => {
 
       {/* ============ CONTENT ============ */}
       {/* The hanging rope is tied to the top edge of this wrapper (the bottom edge of the ribbon).
-          The rope's md offset (-top-10 on the hourglass) must therefore always equal this
-          wrapper's md top padding (py-10). */}
-      <div className="relative py-6 sm:py-8 md:py-10">
+          The rope's md offset (-mt-6 on the hourglass) must therefore always equal this
+          wrapper's md top padding (py-6). */}
+      <div className="relative py-5 sm:py-6 md:py-6">
         <Container>
           {/* Two sections side by side.
               Below md : one column, the left section first and the folder under it.
@@ -840,7 +840,7 @@ const FlashSaleSection = () => {
               width that matches the folder (the folder sizes itself from its track, so that track
               cannot be content-sized); the left track takes exactly the width its content needs.
               Both are vertically centered against each other. */}
-          <div className="grid grid-cols-1 gap-6 md:mx-auto md:w-fit md:grid-cols-[auto_13rem] md:items-center md:gap-x-12 lg:grid-cols-[auto_15rem] lg:gap-x-36 xl:gap-x-52">
+          <div className="grid grid-cols-1 gap-4 md:mx-auto md:w-fit md:grid-cols-[auto_13rem] md:items-center md:gap-x-8 lg:grid-cols-[auto_15rem] lg:gap-x-16 xl:gap-x-24">
             {/* ============ LEFT SECTION: EVERYTHING ELSE ============ */}
             {/* Below md this is a grid of four tracks: the promo copy spans all four on the first row;
                 on the second row the two middle (auto-sized) tracks hold the hourglass and the
@@ -977,7 +977,7 @@ const FlashSaleSection = () => {
                   ease: [0.22, 1, 0.36, 1],
                   delay: 0.1,
                 }}
-                className="relative z-30 col-start-2 row-start-2 flex w-14 self-stretch justify-center sm:w-16 md:col-start-1 md:row-start-1 md:row-end-3 md:-mt-10 md:justify-self-start"
+                className="relative z-30 col-start-2 row-start-2 flex w-14 self-stretch justify-center sm:w-16 md:col-start-1 md:row-start-1 md:row-end-3 md:-mt-6 md:justify-self-start"
               >
                 <HangingSandTimer
                   percent={countdown.percent}

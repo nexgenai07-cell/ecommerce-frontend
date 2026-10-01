@@ -9,6 +9,7 @@ import {
 } from "react-icons/bs"; // Feature icons, plus the badge and check marks of the closing page
 import Container from "../layouts/Container"; // Shared layout wrapper that centers content
 import InteractiveBook from "../ui/InteractiveBook"; // Reusable 3D page-flip book
+import FireworksBackground from "../ui/FireworksBackground"; // Decorative canvas fireworks drawn behind the section content
 import { ROUTES } from "../../constants/routes"; // Central list of app route paths
 
 // ============================================================
@@ -58,6 +59,13 @@ const BENEFIT_RECAP = [
   "2-3 day delivery",
   "24/7 AI support",
 ];
+
+// Deep emerald and teal shades used for the fireworks, matching the brand theme.
+const FIREWORK_COLORS = ["#064e3b", "#065f46", "#047857", "#059669", "#0f766e"];
+
+// Rocket sticks with a clearly visible thickness and small glassy sparks.
+const FIREWORK_SIZE = { min: 1.5, max: 3 };
+const FIREWORK_PARTICLE_SIZE = { min: 1.5, max: 3.5 };
 
 const TOTAL_FEATURES = FEATURES.length; // Number of features, used for the "01 / 03" counter
 
@@ -301,11 +309,22 @@ const COVER_EMBLEM = (
 const WhyZyron = () => {
   return (
     // Section with a soft gradient backdrop; horizontal overflow is clipped so the 3D motion can never cause sideways scrolling
-    <section className="overflow-x-clip bg-linear-to-b from-gray-50 via-primary-50/40 to-gray-50 py-16 sm:py-10">
-      {/* Small side padding on phones gives the two-page spread as much width as possible */}
-      <Container className="px-2 sm:px-6 lg:px-8">
+    <section className="relative overflow-x-clip bg-linear-to-b from-gray-50 via-primary-50/40 to-gray-50 pb-1 pt-4 sm:pb-2 sm:pt-6">
+      {/* Fireworks fill the whole section behind the content and never receive clicks */}
+      <FireworksBackground
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        canvasClassName="opacity-90"
+        population={0.6}
+        color={FIREWORK_COLORS}
+        fireworkSize={FIREWORK_SIZE}
+        particleSize={FIREWORK_PARTICLE_SIZE}
+      />
+
+      {/* Small side padding on phones gives the two-page spread as much width as possible; it sits above the fireworks */}
+      <Container className="relative z-10 px-2 sm:px-6 lg:px-8">
         {/* ============ SECTION HEADER ============ */}
-        <div className="mb-6 flex flex-col items-center gap-3 px-2 text-center sm:mb-8">
+        <div className="mb-2 flex flex-col items-center gap-1 px-2 text-center sm:mb-3">
           <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-3xl lg:text-4xl">
             Why Choose Zyron
           </h2>

@@ -198,11 +198,11 @@ const Testimonials = () => {
 
   return (
     // Section wrapper: clips the side cards at the screen edges so the page never scrolls sideways
-    <section className="py-10 sm:py-14 bg-gray-50 overflow-hidden">
+    <section className="pb-4 pt-2 sm:pb-6 sm:pt-3 bg-gray-50 overflow-hidden">
       {/* ============ SECTION HEADER ============ */}
       <Container>
         {/* Centered heading block with the title and a short supporting sentence */}
-        <div className="flex flex-col items-center text-center gap-3 mb-8 sm:mb-10">
+        <div className="flex flex-col items-center text-center gap-1 mb-4 sm:mb-5">
           {/* Main heading whose size grows from mobile to desktop */}
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
             Our Stories
@@ -217,7 +217,7 @@ const Testimonials = () => {
       {/* ============ CAROUSEL + PROGRESS MARKERS ============ */}
       {/* Interaction wrapper: one place to detect hover and keyboard focus for pausing autoplay. It sits outside the Container so the chain can use the full screen width. */}
       <div
-        className="flex flex-col items-center gap-5 sm:gap-6"
+        className="flex flex-col items-center gap-3 sm:gap-4"
         onPointerEnter={handlePointerEnter} // Pause autoplay while a mouse hovers the carousel
         onPointerLeave={handlePointerLeave} // Resume autoplay when the mouse leaves
         onFocus={handleFocus} // Pause autoplay while a keyboard user is inside the carousel
