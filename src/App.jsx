@@ -267,6 +267,19 @@ const ProtectedRoute = ({ children }) => {
 };
 
 // ============================================================
+// GUEST WISHLIST ROUTE — public wishlist guard
+// ============================================================
+const GuestWishlistRoute = ({ children }) => {
+  const { isAuthenticated, role } = useAuth();
+
+  if (isAuthenticated && role !== "admin") {
+    return <Navigate to={ROUTES.ACCOUNT_WISHLIST} replace />;
+  }
+
+  return children;
+};
+
+// ============================================================
 // ADMIN PROTECTED ROUTE — Admin pages guard
 // ============================================================
 const AdminProtectedRoute = ({ children }) => {
@@ -412,9 +425,11 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.WISHLIST}
             element={
-              <Suspense fallback={<PageLoader />}>
-                <Wishlist />
-              </Suspense>
+              <GuestWishlistRoute>
+                <Suspense fallback={<PageLoader />}>
+                  <Wishlist />
+                </Suspense>
+              </GuestWishlistRoute>
             }
           />
 

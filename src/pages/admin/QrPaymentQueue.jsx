@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineQrcode, AiOutlineWarning } from "react-icons/ai";
 import { HiOutlineCheck, HiOutlineXMark } from "react-icons/hi2";
@@ -13,6 +14,7 @@ import {
 } from "../../api/payments.api";
 import { exportReport } from "../../api/analytics.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
+import { ROUTES } from "../../constants/routes";
 import { PAYMENT_STATUS } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
@@ -205,6 +207,8 @@ const QrPaymentQueue = () => {
   const debouncedMinAmount = useDebounce(minAmount, 400);
   const debouncedMaxAmount = useDebounce(maxAmount, 400);
 
+  const navigate = useNavigate();
+
   // Which order the Approve confirmation is currently open for.
   const [approveTarget, setApproveTarget] = useState(null);
   // Which order the Reject modal is currently open for, plus the
@@ -380,10 +384,11 @@ const QrPaymentQueue = () => {
   // =============================================
   const approveMutation = useMutation({
     mutationFn: (orderNumber) => approveQrPayment(orderNumber),
-    onSuccess: () => {
-      showSuccess(`${approveTarget} approved — order confirmed.`);
+    onSuccess: (_response, orderNumber) => {
+      showSuccess(`${orderNumber} approved — order confirmed.`);
       refreshPayments();
       setApproveTarget(null);
+      navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", orderNumber));
     },
     onError: (error) => {
       // The backend returns validation/state errors under an "error"
@@ -400,7 +405,7 @@ const QrPaymentQueue = () => {
   const rejectMutation = useMutation({
     mutationFn: ({ orderNumber, reason }) =>
       rejectQrPayment(orderNumber, reason),
-    onSuccess: (response) => {
+    onSuccess: (response, { orderNumber }) => {
       // The first and second rejection leave the order in
       // "pending_payment" so the customer can upload a new proof; the
       // third rejection cancels the order permanently. The toast shows
@@ -409,12 +414,12 @@ const QrPaymentQueue = () => {
       const result = response?.data;
       if (result?.permanently_cancelled) {
         showSuccess(
-          `${rejectTarget} rejected — maximum attempts reached, the order has been cancelled.`,
+          `${orderNumber} rejected — maximum attempts reached, the order has been cancelled.`,
         );
       } else {
         showSuccess(
           result?.message ||
-            `${rejectTarget} rejected. The customer has been notified` +
+            `${orderNumber} rejected. The customer has been notified` +
               (typeof result?.attempts_left === "number"
                 ? ` and has ${result.attempts_left} attempt${result.attempts_left === 1 ? "" : "s"} left.`
                 : "."),
@@ -423,6 +428,7 @@ const QrPaymentQueue = () => {
       refreshPayments();
       setRejectTarget(null);
       setRejectReason("");
+      navigate(ROUTES.ADMIN_ORDER_DETAIL.replace(":id", orderNumber));
     },
     onError: (error) => {
       showError(getApiErrorMessage(error, "Failed to reject this payment."));

@@ -4,10 +4,8 @@
 // Paints the artwork used as the WebGL backdrop of one hero category.
 // The artwork is drawn on an offscreen 2D canvas (so no external image
 // files are needed) and is later uploaded to the GPU as a texture by the
-// dissolve renderer. It combines a deep base tone, soft tinted glows,
-// fine concentric rings, light beams and a field of dust particles. The
-// fine details matter: the dissolve shader detects edges in this image to
-// produce its silver glowing outlines and sparkles.
+// dissolve renderer. It combines a deep base tone, soft tinted glows
+// and a vignette that darkens the corners.
 
 // Reads an "R G B" triple (for example "16 185 129") from a CSS custom
 // property of the given element and returns it as three numbers. The
@@ -114,63 +112,7 @@ export const createHeroBackdrop = ({ tint, base, seed, size = 1280 }) => {
     ctx.fillRect(0, 0, size, size); // Paint the accent glow
   }
 
-  // ---- 4. Thin concentric rings around the centre ----
-  ctx.lineWidth = Math.max(1.5, size * 0.0016); // Hairline stroke width
-  for (let ring = 1; ring <= 11; ring += 1) {
-    // Radius grows with every ring.
-    const radius = size * (0.06 + ring * 0.06);
-    // Rings fade out gradually towards the outside.
-    const ringAlpha = 0.22 - ring * 0.014;
-    ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.04, ringAlpha)})`; // Soft white
-    ctx.beginPath(); // Start a new circular path
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); // Full circle
-    ctx.stroke(); // Draw the ring outline
-  }
-
-  // ---- 5. Light beams radiating from the centre ----
-  for (let beam = 0; beam < 14; beam += 1) {
-    // Evenly spread angle with a little random jitter.
-    const angle = (beam / 14) * Math.PI * 2 + random() * 0.2;
-    // Gradient along the beam: bright at the centre, gone at the end.
-    const beamGradient = ctx.createLinearGradient(
-      centerX,
-      centerY,
-      centerX + Math.cos(angle) * size * 0.75,
-      centerY + Math.sin(angle) * size * 0.75,
-    );
-    beamGradient.addColorStop(0, "rgba(255, 255, 255, 0.16)"); // Bright start
-    beamGradient.addColorStop(1, "rgba(255, 255, 255, 0)"); // Faded end
-    ctx.strokeStyle = beamGradient; // Stroke with the beam gradient
-    ctx.lineWidth = 1 + random() * 2.5; // Slightly varied thickness
-    ctx.beginPath(); // Start the beam path
-    ctx.moveTo(centerX, centerY); // Begin at the centre
-    ctx.lineTo(
-      centerX + Math.cos(angle) * size * 0.75,
-      centerY + Math.sin(angle) * size * 0.75,
-    ); // Extend outwards along the angle
-    ctx.stroke(); // Draw the beam
-  }
-
-  // ---- 6. Dust particles scattered over the whole canvas ----
-  for (let dust = 0; dust < 1100; dust += 1) {
-    // Random position of the particle.
-    const dustX = random() * size;
-    const dustY = random() * size;
-    // Mostly tiny particles with the occasional larger one.
-    const dustRadius = 0.5 + Math.pow(random(), 3) * 2.6;
-    // Random brightness of the particle.
-    const dustAlpha = 0.12 + random() * 0.7;
-    // One in four particles carries the category tint, the rest are white.
-    ctx.fillStyle =
-      random() < 0.25
-        ? rgba(tint, dustAlpha)
-        : `rgba(255, 255, 255, ${dustAlpha})`;
-    ctx.beginPath(); // Start a new particle path
-    ctx.arc(dustX, dustY, dustRadius, 0, Math.PI * 2); // Draw it as a small disc
-    ctx.fill(); // Fill the particle
-  }
-
-  // ---- 7. Vignette that darkens the corners ----
+  // ---- 4. Vignette that darkens the corners ----
   const vignette = ctx.createRadialGradient(
     size / 2,
     size / 2,

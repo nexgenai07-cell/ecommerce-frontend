@@ -1,6 +1,3 @@
-// ============================================================
-// HeroSection - COMPONENT (homepage hero)
-// ============================================================
 // A scroll driven, full screen showcase of up to three real store
 // categories. The hero pins itself below the navbar while the visitor
 // scrolls:
@@ -45,14 +42,20 @@ import {
 import cn from "../../utils/cn"; // Joins class names conditionally
 import HeroCategoryScene from "./hero/HeroCategoryScene"; // One category scene
 import HeroDissolveCanvas from "./hero/HeroDissolveCanvas"; // WebGL dissolve backdrop
+import FireworksBackground from "../ui/FireworksBackground"; // Decorative canvas fireworks drawn behind the scenes
 
 // Fallback colours used only if the CSS custom properties are missing.
 const FALLBACK_BASE = [5, 8, 12];
 const FALLBACK_TINTS = [
   [16, 185, 129],
   [99, 102, 241],
-  [245, 158, 11],
+  [6, 182, 212],
 ];
+
+// Fireworks styling: light emerald and silver tones that stay visible on the dark backdrop.
+const FIREWORK_COLORS = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#e5e7eb"];
+const FIREWORK_SIZE = { min: 1.5, max: 3 }; // Thickness of the rising rocket trails
+const FIREWORK_PARTICLE_SIZE = { min: 1.5, max: 3.5 }; // Size of the glassy burst sparks
 
 // Screens up to this width (phones and tablets) get a compact hero: a normal
 // height block whose categories change by themselves, instead of a full screen
@@ -292,6 +295,17 @@ const HeroSection = () => {
 
           {/* Dark gradient over the backdrop that keeps text and tiles readable */}
           <div className="hero-shade" aria-hidden="true" />
+
+          {/* Fireworks above the shade and below the scenes; they never receive clicks */}
+          <FireworksBackground
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-[1]"
+            canvasClassName="opacity-90"
+            population={0.6}
+            color={FIREWORK_COLORS}
+            fireworkSize={FIREWORK_SIZE}
+            particleSize={FIREWORK_PARTICLE_SIZE}
+          />
 
           {/* One scene per category; only the active one is visible and focusable */}
           {categories.map((category, index) => (

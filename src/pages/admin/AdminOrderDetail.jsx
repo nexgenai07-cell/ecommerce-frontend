@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AiOutlineTruck,
@@ -187,6 +187,7 @@ const AdminOrderDetail = () => {
   // so this page and the main Orders list both refetch fresh data
 
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const navigate = useNavigate();
   // Controls visibility of the "Update Order Status" modal
 
   const [newStatus, setNewStatus] = useState("");
@@ -275,6 +276,11 @@ const AdminOrderDetail = () => {
   // rejected) has nothing to refund, and Stripe cancellations refund
   // automatically with no extra fields.
   const requiresManualRefundProof = isCancelling && isQrOrder && isPaidOrder;
+  const needsQrApproval =
+    isQrOrder &&
+    !isPaidOrder &&
+    order?.status !== ORDER_STATUS.CANCELLED &&
+    order?.status !== ORDER_STATUS.DELIVERED;
 
   const updateStatusMutation = useMutation({
     mutationFn: () =>
@@ -750,6 +756,26 @@ const AdminOrderDetail = () => {
         size="sm"
       >
         <div className="flex flex-col gap-4">
+          {needsQrApproval && (
+            <div className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-light/40 p-4">
+              <p className="text-xs text-warning font-medium">
+                This order's QR payment has not been approved yet. Approve the
+                payment from the QR Payments page first — Confirmed, Shipped,
+                Out for Delivery and Delivered stay locked until then.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setIsStatusModalOpen(false);
+                  navigate(ROUTES.ADMIN_QR_PAYMENTS);
+                }}
+                className="w-full sm:w-auto sm:self-start"
+              >
+                Go to QR Payments
+              </Button>
+            </div>
+          )}
           <Select
             label="New Status"
             options={statusOptions}

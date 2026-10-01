@@ -2,15 +2,16 @@ import { useState, useRef, useCallback } from "react"; // React hooks: state for
 import { motion } from "framer-motion"; // Animation library that provides the draggable wrapper used for the swipe interaction
 import { BsPatchCheckFill } from "react-icons/bs"; // Verified badge icon shown in the chip on top of the featured photo
 import Container from "../layouts/Container"; // Shared layout wrapper that centers content and applies consistent horizontal padding
+import SectionHeading from "../shared/SectionHeading"; // Animated heading block shared by the home sections
 import cn from "../../utils/cn"; // Tailwind class-merging helper used to combine class names conditionally
 
 // ============================================================
 // STORIES DATA
 // Static list of customer stories rendered by the carousel.
-// Optional "image" field: put a portrait photo URL (for example
-// "/stories/sarah.jpg" stored in the public folder) and it replaces
-// the gradient + initials artwork automatically. Portrait photos with
-// a 2:3 ratio (for example 800x1200) fit the card shape best.
+// Every story has an "image" field with the URL of a portrait photo
+// stored in the public/stories folder. When a photo is missing or fails
+// to load, the gradient + initials artwork is shown instead. Portrait
+// photos with a 2:3 ratio (for example 800x1200) fit the card shape best.
 // ============================================================
 const STORIES = [
   {
@@ -20,7 +21,7 @@ const STORIES = [
     metric: "100% spot-on recommendations", // Highlighted result shown as the large heading of the card
     text: "The curation is so precise, it feels like they know me better than I know myself. Every recommendation has been spot on.", // Customer quote
     initials: "SJ", // Initials rendered on the artwork when no photo is provided
-    image: "", // Optional portrait photo URL; an empty value falls back to the gradient artwork
+    image: "/stories/sarah-johnson.jpg", // Portrait photo URL; the gradient artwork is the fallback when it cannot be loaded
     panelClass: "from-emerald-500 via-emerald-600 to-teal-800", // Gradient colors of the artwork panel
   },
   {
@@ -30,7 +31,7 @@ const STORIES = [
     metric: "40+ unique pieces discovered",
     text: "Finally, an AI that actually understands my aesthetic. I've discovered so many unique pieces I never would have found on my own.",
     initials: "MC",
-    image: "",
+    image: "/stories/michael-chen.jpg",
     panelClass: "from-sky-500 via-blue-600 to-indigo-800",
   },
   {
@@ -40,7 +41,7 @@ const STORIES = [
     metric: "2-day average delivery",
     text: "The delivery was incredibly fast and the product quality exceeded my expectations. Will definitely be a regular customer.",
     initials: "PS",
-    image: "",
+    image: "/stories/priya-sharma.jpg",
     panelClass: "from-purple-500 via-fuchsia-600 to-purple-800",
   },
   {
@@ -50,7 +51,7 @@ const STORIES = [
     metric: "0 damaged bulk orders",
     text: "Ordering in bulk for my store has never been this smooth. Packaging is solid and nothing ever arrives damaged.",
     initials: "AR",
-    image: "",
+    image: "/stories/ahmed-raza.jpg",
     panelClass: "from-amber-400 via-orange-500 to-orange-700",
   },
   {
@@ -60,38 +61,8 @@ const STORIES = [
     metric: "3x faster repeat orders",
     text: "I love how the site remembers my style preferences. It genuinely feels like shopping with a friend who gets my taste.",
     initials: "ED",
-    image: "",
+    image: "/stories/emily-davis.jpg",
     panelClass: "from-rose-400 via-rose-500 to-pink-700",
-  },
-  {
-    id: 6,
-    name: "Hassan Ali",
-    role: "Graphic Designer",
-    metric: "60-second checkout",
-    text: "Clean checkout, fast support, and the product photos actually match what arrives at my door. Rare to find all three together.",
-    initials: "HA",
-    image: "",
-    panelClass: "from-cyan-400 via-cyan-600 to-teal-800",
-  },
-  {
-    id: 7,
-    name: "Fatima Noor",
-    role: "College Student",
-    metric: "10+ friends referred",
-    text: "Budget-friendly without feeling cheap. I've recommended this to literally every one of my roommates at this point.",
-    initials: "FN",
-    image: "",
-    panelClass: "from-pink-400 via-fuchsia-500 to-purple-700",
-  },
-  {
-    id: 8,
-    name: "David Kim",
-    role: "Photographer",
-    metric: "24-hour size exchange",
-    text: "Returns were painless the one time I needed to exchange a size. That alone earned my trust for future orders.",
-    initials: "DK",
-    image: "",
-    panelClass: "from-indigo-400 via-indigo-600 to-slate-800",
   },
 ]; // End of the STORIES array
 
@@ -115,6 +86,9 @@ const Testimonials = () => {
 
   // True while the user is dragging the chain, which pauses autoplay
   const [isDragging, setIsDragging] = useState(false);
+
+  // Ids of the stories whose photo could not be loaded; those cards show the gradient artwork instead
+  const [failedImages, setFailedImages] = useState({});
 
   // Ref that remembers a drag happened so the click that follows a drag is ignored
   const dragMovedRef = useRef(false);
@@ -201,17 +175,13 @@ const Testimonials = () => {
     <section className="pb-4 pt-2 sm:pb-6 sm:pt-3 bg-gray-50 overflow-hidden">
       {/* ============ SECTION HEADER ============ */}
       <Container>
-        {/* Centered heading block with the title and a short supporting sentence */}
-        <div className="flex flex-col items-center text-center gap-1 mb-4 sm:mb-5">
-          {/* Main heading whose size grows from mobile to desktop */}
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
-            Our Stories
-          </h2>
-          {/* Supporting sentence with a capped width so it never stretches on large screens */}
-          <p className="text-sm sm:text-base text-gray-500 max-w-md">
-            Real experiences from real Zyron shoppers
-          </p>
-        </div>
+        {/* Animated heading with the title, a highlighted word and a short supporting sentence */}
+        <SectionHeading
+          title="Our"
+          highlight="Stories"
+          subtitle="Real experiences from real Zyron shoppers"
+          className="mb-4 sm:mb-5"
+        />
       </Container>
 
       {/* ============ CAROUSEL + PROGRESS MARKERS ============ */}
@@ -267,12 +237,18 @@ const Testimonials = () => {
                     )}
                   >
                     {/* Real portrait photo when one is provided for this story */}
-                    {story.image ? (
+                    {story.image && !failedImages[story.id] ? (
                       <img
                         src={story.image} // Photo source supplied in the STORIES data
                         alt="" // Decorative because the customer's name is already in the text content
                         loading="lazy" // Defers loading until the image is near the viewport
                         draggable={false} // Stops the browser's native image drag from fighting the swipe gesture
+                        onError={() =>
+                          setFailedImages((current) => ({
+                            ...current,
+                            [story.id]: true,
+                          }))
+                        } // Falls back to the gradient artwork when the photo cannot be loaded
                         className="absolute inset-0 h-full w-full object-cover" // Fills the panel and crops the photo evenly
                       />
                     ) : (

@@ -8,6 +8,7 @@ import {
   BsCheckCircleFill,
 } from "react-icons/bs"; // Feature icons, plus the badge and check marks of the closing page
 import Container from "../layouts/Container"; // Shared layout wrapper that centers content
+import SectionHeading from "../shared/SectionHeading"; // Animated heading block shared by the home sections
 import InteractiveBook from "../ui/InteractiveBook"; // Reusable 3D page-flip book
 import FireworksBackground from "../ui/FireworksBackground"; // Decorative canvas fireworks drawn behind the section content
 import { ROUTES } from "../../constants/routes"; // Central list of app route paths
@@ -324,14 +325,12 @@ const WhyZyron = () => {
       {/* Small side padding on phones gives the two-page spread as much width as possible; it sits above the fireworks */}
       <Container className="relative z-10 px-2 sm:px-6 lg:px-8">
         {/* ============ SECTION HEADER ============ */}
-        <div className="mb-2 flex flex-col items-center gap-1 px-2 text-center sm:mb-3">
-          <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-3xl lg:text-4xl">
-            Why Choose Zyron
-          </h2>
-          <p className="max-w-md text-sm text-gray-500 sm:text-base">
-            Built different. Designed for the modern shopper.
-          </p>
-        </div>
+        <SectionHeading
+          title="Why Choose"
+          highlight="Zyron"
+          subtitle="Built different. Designed for the modern shopper."
+          className="mb-2 px-2 sm:mb-3"
+        />
 
         {/* ============ INTERACTIVE BOOK ============ */}
         <InteractiveBook

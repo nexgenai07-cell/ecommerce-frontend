@@ -6,7 +6,12 @@ import { Link, useNavigate } from "react-router-dom";
 // Shopping"). useNavigate gives us a function to redirect programmatically
 // (used for the login redirect and the "Start Shopping" empty-state button).
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueries,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 // useQuery fetches both the cart data and the "recommended products" list.
 // useMutation runs the "clear cart" API call.
 // useQueryClient lets us mark cached queries as stale so they refetch.
@@ -28,7 +33,11 @@ import { getCart, clearCart, removeCartItem } from "../../api/cart.api";
 // removeCartItem() → DELETE /api/v1/cart/remove/{item_id}/ — removes one
 // specific item, used below to power "Remove Selected".
 
-import { getProducts } from "../../api/products.api";
+import {
+  getProducts,
+  searchProducts,
+  getProductById,
+} from "../../api/products.api";
 // getProducts() fetches product listings — used here to populate the
 // "You Might Also Like" recommendation section at the bottom of the page.
 
@@ -171,11 +180,40 @@ const Cart = () => {
   // Recomputed on every render from cartItems — cheap, and always in sync
   // with whatever is in the cart right now.
   // --------------------------------------------------------------------------
+  // Reads a product's category id from whatever shape the API sends:
+  // { category: { id, name } }, { category: 5 } or { category_id: 5 }.
+  const getCategoryId = (product) => {
+    const c = product?.category;
+    if (c && typeof c === "object") return c.id ?? null;
+    if (c != null && c !== "") return c;
+    return product?.category_id ?? null;
+  };
+
+  // If a cart item's product does NOT carry its category (the cart API can
+  // return a slimmed-down product), look the product up by id to get it.
+  // Cached per product, so this only costs a request once per product.
+  const itemsMissingCategory = cartItems.filter(
+    (item) => item.product?.id && getCategoryId(item.product) == null,
+  );
+  const lookupQueries = useQueries({
+    queries: itemsMissingCategory.map((item) => ({
+      queryKey: QUERY_KEYS.PRODUCT_DETAIL(item.product.id),
+      queryFn: ({ signal }) => getProductById(item.product.id, signal),
+      staleTime: 1000 * 60 * 10,
+    })),
+  });
+  const lookupsPending = lookupQueries.some((q) => q.isLoading);
+
   const cartCategoryIds = [
     ...new Set(
-      cartItems
-        .map((item) => item.product?.category?.id)
-        .filter((id) => id != null),
+      [
+        ...cartItems
+          .map((item) => getCategoryId(item.product))
+          .filter((id) => id != null),
+        ...lookupQueries
+          .map((q) => getCategoryId(q.data?.data))
+          .filter((id) => id != null),
+      ].map((id) => Number(id)),
     ),
   ];
 
@@ -193,46 +231,79 @@ const Cart = () => {
   // completely separate query from the cart data query, so the two load
   // independently of one another.
   // --------------------------------------------------------------------------
-  const { data: recommendedData, isLoading: recommendedLoading } = useQuery({
-    // Cache key includes the current cart category ids so switching to a
-    // different mix of categories (adding/removing items) fetches a fresh,
-    // correctly-scoped list instead of reusing a stale one.
-    queryKey: [
-      ...QUERY_KEYS.PRODUCTS,
-      "cart-recommended",
-      cartCategoryIds.join(","),
-    ],
-    queryFn: ({ signal }) =>
-      getProducts(
-        {
-          ordering: "-created_at",
-          page: 1,
-          // Real stock filter (not a client-side guess) — the backend
-          // genuinely checks available_stock, so an out-of-stock product
-          // is never even returned here instead of being fetched and
-          // then hidden.
-          in_stock: true,
-          // Only add category_id when the cart actually has categorized
-          // items — omitting it falls back to the general newest-products
-          // list rather than sending an invalid empty filter.
-          ...(cartCategoryIds.length > 0
-            ? { category_id: cartCategoryIds.join(",") }
-            : {}),
-        },
-        signal,
-      ),
-    // 5-minute cache — recommended products don't need to refresh very often.
-    staleTime: 1000 * 60 * 5,
-    // Wait until the cart itself has loaded, so this never fires once with
-    // no category filter and then again right after with one.
-    enabled: !cartLoading,
+  // One independent query PER category (max 4, so each can get a slot).
+  // Each is cached by its own category id, so the final list below is
+  // re-derived from the CURRENT cart on every render — adding or removing
+  // a cart item changes the result instantly, with no stale mixed cache.
+  // category_id is only supported by the SEARCH endpoint (API 29); the
+  // plain List Products endpoint (API 28) ignores it.
+  const recommendCategoryIds = cartCategoryIds.slice(0, 4);
+  const categoryQueries = useQueries({
+    queries: recommendCategoryIds.map((categoryId) => ({
+      queryKey: [...QUERY_KEYS.PRODUCTS, "cart-recommended-cat", categoryId],
+      queryFn: ({ signal }) =>
+        searchProducts(
+          {
+            category_id: categoryId,
+            in_stock: true,
+            ordering: "-created_at",
+            page: 1,
+          },
+          signal,
+        ).then((res) =>
+          // Keep ONLY products that truly belong to this category.
+          (res?.data?.results || []).filter(
+            (p) => String(getCategoryId(p)) === String(categoryId),
+          ),
+        ),
+      staleTime: 1000 * 60 * 2,
+      enabled: !cartLoading,
+    })),
   });
 
-  // Drop anything already sitting in the cart, then keep the first 4 results
-  // so the recommendation grid stays compact.
-  const recommendedProducts = (recommendedData?.data?.results || [])
-    .filter((product) => !cartProductIds.has(product.id))
-    .slice(0, 4);
+  // Fallback (cart items have no category): newest in-stock products.
+  const { data: fallbackData, isLoading: fallbackLoading } = useQuery({
+    queryKey: [...QUERY_KEYS.PRODUCTS, "cart-recommended-fallback"],
+    queryFn: ({ signal }) =>
+      getProducts({ ordering: "-created_at", page: 1, in_stock: true }, signal),
+    staleTime: 1000 * 60 * 5,
+    enabled:
+      !cartLoading && !lookupsPending && recommendCategoryIds.length === 0,
+  });
+
+  const recommendedLoading =
+    lookupsPending ||
+    (recommendCategoryIds.length === 0
+      ? fallbackLoading
+      : categoryQueries.some((q) => q.isLoading));
+
+  // Exactly 4, split equally across the cart's CURRENT categories
+  // (round-robin): 1 category -> 4, 2 -> 2+2, 3 -> 2+1+1, 4 -> 1 each.
+  // If a category runs out of products, others fill the remaining slots.
+  // Products already in the cart are skipped.
+  const recommendedProducts = (() => {
+    const lists =
+      recommendCategoryIds.length === 0
+        ? [fallbackData?.data?.results || []]
+        : categoryQueries.map((q) => q.data || []);
+    const cleaned = lists.map((list) =>
+      list.filter((product) => !cartProductIds.has(product.id)),
+    );
+    const picked = [];
+    const pickedIds = new Set();
+    let index = 0;
+    while (picked.length < 4 && cleaned.some((list) => index < list.length)) {
+      for (const list of cleaned) {
+        const product = list[index];
+        if (product && !pickedIds.has(product.id) && picked.length < 4) {
+          picked.push(product);
+          pickedIds.add(product.id);
+        }
+      }
+      index += 1;
+    }
+    return picked;
+  })();
 
   // --------------------------------------------------------------------------
   // BULK SELECTION HELPERS

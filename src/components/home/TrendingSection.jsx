@@ -11,6 +11,7 @@ import extractListData from "../../utils/extractListData"; // Defensive normaliz
 import ProductGrid from "../shared/ProductGrid"; // Reusable grid that renders product cards (and their loading skeletons)
 import CategoryPills from "../shared/CategoryPills"; // Reusable row of clickable category filter buttons
 import Container from "../layouts/Container"; // Wrapper that centers content and applies consistent side padding
+import SectionHeading from "../shared/SectionHeading"; // Animated heading block shared by the home sections
 
 // Only ever show a single row of 4 cards on the Home page —
 // the full catalog is available via "View All"
@@ -162,28 +163,21 @@ const TrendingSection = () => {
             It is watched for entering the screen, which starts the chip and card entrances. */}
         <div ref={contentRef} className="flex flex-col gap-3 sm:gap-4">
           {/* ============ SECTION HEADER ============ */}
-          {/* Heading block on the left, "View All" link on the right, aligned to the bottom */}
-          <div className="flex items-end justify-between gap-4">
-            {/* Left side: main heading + supporting subtitle */}
-            <div className="flex min-w-0 flex-col gap-0.5">
-              {/* Main section title — scales up from mobile (text-2xl) to desktop (text-4xl) for a bold, responsive look */}
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
-                Trending Now
-              </h2>
-              {/* Supporting subtitle text under the heading */}
-              <p className="text-sm sm:text-base text-gray-500">
-                Curated picks updated daily
-              </p>
-            </div>
-            {/* "View All" link — navigates to the full products page; arrow nudges right on hover */}
-            <Link
-              to={ROUTES.PRODUCTS}
-              className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:gap-2.5 hover:underline shrink-0 transition-all duration-200"
-            >
-              View All
-              <AiOutlineArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
+          {/* Centered animated heading; the "View All" link sits at the right edge on larger screens */}
+          <SectionHeading
+            title="Trending"
+            highlight="Now"
+            subtitle="Curated picks updated daily"
+            action={
+              <Link
+                to={ROUTES.PRODUCTS}
+                className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:gap-2.5 hover:underline shrink-0 transition-all duration-200"
+              >
+                View All
+                <AiOutlineArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            }
+          />
 
           {/* ============ CATEGORY FILTER PILLS ============ */}
           {/* Row of clickable pills to filter trending products by category.

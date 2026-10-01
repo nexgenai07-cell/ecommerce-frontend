@@ -1759,7 +1759,7 @@ body::-webkit-scrollbar {
   --hero-base: 5 8 12; /* Deep background tone behind every backdrop */
   --hero-tint-0: 16 185 129; /* Accent of the first category (brand emerald) */
   --hero-tint-1: 99 102 241; /* Accent of the second category (indigo) */
-  --hero-tint-2: 245 158 11; /* Accent of the third category (amber) */
+  --hero-tint-2: 6 182 212; /* Accent of the third category (cyan) */
 }
 
 /* Per-scene accent colour, picked by the scene's position in the hero */
@@ -1770,7 +1770,7 @@ body::-webkit-scrollbar {
   --scene-tint: var(--hero-tint-1); /* Indigo accent */
 }
 .hero-tint-2 {
-  --scene-tint: var(--hero-tint-2); /* Amber accent */
+  --scene-tint: var(--hero-tint-2); /* Cyan accent */
 }
 
 /* ---------- Scroll track and pinned stage ---------- */
@@ -2534,29 +2534,24 @@ body::-webkit-scrollbar {
 
 .hero-dust-dot {
   position: absolute; /* Placed by its nth-child rule */
-  width: 4px; /* Default dot size */
-  height: 4px; /* Round dot */
+  width: 3px; /* Uniform dot size */
+  height: 3px; /* Round dot */
   border-radius: 999px; /* Perfect circle */
-  background: rgb(255 255 255 / 0.9); /* Bright white core */
-  box-shadow: 0 0 10px 2px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.6); /* Tinted halo */
-  animation: heroDustTwinkle 3.4s ease-in-out infinite; /* Endless twinkle */
+  background: rgb(255 255 255 / 0.85); /* Soft white core */
+  box-shadow: 0 0 6px 1px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.4); /* Subtle tinted halo */
+  animation: heroDustTwinkle 5s ease-in-out infinite; /* Slow, calm twinkle */
 }
 
-.hero-dust-dot:nth-child(3n) {
-  width: 3px; /* Smaller dots */
-  height: 3px;
-  animation-duration: 2.6s; /* Faster twinkle */
-}
 .hero-dust-dot:nth-child(4n) {
-  width: 6px; /* Larger dots */
-  height: 6px;
-  animation-duration: 4.2s; /* Slower twinkle */
+  width: 2px; /* Slightly smaller dots for variety */
+  height: 2px;
+  animation-duration: 6s; /* Slower twinkle */
 }
 .hero-dust-dot:nth-child(odd) {
-  animation-delay: -1.2s; /* Offset phase for odd dots */
+  animation-delay: -1.5s; /* Offset phase for odd dots */
 }
 .hero-dust-dot:nth-child(3n + 2) {
-  animation-delay: -2.1s; /* Offset phase for every third dot */
+  animation-delay: -3s; /* Offset phase for every third dot */
 }
 
 .hero-dust-dot:nth-child(1) {
@@ -2627,12 +2622,12 @@ body::-webkit-scrollbar {
 @keyframes heroDustTwinkle {
   0%,
   100% {
-    opacity: 0.15; /* Almost out */
-    transform: scale(0.6); /* Shrunk */
+    opacity: 0.25; /* Dimmed */
+    transform: scale(0.85); /* Slightly shrunk */
   }
   50% {
-    opacity: 1; /* Fully lit */
-    transform: scale(1.25); /* Slightly enlarged */
+    opacity: 0.9; /* Lit */
+    transform: scale(1.1); /* Slightly enlarged */
   }
 }
 
@@ -2757,5 +2752,15 @@ body::-webkit-scrollbar {
   .hero-scroll-hint-line,
   .hero-stage-loading {
     animation: none; /* No endless motion */
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* SectionHeading.jsx — flowing gradient inside the highlighted word. */
+/* The gradient is symmetric and repeats, so the loop has no jump.    */
+/* ---------------------------------------------------------------- */
+@keyframes sectionHeadingFlow {
+  to {
+    background-position: 200% center; /* Moves the gradient by exactly one full cycle */
   }
 }

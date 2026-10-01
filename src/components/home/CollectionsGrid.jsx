@@ -8,6 +8,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys"; // Central list of react
 import { getCategories } from "../../api/categories.api"; // API call to fetch all product categories
 import extractListData from "../../utils/extractListData"; // Normalizes the categories response whether it is a flat array or a paginated object
 import Container from "../layouts/Container"; // Wrapper that centers content and applies consistent side padding
+import SectionHeading from "../shared/SectionHeading"; // Animated heading block shared by the home sections
 import cn from "../../utils/cn"; // Merges conditional Tailwind class names
 
 // =============================================
@@ -334,16 +335,11 @@ const CollectionsGrid = () => {
         {/* Vertical stack: header block, then the carousel */}
         <div className="flex flex-col gap-4 sm:gap-5">
           {/* ============ SECTION HEADER ============ */}
-          <div className="flex flex-col gap-0.5">
-            {/* Main section title — scales from mobile to desktop */}
-            <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-3xl lg:text-4xl">
-              Curated Collections
-            </h2>
-            {/* Supporting subtitle under the heading */}
-            <p className="text-sm text-gray-500 sm:text-base">
-              Hand-picked edits across every category, refreshed regularly
-            </p>
-          </div>
+          <SectionHeading
+            title="Curated"
+            highlight="Collections"
+            subtitle="Hand-picked edits across every category, refreshed regularly"
+          />
 
           {isLoading ? (
             // ---- LOADING STATE ----
