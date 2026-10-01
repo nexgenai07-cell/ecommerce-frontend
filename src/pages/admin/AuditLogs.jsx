@@ -73,9 +73,9 @@ const AuditLogs = () => {
   };
 
   // --------------------------------------------------
-  // MAIN LOG LIST — API 82. `page`, `entity`, `user`, and `search` are
-  // now confirmed to filter and paginate correctly on the backend, so
-  // this always returns exactly one already-filtered page of logs.
+  // MAIN LOG LIST — `page`, `entity`, `user` and `search` are filtered and
+  // paginated on the backend, so this always returns exactly one
+  // already-filtered page of logs.
   // --------------------------------------------------
   const {
     data: logsResponse,
@@ -110,11 +110,9 @@ const AuditLogs = () => {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   // --------------------------------------------------
-  // ENTITY / USER DROPDOWN OPTIONS — API 82.1 / API 82.2 (NEW, 16 Sep
-  // 2026 Filtering Fix pass). These two dedicated endpoints replace
-  // the old approach of deriving the dropdown options from whatever
-  // rows happened to already be on the current page — which never
-  // showed every real option, only whatever had scrolled past.
+  // ENTITY / USER DROPDOWN OPTIONS — two dedicated endpoints return every
+  // option that has ever been logged, rather than only the values that
+  // happen to be on the current page of rows.
   // --------------------------------------------------
   const { data: entitiesResponse } = useQuery({
     queryKey: ["auditLogs", "entities"],
@@ -127,7 +125,7 @@ const AuditLogs = () => {
     staleTime: 1000 * 60 * 5,
   });
 
-  // API 82.1 returns a plain array of entity name strings directly.
+  // The entities endpoint returns a plain array of entity name strings.
   const entityOptions = [
     { value: "", label: "All Entities" },
     ...extractListData(entitiesResponse).map((entity) => ({
@@ -135,10 +133,9 @@ const AuditLogs = () => {
       label: entity,
     })),
   ];
-  // API 82.2 returns [{ id, name, email }, ...]. The `user` query
-  // param on getAuditLogs matches by name (same as before this fix —
-  // only where the options now come from has changed), so `value`
-  // here stays each user's `name`, not their numeric `id`.
+  // The users endpoint returns [{ id, name, email }, ...]. The `user`
+  // query param on getAuditLogs matches by name, so `value` here is each
+  // user's `name`, not their numeric `id`.
   const userOptions = [
     { value: "", label: "All Users" },
     ...extractListData(usersResponse).map((user) => ({
@@ -149,8 +146,9 @@ const AuditLogs = () => {
 
   // --------------------------------------------------
   // ACTION-TYPE COUNTS — 3 separate queries, same pattern used on
-  // Complaints/Discounts stat cards. `action` is now a CONFIRMED
-  // working filter param.
+  // Complaints/Discounts stat cards. `action` matches by prefix, so
+  // "create" also counts actions such as create_product and
+  // create_notification.
   // --------------------------------------------------
   const { data: createResponse } = useQuery({
     queryKey: ["auditLogs", "count", "create"],
@@ -169,7 +167,7 @@ const AuditLogs = () => {
     response?.data?.count ?? extractListData(response).length;
 
   // --------------------------------------------------
-  // EXPORT — API 99, type=audit_logs. The backend builds and returns
+  // EXPORT — type=audit_logs. The backend builds and returns
   // the CSV file directly for the currently applied filters, so this
   // is one request instead of looping every page of results and
   // building the file in the browser.
@@ -214,10 +212,8 @@ const AuditLogs = () => {
       key: "user",
       label: "User",
       render: (row) => (
-        // user_name — API 82 (24 Sep 2026). The acting admin's readable
-        // name (e.g. "Ali Khan"; "System" for an automated action).
-        // Previously this column had no readable name to fall back
-        // to and showed the raw numeric user id instead.
+        // user_name is the acting admin's readable name (e.g. "Ali Khan";
+        // "System" for an automated action).
         <span className="text-[10px] sm:text-[11px] font-medium text-gray-900">
           {row.user_name || "System"}
         </span>
@@ -248,8 +244,12 @@ const AuditLogs = () => {
       key: "entity_id",
       label: "Entity ID",
       render: (row) => (
-        <span className="text-[10px] sm:text-[11px] text-gray-500 font-mono">
-          {row.entity_id}
+        // customer_name is the customer the action was about (for example
+        // "complaint 12 — Sara Ahmed"). It is null for entities with no
+        // customer behind them, so only the id is shown then.
+        <span className="text-[10px] sm:text-[11px] text-gray-500">
+          <span className="font-mono">{row.entity_id}</span>
+          {row.customer_name && ` — ${row.customer_name}`}
         </span>
       ),
     },
@@ -257,8 +257,10 @@ const AuditLogs = () => {
       key: "ip_address",
       label: "IP Address",
       render: (row) => (
+        // Older entries and actions performed through the AI assistant
+        // have no IP address, so a dash is shown for those.
         <span className="text-[10px] sm:text-[11px] text-gray-500 font-mono">
-          {row.ip_address}
+          {row.ip_address || "—"}
         </span>
       ),
     },

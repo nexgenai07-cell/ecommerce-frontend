@@ -353,7 +353,7 @@ export const createLiveEventProcessor = ({
     invalidateKey(QUERY_KEYS.MY_ORDER_STATS);
     invalidateKey(QUERY_KEYS.ADMIN_ORDERS);
     invalidateKey(["adminOrders"]);
-    invalidateKey(QUERY_KEYS.QR_PENDING_PAYMENTS);
+    invalidateKey(QUERY_KEYS.QR_PAYMENTS);
   };
 
   const refreshPaymentViews = (payment) => {
@@ -363,7 +363,7 @@ export const createLiveEventProcessor = ({
 
     invalidateKey(QUERY_KEYS.MY_ORDERS);
     invalidateKey(["adminOrders"]);
-    invalidateKey(QUERY_KEYS.QR_PENDING_PAYMENTS);
+    invalidateKey(QUERY_KEYS.QR_PAYMENTS);
   };
 
   const refreshReturnViews = (returnRequest) => {

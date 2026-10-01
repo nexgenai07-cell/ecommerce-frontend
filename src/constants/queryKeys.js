@@ -70,7 +70,14 @@ export const QUERY_KEYS = {
   ORDER_DETAIL: (orderNumber) => ["order", orderNumber],
   ORDER_TRACKING: (orderNumber) => ["order-tracking", orderNumber],
   ADMIN_ORDERS: ["admin-orders"],
-  QR_PENDING_PAYMENTS: ["qr-pending-payments"],
+  // Every admin QR payments query (the filterable list and the stat
+  // cards) is cached under this shared prefix, so one invalidation
+  // refreshes all of them together.
+  QR_PAYMENTS: ["qr-payments"],
+  // The store's payment QR image exactly as customers see it at checkout.
+  QR_STORE_IMAGE: ["qr-store-image"],
+  // The same image as managed from the admin QR payments page.
+  ADMIN_QR_IMAGE: ["admin-qr-image"],
 
   // ----------------------------
   // RETURNS

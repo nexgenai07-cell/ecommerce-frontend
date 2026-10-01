@@ -3,14 +3,14 @@
 // ============================================================
 // Shown in place of the Stripe Payment Element whenever the customer
 // checked out with payment_method: "qr". Checkout's response for a QR
-// order includes "qr_image_url" (a static, config-driven image — one
-// per gateway, not generated per transaction), "payment_reference"
-// (the order_number, to write in the bank transfer note), and
-// "qr_upload_deadline" (an ISO timestamp — 10 minutes from the moment
-// the order was placed).
+// order includes "payment_reference" (the order_number, to write in the
+// bank transfer note) and "qr_upload_deadline" (an ISO timestamp — 10
+// minutes from the moment the order was placed). The QR image itself is
+// the store's own image, uploaded by the admin, and is loaded by this
+// panel directly — one image per store, not generated per transaction.
 //
 // Flow on this screen:
-// 1. Customer sees the QR code + payment reference + a live countdown,
+// 1. Customer sees the store's QR code + payment reference + a live countdown,
 //    pays outside the system (Easypaisa/JazzCash app).
 // 2. Customer uploads a screenshot as proof (QrProofUploadForm) any
 //    time before the countdown reaches zero. Uploading is what clears
@@ -28,7 +28,7 @@
 //    "pending_payment" until an admin manually approves the proof.
 
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   HiCheckCircle,
   HiOutlineClock,
@@ -36,11 +36,11 @@ import {
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
 import QrProofUploadForm from "../payments/QrProofUploadForm"; // Form component for uploading payment screenshot
-import { extendQrUploadTime } from "../../api/payments.api";
+import { extendQrUploadTime, getStoreQrImage } from "../../api/payments.api";
+import { QUERY_KEYS } from "../../constants/queryKeys";
 import { ROUTES } from "../../constants/routes";
 import { showError, showSuccess } from "../ui/Toast";
 import Button from "../ui/Button";
-import fallbackQrImage from "../../assets/easypaisa-jazzcash-qr.png"; // TEMPORARY: local placeholder QR image until backend provides qr_image_url
 
 // Turns an ISO deadline timestamp into whole seconds remaining until
 // it, clamped to 0 rather than going negative once it's passed.
@@ -74,7 +74,6 @@ const formatCountdown = (totalSeconds) => {
 // was already used — but showing it at all is misleading).
 const QrPaymentPanel = ({
   orderNumber,
-  qrImageUrl,
   paymentReference,
   qrUploadDeadline,
   qrExtensionUsed = false,
@@ -144,8 +143,27 @@ const QrPaymentPanel = ({
     },
   });
 
-  // TEMPORARY: use the backend-provided QR image if it exists, otherwise fall back to the local placeholder image
-  const displayedQrImage = qrImageUrl || fallbackQrImage;
+  // =============================================
+  // STORE QR IMAGE — GET /api/v1/payments/qr/image/
+  // =============================================
+  // The image the store admin uploaded. Until the admin uploads a real
+  // one the backend returns a sample image flagged is_default, which must
+  // never be offered as a payment target, so it is treated the same as
+  // the image being unavailable.
+  const {
+    data: qrImageResponse,
+    isLoading: isQrImageLoading,
+    isError: isQrImageError,
+    refetch: refetchQrImage,
+  } = useQuery({
+    queryKey: QUERY_KEYS.QR_STORE_IMAGE,
+    queryFn: ({ signal }) => getStoreQrImage(signal),
+    staleTime: 1000 * 60,
+  });
+
+  const storeQrImage = qrImageResponse?.data;
+  const isQrImageAvailable =
+    !!storeQrImage?.qr_image_url && !storeQrImage.is_default;
 
   // =============================================
   // STATE 1 — proof already submitted this session
@@ -247,12 +265,38 @@ const QrPaymentPanel = ({
           </div>
         )}
 
-        <div className="w-48 h-48 rounded-xl border border-gray-200 p-3 bg-white">
-          <img
-            src={displayedQrImage} // Uses backend QR image when available, otherwise the temporary local placeholder
-            alt="QR code for Easypaisa/JazzCash payment" // Accessible description of the image for screen readers
-            className="w-full h-full object-contain" // Keeps QR code proportions intact within its container
-          />
+        <div className="w-48 h-48 rounded-xl border border-gray-200 p-3 bg-white flex items-center justify-center">
+          {isQrImageLoading && (
+            <div className="w-full h-full rounded-lg bg-gray-100 animate-pulse" />
+          )}
+
+          {!isQrImageLoading && isQrImageAvailable && (
+            <img
+              src={storeQrImage.qr_image_url}
+              alt="QR code for Easypaisa/JazzCash payment"
+              className="w-full h-full object-contain"
+            />
+          )}
+
+          {!isQrImageLoading && !isQrImageAvailable && (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <HiOutlineExclamationTriangle className="w-7 h-7 text-warning" />
+              <p className="text-xs text-gray-500">
+                {isQrImageError
+                  ? "Couldn't load the payment QR."
+                  : "Payment QR is not available right now, please contact the store."}
+              </p>
+              {isQrImageError && (
+                <button
+                  type="button"
+                  onClick={() => refetchQrImage()}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-2">
           <span className="text-xs text-gray-400">

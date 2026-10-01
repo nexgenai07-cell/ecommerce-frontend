@@ -362,7 +362,6 @@ const OrderDetail = () => {
               order.payment?.method === PAYMENT_METHOD.QR && (
                 <QrPaymentPanel
                   orderNumber={order.order_number}
-                  qrImageUrl={order.payment?.qr_image_url}
                   paymentReference={order.order_number}
                   qrUploadDeadline={order.payment?.qr_upload_deadline}
                   qrExtensionUsed={order.payment?.qr_extension_used}

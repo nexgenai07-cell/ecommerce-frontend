@@ -1824,3 +1824,885 @@ body::-webkit-scrollbar {
     animation: none; /* No fly-in */
   }
 }
+
+/* ============================================================ */
+/* HOME HERO — scroll driven category showcase                   */
+/* ============================================================ */
+/* Styles for components/home/HeroSection.jsx and its children   */
+/* (HeroCategoryScene, HeroDissolveCanvas). Colours are exposed  */
+/* as "R G B" triples so both CSS and the WebGL backdrop painter */
+/* (utils/createHeroBackdrop.js) can read the very same values.  */
+/* ============================================================ */
+
+:root {
+  --hero-base: 5 8 12; /* Deep background tone behind every backdrop */
+  --hero-tint-0: 16 185 129; /* Accent of the first category (brand emerald) */
+  --hero-tint-1: 99 102 241; /* Accent of the second category (indigo) */
+  --hero-tint-2: 245 158 11; /* Accent of the third category (amber) */
+}
+
+/* Per-scene accent colour, picked by the scene's position in the hero */
+.hero-tint-0 {
+  --scene-tint: var(--hero-tint-0); /* Emerald accent */
+}
+.hero-tint-1 {
+  --scene-tint: var(--hero-tint-1); /* Indigo accent */
+}
+.hero-tint-2 {
+  --scene-tint: var(--hero-tint-2); /* Amber accent */
+}
+
+/* ---------- Scroll track and pinned stage ---------- */
+
+.hero-track {
+  position: relative; /* Anchor for the pinned stage */
+}
+
+/* Track heights: one pinned screen plus 170 screen heights of scroll per transition */
+.hero-track-1 {
+  height: calc(100vh - 4rem); /* Single category: no extra scrolling */
+  height: calc(100svh - 4rem); /* Same, measured against the small viewport */
+}
+.hero-track-2 {
+  height: calc((100vh - 4rem) + 170vh); /* Two categories: one transition */
+  height: calc((100svh - 4rem) + 170svh); /* Same, measured against the small viewport */
+}
+.hero-track-3 {
+  height: calc((100vh - 4rem) + 340vh); /* Three categories: two transitions */
+  height: calc((100svh - 4rem) + 340svh); /* Same, measured against the small viewport */
+}
+
+.hero-sticky {
+  position: sticky; /* Pins the stage while the track scrolls past */
+  top: 4rem; /* Sits directly below the 4rem navbar */
+  height: calc(100vh - 4rem); /* Fills the rest of the screen */
+  height: calc(100svh - 4rem); /* Same, measured against the small viewport */
+  padding-block: 0.75rem; /* Breathing room above and below the stage */
+}
+
+.hero-stage {
+  position: relative; /* Anchor for every absolutely placed layer */
+  height: 100%; /* Fill the pinned wrapper */
+  overflow: hidden; /* Clip flying elements at the rounded edge */
+  isolation: isolate; /* Keep the stage's layers in their own stacking context */
+  border-radius: 1.5rem; /* Soft rounded card, matching the rest of the page */
+  border: 1px solid rgb(255 255 255 / 0.08); /* Hairline edge on the dark card */
+  background-color: rgb(var(--hero-base)); /* Dark base shown until WebGL paints */
+  background-image: radial-gradient(
+    ellipse at center,
+    rgb(var(--hero-tint-0) / 0.28),
+    transparent 70%
+  ); /* Soft glow used as the no-WebGL fallback */
+  box-shadow: 0 25px 60px -20px rgb(0 0 0 / 0.45); /* Lifts the stage off the page */
+}
+
+/* Gentle pulse while categories are still loading */
+.hero-stage-loading {
+  animation: heroStagePulse 1.6s ease-in-out infinite; /* Breathing placeholder */
+}
+
+@keyframes heroStagePulse {
+  0%,
+  100% {
+    opacity: 1; /* Fully visible */
+  }
+  50% {
+    opacity: 0.8; /* Slightly dimmed */
+  }
+}
+
+.hero-canvas {
+  position: absolute; /* Fills the stage behind everything */
+  inset: 0; /* Cover all four edges */
+  z-index: 0; /* Lowest layer of the stage */
+  display: block; /* Removes the inline gap under canvases */
+  width: 100%; /* Full stage width */
+  height: 100%; /* Full stage height */
+}
+
+.hero-shade {
+  position: absolute; /* Fills the stage above the backdrop */
+  inset: 0; /* Cover all four edges */
+  z-index: 1; /* Above the canvas, below the scenes */
+  pointer-events: none; /* Never blocks clicks */
+  background:
+    radial-gradient(ellipse at center, rgb(0 0 0 / 0.3) 0%, transparent 65%),
+    linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0.25),
+      transparent 25%,
+      transparent 75%,
+      rgb(0 0 0 / 0.35)
+    ); /* Darkens the middle and the top/bottom for legibility */
+}
+
+/* ---------- Scenes (one per category) ---------- */
+
+.hero-scene {
+  position: absolute; /* Every scene fills the whole stage */
+  inset: 0; /* Cover all four edges */
+  z-index: 2; /* Above the shade */
+  visibility: hidden; /* Hidden scenes are not rendered or focusable */
+  transition: visibility 0s linear 0.9s; /* Stay rendered until the scatter-out has finished */
+}
+
+.hero-scene.is-active {
+  visibility: visible; /* Active scene is shown immediately */
+  transition-delay: 0s; /* No delay when switching on */
+}
+
+/* ---------- Fly-in / scatter-out behaviour ---------- */
+
+.hero-fly {
+  --fx: 0vw; /* Horizontal start offset */
+  --fy: 0vh; /* Vertical start offset */
+  --fr: 0deg; /* Start rotation */
+  --fs: 1; /* Start scale */
+  --fd: 0ms; /* Entrance delay */
+  opacity: 0; /* Invisible while scattered */
+  transform: translate3d(var(--fx), var(--fy), 0) rotate(var(--fr))
+    scale(var(--fs)); /* Scattered far away from its place */
+  transition:
+    transform 0.6s cubic-bezier(0.4, 0, 1, 1),
+    opacity 0.4s ease; /* Quick scatter-out when the scene turns off */
+  will-change: transform, opacity; /* Hint the browser to use the GPU */
+}
+
+.hero-scene.is-active .hero-fly {
+  opacity: 1; /* Fully visible once settled */
+  transform: none; /* Rests exactly in its own place */
+  transition:
+    transform 1.25s cubic-bezier(0.16, 1, 0.3, 1) var(--fd),
+    opacity 0.6s ease var(--fd); /* Smooth fly-in with a per-element delay */
+}
+
+/* Twelve different directions, rotations, sizes and delays */
+.hero-fly-1 {
+  --fx: -65vw;
+  --fy: -55vh;
+  --fr: -170deg;
+  --fs: 0.25;
+  --fd: 0ms;
+}
+.hero-fly-2 {
+  --fx: 70vw;
+  --fy: -35vh;
+  --fr: 150deg;
+  --fs: 0.4;
+  --fd: 50ms;
+}
+.hero-fly-3 {
+  --fx: -30vw;
+  --fy: 70vh;
+  --fr: 210deg;
+  --fs: 0.3;
+  --fd: 100ms;
+}
+.hero-fly-4 {
+  --fx: 55vw;
+  --fy: 60vh;
+  --fr: -190deg;
+  --fs: 0.5;
+  --fd: 150ms;
+}
+.hero-fly-5 {
+  --fx: -75vw;
+  --fy: 15vh;
+  --fr: 120deg;
+  --fs: 0.35;
+  --fd: 200ms;
+}
+.hero-fly-6 {
+  --fx: 40vw;
+  --fy: -70vh;
+  --fr: -140deg;
+  --fs: 0.45;
+  --fd: 250ms;
+}
+.hero-fly-7 {
+  --fx: -45vw;
+  --fy: -65vh;
+  --fr: 180deg;
+  --fs: 0.3;
+  --fd: 300ms;
+}
+.hero-fly-8 {
+  --fx: 80vw;
+  --fy: 10vh;
+  --fr: -160deg;
+  --fs: 0.4;
+  --fd: 350ms;
+}
+.hero-fly-9 {
+  --fx: -20vw;
+  --fy: -75vh;
+  --fr: 230deg;
+  --fs: 0.55;
+  --fd: 400ms;
+}
+.hero-fly-10 {
+  --fx: 25vw;
+  --fy: 75vh;
+  --fr: -210deg;
+  --fs: 0.35;
+  --fd: 450ms;
+}
+.hero-fly-11 {
+  --fx: -80vw;
+  --fy: -20vh;
+  --fr: -120deg;
+  --fs: 0.45;
+  --fd: 500ms;
+}
+.hero-fly-12 {
+  --fx: 60vw;
+  --fy: -60vh;
+  --fr: 170deg;
+  --fs: 0.3;
+  --fd: 550ms;
+}
+
+/* ---------- Centre block: label, title, description, button ---------- */
+
+.hero-center {
+  position: absolute; /* Centred over the whole scene */
+  inset: 0; /* Cover all four edges */
+  z-index: 2; /* Above the product tiles */
+  display: flex; /* Stack the children vertically */
+  flex-direction: column; /* Vertical stack */
+  align-items: center; /* Centre horizontally */
+  justify-content: center; /* Centre vertically */
+  gap: clamp(0.6rem, 1.8vh, 1.4rem); /* Spacing that shrinks on short screens */
+  padding-inline: 2.25rem; /* Keeps text clear of the stage edges and the progress dots */
+  text-align: center; /* Centre multi-line text */
+  pointer-events: none; /* Lets clicks pass through to the product tiles */
+}
+
+.hero-kicker {
+  margin: 0; /* No default paragraph margin */
+  padding: 0.35rem 0.9rem; /* Pill padding */
+  border: 1px solid rgb(255 255 255 / 0.25); /* Hairline pill outline */
+  border-radius: 999px; /* Fully rounded pill */
+  background: rgb(255 255 255 / 0.06); /* Faint glass fill */
+  color: rgb(226 232 240 / 0.85); /* Soft silver text */
+  font-size: 0.7rem; /* Small label size */
+  font-weight: 600; /* Semi bold */
+  letter-spacing: 0.28em; /* Wide, elegant tracking */
+  text-transform: uppercase; /* Capital letters */
+}
+
+.hero-title {
+  display: flex; /* Lay the words out in a row */
+  flex-wrap: wrap; /* Allow words to wrap onto new lines */
+  justify-content: center; /* Centre each line */
+  column-gap: 0.28em; /* Space between words */
+  margin: 0; /* No default heading margin */
+  max-width: 100%; /* Never wider than the stage */
+  font-weight: 900; /* Heaviest weight for impact */
+  letter-spacing: -0.035em; /* Tight display tracking */
+  line-height: 0.95; /* Compact lines */
+}
+
+/* Title sizes scale with the screen width and height, by word length */
+.hero-title-lg {
+  font-size: clamp(2.75rem, min(12vw, 17vh), 9rem); /* Short names */
+}
+.hero-title-md {
+  font-size: clamp(2.4rem, min(9.5vw, 14vh), 7rem); /* Medium names */
+}
+.hero-title-sm {
+  font-size: clamp(2rem, min(7.5vw, 11vh), 5.5rem); /* Long names */
+}
+
+.hero-word {
+  display: inline-flex; /* Letters side by side */
+  white-space: nowrap; /* A word never breaks in the middle */
+}
+
+.hero-letter {
+  display: inline-block; /* Needed so each letter can be transformed */
+  padding-bottom: 0.06em; /* Keeps descenders from being clipped */
+}
+
+.hero-letter-face {
+  display: inline-block; /* Gradient is applied per letter */
+  background-image: linear-gradient(
+    180deg,
+    rgb(255 255 255) 0%,
+    rgb(226 232 240) 45%,
+    rgb(148 163 184) 100%
+  ); /* Bright silver fading to steel */
+  -webkit-background-clip: text; /* Clip the gradient to the glyph shape (WebKit) */
+  background-clip: text; /* Clip the gradient to the glyph shape */
+  color: transparent; /* Let the gradient show through */
+  -webkit-text-fill-color: transparent; /* Same, for WebKit browsers */
+  filter: drop-shadow(0 0 0.35em rgb(var(--scene-tint, var(--hero-tint-0)) / 0.3))
+    drop-shadow(0 0.06em 0.12em rgb(0 0 0 / 0.5)); /* Tinted glow plus soft depth shadow */
+}
+
+.hero-subtitle {
+  display: -webkit-box; /* Needed for multi-line clamping */
+  margin: 0; /* No default paragraph margin */
+  max-width: 34rem; /* Comfortable reading width */
+  overflow: hidden; /* Hide text beyond two lines */
+  -webkit-box-orient: vertical; /* Stack the lines vertically */
+  -webkit-line-clamp: 2; /* Show at most two lines */
+  line-clamp: 2; /* Standard property for the same limit */
+  color: rgb(226 232 240 / 0.8); /* Soft silver text */
+  font-size: clamp(0.85rem, 1.5vw, 1.05rem); /* Responsive body size */
+  line-height: 1.5; /* Readable line height */
+}
+
+.hero-cta {
+  display: inline-flex; /* Text and arrow side by side */
+  align-items: center; /* Vertically centre the content */
+  gap: 0.5rem; /* Space between text and arrow */
+  padding: 0.8rem 1.6rem; /* Comfortable tap target */
+  border-radius: 999px; /* Fully rounded button */
+  background: rgb(var(--scene-tint, var(--hero-tint-0))); /* Category accent colour */
+  color: rgb(255 255 255); /* White label */
+  font-size: 0.95rem; /* Label size */
+  font-weight: 700; /* Bold label */
+  pointer-events: auto; /* The button stays clickable inside the click-through block */
+  box-shadow: 0 10px 30px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.7); /* Coloured glow */
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease; /* Smooth hover feedback */
+}
+
+.hero-cta:hover,
+.hero-cta:focus-visible {
+  transform: translateY(-2px) scale(1.04); /* Lift on hover and focus */
+  box-shadow: 0 16px 38px -8px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.9); /* Stronger glow */
+}
+
+/* ---------- Product sprinkles ---------- */
+
+.hero-sparks {
+  position: absolute; /* Fills the scene */
+  inset: 0; /* Cover all four edges */
+  z-index: 1; /* Below the centre block */
+  margin: 0; /* Reset list margin */
+  padding: 0; /* Reset list padding */
+  list-style: none; /* Remove list bullets */
+  --spark-scale: 1; /* Global tile size multiplier, reduced on very short screens */
+}
+
+.hero-spark {
+  position: absolute; /* Placed by its slot class */
+  width: calc(var(--spark-size) * var(--spark-scale)); /* Size comes from the slot class */
+  height: calc(var(--spark-size) * var(--spark-scale)); /* Square tile */
+  margin-left: calc(var(--spark-size) * var(--spark-scale) / -2); /* Centre the tile on its left coordinate */
+  margin-top: calc(var(--spark-size) * var(--spark-scale) / -2); /* Centre the tile on its top coordinate */
+}
+
+.hero-spark-link {
+  position: relative; /* Anchor for the hover label */
+  display: block; /* Fill the tile */
+  width: 100%; /* Full tile width */
+  height: 100%; /* Full tile height */
+  border-radius: 1.1rem; /* Rounded tile corners */
+  outline: none; /* Focus ring is drawn on the inner tile instead */
+}
+
+.hero-spark-float {
+  display: block; /* Fill the link */
+  width: 100%; /* Full tile width */
+  height: 100%; /* Full tile height */
+  overflow: hidden; /* Clip the picture to the rounded corners */
+  border-radius: inherit; /* Same rounding as the link */
+  border: 1px solid rgb(255 255 255 / 0.35); /* Glassy edge */
+  background: rgb(255 255 255 / 0.08); /* Faint glass fill behind the picture */
+  box-shadow:
+    0 10px 30px rgb(0 0 0 / 0.45),
+    0 0 28px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.35); /* Depth shadow plus accent glow */
+  animation: heroSparkFloat var(--float-dur, 6s) ease-in-out var(--float-delay, 0s) infinite; /* Endless gentle drift */
+  transition: box-shadow 0.3s ease, border-color 0.3s ease; /* Smooth hover glow */
+}
+
+.hero-spark-link:hover .hero-spark-float,
+.hero-spark-link:focus-visible .hero-spark-float {
+  border-color: rgb(255 255 255 / 0.9); /* Bright rim on hover and focus */
+  box-shadow:
+    0 14px 38px rgb(0 0 0 / 0.5),
+    0 0 44px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.75); /* Stronger accent glow */
+}
+
+.hero-spark-image {
+  display: block; /* Removes the inline gap under images */
+  width: 100%; /* Fill the tile */
+  height: 100%; /* Fill the tile */
+  object-fit: cover; /* Crop to the square without distortion */
+  transition: transform 0.5s ease; /* Smooth zoom */
+}
+
+.hero-spark-link:hover .hero-spark-image,
+.hero-spark-link:focus-visible .hero-spark-image {
+  transform: scale(1.12); /* Gentle zoom on hover and focus */
+}
+
+@keyframes heroSparkFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg); /* Resting position */
+  }
+  50% {
+    transform: translate3d(0, -0.6rem, 0) rotate(1.8deg); /* Drifted up and slightly tilted */
+  }
+}
+
+/* Name and price label shown beside the tile on devices with a real hover */
+.hero-spark-label {
+  position: absolute; /* Floats next to the tile */
+  left: 50%; /* Centre horizontally on the tile */
+  top: calc(100% + 0.6rem); /* Upper tiles show the label below them */
+  z-index: 5; /* Above neighbouring tiles */
+  display: none; /* Hidden on touch devices */
+  flex-direction: column; /* Name above price */
+  align-items: center; /* Centre both lines */
+  gap: 0.1rem; /* Tight spacing */
+  padding: 0.4rem 0.75rem; /* Label padding */
+  border: 1px solid rgb(255 255 255 / 0.18); /* Hairline outline */
+  border-radius: 0.75rem; /* Rounded label */
+  background: rgb(8 12 16 / 0.85); /* Dark glass */
+  backdrop-filter: blur(8px); /* Frosted effect */
+  white-space: nowrap; /* Keep each line on one row */
+  opacity: 0; /* Invisible until hover */
+  translate: -50% 4px; /* Centred, slightly lowered before it appears */
+  transition:
+    opacity 0.25s ease,
+    translate 0.25s ease; /* Smooth reveal */
+  pointer-events: none; /* Never steals the click from the tile */
+}
+
+.hero-spark-name {
+  max-width: 12rem; /* Long names are truncated */
+  overflow: hidden; /* Hide the overflow */
+  text-overflow: ellipsis; /* Show an ellipsis for long names */
+  color: rgb(255 255 255); /* White product name */
+  font-size: 0.75rem; /* Compact size */
+  font-weight: 600; /* Semi bold */
+}
+
+.hero-spark-price {
+  color: rgb(226 232 240); /* Silver price */
+  font-size: 0.7rem; /* Compact size */
+  font-weight: 700; /* Bold */
+}
+
+/* Lower tiles (slots 7 to 12) show their label above the tile instead */
+.hero-slot-7 .hero-spark-label,
+.hero-slot-8 .hero-spark-label,
+.hero-slot-9 .hero-spark-label,
+.hero-slot-10 .hero-spark-label,
+.hero-slot-11 .hero-spark-label,
+.hero-slot-12 .hero-spark-label {
+  top: auto; /* Cancel the default below-tile placement */
+  bottom: calc(100% + 0.6rem); /* Place the label above the tile */
+}
+
+@media (hover: hover) {
+  .hero-spark-label {
+    display: flex; /* Labels exist only where hovering is possible */
+  }
+  .hero-spark-link:hover .hero-spark-label,
+  .hero-spark-link:focus-visible .hero-spark-label {
+    opacity: 1; /* Reveal on hover and focus */
+    translate: -50% 0; /* Slide into its final position */
+  }
+}
+
+/* ---------- Slots: position, size and float timing of each tile ---------- */
+/* Mobile layout: tiles sit in a top band and a bottom band, leaving the middle for the title */
+
+.hero-slot-1 {
+  left: 16%;
+  top: 9%;
+  --spark-size: 3.9rem;
+  --float-dur: 6.2s;
+  --float-delay: -0.8s;
+}
+.hero-slot-2 {
+  left: 50%;
+  top: 7%;
+  --spark-size: 4.6rem;
+  --float-dur: 7.1s;
+  --float-delay: -2.4s;
+}
+.hero-slot-3 {
+  left: 84%;
+  top: 10%;
+  --spark-size: 3.3rem;
+  --float-dur: 5.6s;
+  --float-delay: -1.5s;
+}
+.hero-slot-4 {
+  left: 10%;
+  top: 23%;
+  --spark-size: 3.9rem;
+  --float-dur: 6.8s;
+  --float-delay: -3.1s;
+}
+.hero-slot-5 {
+  left: 90%;
+  top: 26%;
+  --spark-size: 4.6rem;
+  --float-dur: 5.9s;
+  --float-delay: -0.4s;
+}
+.hero-slot-6 {
+  left: 50%;
+  top: 22%;
+  --spark-size: 3.3rem;
+  --float-dur: 7.4s;
+  --float-delay: -4.2s;
+}
+.hero-slot-7 {
+  left: 12%;
+  top: 76%;
+  --spark-size: 4.6rem;
+  --float-dur: 6.4s;
+  --float-delay: -1.9s;
+}
+.hero-slot-8 {
+  left: 40%;
+  top: 85%;
+  --spark-size: 3.9rem;
+  --float-dur: 5.7s;
+  --float-delay: -2.9s;
+}
+.hero-slot-9 {
+  left: 68%;
+  top: 77%;
+  --spark-size: 3.3rem;
+  --float-dur: 7s;
+  --float-delay: -0.2s;
+}
+.hero-slot-10 {
+  left: 88%;
+  top: 73%;
+  --spark-size: 4.6rem;
+  --float-dur: 6.1s;
+  --float-delay: -3.6s;
+}
+.hero-slot-11 {
+  left: 22%;
+  top: 94%;
+  --spark-size: 3.9rem;
+  --float-dur: 6.9s;
+  --float-delay: -1.1s;
+}
+.hero-slot-12 {
+  left: 62%;
+  top: 92%;
+  --spark-size: 3.3rem;
+  --float-dur: 5.8s;
+  --float-delay: -4.8s;
+}
+
+/* Desktop layout: tiles form a loose ring around the title */
+@media (min-width: 768px) {
+  .hero-slot-1 {
+    left: 8%;
+    top: 22%;
+    --spark-size: clamp(4.2rem, 6.4vw, 6rem);
+  }
+  .hero-slot-2 {
+    left: 22%;
+    top: 12%;
+    --spark-size: clamp(5rem, 8vw, 7.5rem);
+  }
+  .hero-slot-3 {
+    left: 40%;
+    top: 9%;
+    --spark-size: clamp(3.4rem, 5vw, 4.6rem);
+  }
+  .hero-slot-4 {
+    left: 60%;
+    top: 11%;
+    --spark-size: clamp(4.2rem, 6.4vw, 6rem);
+  }
+  .hero-slot-5 {
+    left: 78%;
+    top: 13%;
+    --spark-size: clamp(5rem, 8vw, 7.5rem);
+  }
+  .hero-slot-6 {
+    left: 92%;
+    top: 26%;
+    --spark-size: clamp(3.4rem, 5vw, 4.6rem);
+  }
+  .hero-slot-7 {
+    left: 90%;
+    top: 58%;
+    --spark-size: clamp(5rem, 8vw, 7.5rem);
+  }
+  .hero-slot-8 {
+    left: 78%;
+    top: 84%;
+    --spark-size: clamp(4.2rem, 6.4vw, 6rem);
+  }
+  .hero-slot-9 {
+    left: 58%;
+    top: 90%;
+    --spark-size: clamp(3.4rem, 5vw, 4.6rem);
+  }
+  .hero-slot-10 {
+    left: 36%;
+    top: 88%;
+    --spark-size: clamp(5rem, 8vw, 7.5rem);
+  }
+  .hero-slot-11 {
+    left: 18%;
+    top: 82%;
+    --spark-size: clamp(4.2rem, 6.4vw, 6rem);
+  }
+  .hero-slot-12 {
+    left: 7%;
+    top: 56%;
+    --spark-size: clamp(3.4rem, 5vw, 4.6rem);
+  }
+}
+
+/* ---------- Twinkling dust ---------- */
+
+.hero-dust {
+  position: absolute; /* Fills the scene */
+  inset: 0; /* Cover all four edges */
+  z-index: 0; /* Behind tiles and title */
+  pointer-events: none; /* Never blocks clicks */
+  opacity: 0; /* Hidden while the scene is inactive */
+  transition: opacity 0.8s ease; /* Smooth fade in and out */
+}
+
+.hero-scene.is-active .hero-dust {
+  opacity: 1; /* Visible while the scene is active */
+}
+
+.hero-dust-dot {
+  position: absolute; /* Placed by its nth-child rule */
+  width: 4px; /* Default dot size */
+  height: 4px; /* Round dot */
+  border-radius: 999px; /* Perfect circle */
+  background: rgb(255 255 255 / 0.9); /* Bright white core */
+  box-shadow: 0 0 10px 2px rgb(var(--scene-tint, var(--hero-tint-0)) / 0.6); /* Tinted halo */
+  animation: heroDustTwinkle 3.4s ease-in-out infinite; /* Endless twinkle */
+}
+
+.hero-dust-dot:nth-child(3n) {
+  width: 3px; /* Smaller dots */
+  height: 3px;
+  animation-duration: 2.6s; /* Faster twinkle */
+}
+.hero-dust-dot:nth-child(4n) {
+  width: 6px; /* Larger dots */
+  height: 6px;
+  animation-duration: 4.2s; /* Slower twinkle */
+}
+.hero-dust-dot:nth-child(odd) {
+  animation-delay: -1.2s; /* Offset phase for odd dots */
+}
+.hero-dust-dot:nth-child(3n + 2) {
+  animation-delay: -2.1s; /* Offset phase for every third dot */
+}
+
+.hero-dust-dot:nth-child(1) {
+  left: 6%;
+  top: 35%;
+}
+.hero-dust-dot:nth-child(2) {
+  left: 14%;
+  top: 62%;
+}
+.hero-dust-dot:nth-child(3) {
+  left: 24%;
+  top: 28%;
+}
+.hero-dust-dot:nth-child(4) {
+  left: 30%;
+  top: 72%;
+}
+.hero-dust-dot:nth-child(5) {
+  left: 38%;
+  top: 18%;
+}
+.hero-dust-dot:nth-child(6) {
+  left: 44%;
+  top: 82%;
+}
+.hero-dust-dot:nth-child(7) {
+  left: 52%;
+  top: 12%;
+}
+.hero-dust-dot:nth-child(8) {
+  left: 58%;
+  top: 66%;
+}
+.hero-dust-dot:nth-child(9) {
+  left: 66%;
+  top: 30%;
+}
+.hero-dust-dot:nth-child(10) {
+  left: 72%;
+  top: 78%;
+}
+.hero-dust-dot:nth-child(11) {
+  left: 78%;
+  top: 48%;
+}
+.hero-dust-dot:nth-child(12) {
+  left: 84%;
+  top: 20%;
+}
+.hero-dust-dot:nth-child(13) {
+  left: 90%;
+  top: 70%;
+}
+.hero-dust-dot:nth-child(14) {
+  left: 94%;
+  top: 40%;
+}
+.hero-dust-dot:nth-child(15) {
+  left: 20%;
+  top: 90%;
+}
+.hero-dust-dot:nth-child(16) {
+  left: 70%;
+  top: 10%;
+}
+
+@keyframes heroDustTwinkle {
+  0%,
+  100% {
+    opacity: 0.15; /* Almost out */
+    transform: scale(0.6); /* Shrunk */
+  }
+  50% {
+    opacity: 1; /* Fully lit */
+    transform: scale(1.25); /* Slightly enlarged */
+  }
+}
+
+/* ---------- Progress dots and scroll hint ---------- */
+
+.hero-progress {
+  position: absolute; /* Pinned to the right edge of the stage */
+  right: 0.9rem; /* Distance from the edge */
+  top: 50%; /* Vertically centred */
+  z-index: 3; /* Above the scenes */
+  display: flex; /* Stack the dots vertically */
+  flex-direction: column; /* Vertical stack */
+  gap: 0.6rem; /* Space between dots */
+  margin: 0; /* Reset list margin */
+  padding: 0; /* Reset list padding */
+  list-style: none; /* Remove list bullets */
+  translate: 0 -50%; /* Centre on the vertical midpoint */
+}
+
+.hero-progress-dot {
+  width: 0.4rem; /* Dot width */
+  height: 0.4rem; /* Dot height */
+  border-radius: 999px; /* Round dot */
+  background: rgb(255 255 255 / 0.35); /* Dim when inactive */
+  transition:
+    height 0.4s ease,
+    background-color 0.4s ease; /* Smooth growth into a bar */
+}
+
+.hero-progress-dot.is-current {
+  height: 1.6rem; /* Stretches into a bar for the current category */
+  background: rgb(255 255 255); /* Bright when current */
+}
+
+.hero-scroll-hint {
+  position: absolute; /* Pinned to the bottom of the stage */
+  left: 50%; /* Horizontally centred */
+  bottom: 1rem; /* Distance from the bottom edge */
+  z-index: 3; /* Above the scenes */
+  display: flex; /* Label above line */
+  flex-direction: column; /* Vertical stack */
+  align-items: center; /* Centre both parts */
+  gap: 0.4rem; /* Space between label and line */
+  translate: -50% 0; /* Centre on the horizontal midpoint */
+  transition: opacity 0.4s ease; /* Smooth hide and show */
+}
+
+.hero-scroll-hint.is-hidden {
+  opacity: 0; /* Hidden after the first category */
+}
+
+.hero-scroll-hint-text {
+  color: rgb(226 232 240 / 0.7); /* Soft silver label */
+  font-size: 0.65rem; /* Tiny label */
+  font-weight: 600; /* Semi bold */
+  letter-spacing: 0.3em; /* Wide tracking */
+  text-transform: uppercase; /* Capital letters */
+}
+
+.hero-scroll-hint-line {
+  width: 1px; /* Hairline */
+  height: 1.75rem; /* Line length */
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.8), transparent); /* Fading downwards */
+  transform-origin: top; /* Grows from the top */
+  animation: heroScrollLine 1.8s ease-in-out infinite; /* Endless pulse */
+}
+
+@keyframes heroScrollLine {
+  0% {
+    transform: scaleY(0); /* Collapsed */
+    opacity: 0; /* Invisible */
+  }
+  50% {
+    transform: scaleY(1); /* Fully extended */
+    opacity: 1; /* Visible */
+  }
+  100% {
+    transform: scaleY(1); /* Stays extended */
+    opacity: 0; /* Fades away */
+  }
+}
+
+/* The scroll hint is unnecessary on phones, where scrolling is the natural gesture */
+@media (max-width: 767px) {
+  .hero-scroll-hint {
+    display: none; /* Keeps the bottom tiles uncluttered */
+  }
+}
+
+@media (min-width: 768px) {
+  .hero-progress {
+    right: 1.5rem; /* More breathing room on larger screens */
+  }
+}
+
+/* Very short screens (phones held sideways): smaller tiles and a leaner centre block */
+@media (max-height: 520px) {
+  .hero-sparks {
+    --spark-scale: 0.62; /* Shrinks every tile so they do not crowd the title */
+  }
+  .hero-subtitle,
+  .hero-scroll-hint {
+    display: none; /* Frees vertical space for the title and button */
+  }
+  .hero-center {
+    gap: 0.45rem; /* Tighter spacing between the centre elements */
+  }
+  .hero-cta {
+    padding: 0.6rem 1.3rem; /* Slimmer button */
+  }
+}
+
+/* Visitors who prefer reduced motion see content fade in place, with no flying or floating */
+@media (prefers-reduced-motion: reduce) {
+  .hero-fly,
+  .hero-scene.is-active .hero-fly {
+    transform: none; /* No flying */
+    transition: opacity 0.3s ease; /* Simple fade only */
+  }
+  .hero-spark-float,
+  .hero-dust-dot,
+  .hero-scroll-hint-line,
+  .hero-stage-loading {
+    animation: none; /* No endless motion */
+  }
+}

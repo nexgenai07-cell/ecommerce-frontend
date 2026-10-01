@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineCheck } from "react-icons/ai";
 // Import the QUERY_KEYS constants object that stores standardized React Query cache key names
 import { QUERY_KEYS } from "../../constants/queryKeys";
-// Import the NEW dedicated bulk "mark all as read" API function
+// Import the dedicated bulk "mark all as read" API function
 import { markAllNotificationsRead } from "../../api/notifications.api";
 // Import the success and error toast notification helper functions for user feedback
 import { showSuccess, showError } from "../ui/Toast";
@@ -25,7 +25,7 @@ export const NOTIFICATION_TABS = [
 
 // Define the NotificationFilters functional component, receiving the
 // currently active tab, a callback to change tabs, the confirmed
-// total unread count, and (NEW, API 75) a per-type unread breakdown.
+// total unread count, and a per-type unread breakdown.
 const NotificationFilters = ({
   activeTab,
   onTabChange,
@@ -38,10 +38,9 @@ const NotificationFilters = ({
   // =============================================
   // MARK ALL READ MUTATION
   // =============================================
-  // Now calls the single, dedicated bulk endpoint instead of firing
-  // one PUT request per unread notification. No longer needs to know
-  // the full list of unread notifications — the backend handles all
-  // of the logged-in user's unread notifications in one request.
+  // Calls the single, dedicated bulk endpoint rather than firing one PUT
+  // request per unread notification — the backend handles all of the
+  // logged-in user's own unread notifications in one request.
   const markAllMutation = useMutation({
     mutationFn: () => markAllNotificationsRead(),
     // Callback executed once the bulk mark-as-read call succeeds
@@ -72,13 +71,12 @@ const NotificationFilters = ({
           // Determine whether this specific tab is the currently active one
           const isActive = activeTab === tab.id;
 
-          // UPDATED (16 Sep 2026, Filtering Fix pass, API 75): the
-          // backend now also provides `unread_by_type` — a real
+          // The backend provides `unread_by_type` — a real
           // { order, promotion, system } breakdown — alongside the
-          // single total `unread_count`. So the "Unread" tab still
-          // uses the confirmed total, while Orders/Promotions/System
-          // each show their own real count from that breakdown. "All"
-          // intentionally shows no count, same as before.
+          // single total `unread_count`. The "Unread" tab uses the
+          // confirmed total, while Orders/Promotions/System each show
+          // their own real count from that breakdown. "All"
+          // intentionally shows no count.
           const count =
             tab.id === "unread"
               ? unreadCount

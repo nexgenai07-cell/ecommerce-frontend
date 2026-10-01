@@ -6,12 +6,14 @@ import { sendNotification } from "../../api/notifications.api";
 import { getCustomers } from "../../api/customers.api";
 import extractListData from "../../utils/extractListData";
 import useDebounce from "../../hooks/useDebounce";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import Input from "../../components/ui/Input";
 import Textarea from "../../components/ui/Textarea";
 import Select from "../../components/ui/Select";
 import Toggle from "../../components/ui/Toggle";
 import Button from "../../components/ui/Button";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 import Avatar from "../../components/ui/Avatar";
 import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already
@@ -29,10 +31,14 @@ const TYPE_OPTIONS = [
   { value: "promotion", label: "Promotion" },
 ];
 
-// CONFIRMED — these 4 are the complete, accepted list of `sent_via`
-// values for API 78 (Send Notification): "web", "email", "whatsapp",
-// and "in_app". Sending any other value is rejected with a 400 that
-// lists these exact accepted values.
+// The complete, accepted list of `sent_via` values for Send
+// Notification: "web", "email", "whatsapp" and "in_app". Sending any
+// other value is rejected with a 400 that lists the accepted values.
+//
+// "email" really delivers the notification by email, in addition to the
+// in-app notification, and an email cannot be recalled — so the admin is
+// asked to confirm before it is sent. "whatsapp" is only recorded, not
+// delivered over WhatsApp.
 const CHANNEL_OPTIONS = [
   { value: "in_app", label: "In-App" },
   { value: "web", label: "Web" },
@@ -48,6 +54,8 @@ const NotificationTemplates = () => {
   const [message, setMessage] = useState("");
   const [type, setType] = useState("system");
   const [sentVia, setSentVia] = useState("in_app");
+  // Whether the "this email cannot be recalled" confirmation is showing.
+  const [isEmailConfirmOpen, setIsEmailConfirmOpen] = useState(false);
   // Same "onTouched"-style pattern as the rest of the project: a field's
   // error only shows once the admin has left it (blur) or tried to send.
   const [touched, setTouched] = useState({ title: false, message: false });
@@ -67,18 +75,27 @@ const NotificationTemplates = () => {
       sendNotification({
         user: isBroadcast ? null : selectedCustomer?.user,
         // "user" is the account id this notification targets — null
-        // means broadcast to everyone, per API 74's documented behavior
+        // means broadcast to every customer account
         title,
         message,
         type,
         sent_via: sentVia,
       }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // email_recipients is only present when the channel was "email": the
+      // number of recipients the email was queued for.
+      const emailRecipients = response?.data?.email_recipients;
+      const emailNote =
+        typeof emailRecipients === "number"
+          ? ` Email queued for ${emailRecipients} ${emailRecipients === 1 ? "customer" : "customers"}.`
+          : "";
+
       showSuccess(
-        isBroadcast
-          ? "Notification broadcast to all users."
-          : `Notification sent to ${selectedCustomer?.name}.`,
+        (isBroadcast
+          ? "Notification broadcast to all customers."
+          : `Notification sent to ${selectedCustomer?.name}.`) + emailNote,
       );
+      setIsEmailConfirmOpen(false);
       setTitle("");
       setMessage("");
       setSelectedCustomer(null);
@@ -90,13 +107,13 @@ const NotificationTemplates = () => {
       setSubmitAttempted(false);
       setTouched({ title: false, message: false });
     },
-    onError: (error) =>
-      // API 78's error responses are returned under an "error" key
-      // (e.g. { "error": "title and message are required." }), not
-      // "message" — reading the wrong key here would always fall
-      // back to the generic text below instead of showing the real,
-      // specific reason the request was rejected.
-      showError(error?.response?.data?.error || "Failed to send notification."),
+    onError: (error) => {
+      setIsEmailConfirmOpen(false);
+      // The backend returns the specific reason under an "error" key
+      // (e.g. { "error": "title and message are required." }); the
+      // helper surfaces it instead of a generic message.
+      showError(getApiErrorMessage(error, "Failed to send notification."));
+    },
   });
 
   const canSend =
@@ -132,10 +149,16 @@ const NotificationTemplates = () => {
     if (titleError || messageError || customerError) return;
 
     // A selected customer with no linked user id would otherwise send
-    // `user: null` to API 78, which the backend treats as a broadcast —
+    // `user: null`, which the backend treats as a broadcast —
     // silently notifying everyone instead of the intended person.
     if (!isBroadcast && !selectedCustomer?.user) {
       showError("This customer has no linked user account.");
+      return;
+    }
+
+    // An email cannot be recalled, so it is confirmed first.
+    if (sentVia === "email") {
+      setIsEmailConfirmOpen(true);
       return;
     }
 
@@ -267,6 +290,13 @@ const NotificationTemplates = () => {
           >
             {isBroadcast ? "Broadcast to Everyone" : "Send Notification"}
           </Button>
+
+          {sentVia === "whatsapp" && (
+            <p className="text-xs text-gray-500">
+              WhatsApp is recorded only — the message is not delivered over
+              WhatsApp.
+            </p>
+          )}
         </div>
 
         {/* Live preview — purely visual, reflects what's already typed */}
@@ -287,6 +317,21 @@ const NotificationTemplates = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isEmailConfirmOpen}
+        onClose={() => setIsEmailConfirmOpen(false)}
+        onConfirm={() => sendMutation.mutate()}
+        title="Send this email?"
+        message={
+          isBroadcast
+            ? "This will email every active customer that has an email address. An email cannot be recalled once it is sent."
+            : `This will email ${selectedCustomer?.name || "the selected customer"}. An email cannot be recalled once it is sent.`
+        }
+        confirmLabel="Send Email"
+        variant="primary"
+        isLoading={sendMutation.isPending}
+      />
     </div>
   );
 };

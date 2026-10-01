@@ -11,7 +11,7 @@ import axiosInstance from "../lib/axiosInstance";
 // attaches the base URL, auth token, and handles 401 errors globally.
 
 // ----------------------------
-// API  - Get the admin's own store profile information
+// Get the admin's own store profile information
 // ----------------------------
 // Fetches the current store's profile details — things like the
 // store's name, logo, contact phone number, and address. Used to
@@ -21,7 +21,7 @@ export const getMyStore = (signal) => {
 };
 
 // ----------------------------
-// API  - Update the admin's store information
+// Update the admin's store information
 // ----------------------------
 // Allows the admin to update their store's profile details. The
 // "data" payload is expected to include:
@@ -44,44 +44,58 @@ export const updateMyStore = (data, signal) => {
 };
 
 // ----------------------------
-// API — Get the platform's audit logs (Admin only)
+// Get the platform's audit logs (Admin only)
 // ----------------------------
-// CONFIRMED WORKING SERVER-SIDE (as of the backend's latest fix):
+// Returns a read-only log of important actions taken across the
+// platform, by the AI assistant and by manual admin actions alike.
+//
+// Supported query params:
 //   - page   -> standard pagination
 //   - entity -> filters by entity type
 //   - user   -> filters by the acting user
 //   - search -> matches against the log's action/description text
-//   - action -> filters by "create"/"update"/"delete", combines
+//   - action -> filters by "create"/"update"/"delete" (a prefix match
+//               on the log's action, so "create" also matches
+//               "create_product" and "create_notification"); combines
 //               correctly with entity/user/search/page
-// Response shape confirmed as the standard paginated object
-// ({ count, next, previous, results }).
+//
+// Response shape is the standard paginated object
+// ({ count, next, previous, results }). Each result carries:
+//   - user_name     -> the acting admin's readable name ("System" when
+//                      the action had no user)
+//   - customer_name -> the current name of the customer the action was
+//                      about (resolved for order, payment, return and
+//                      complaint entries, and for a notification sent to
+//                      one specific customer); null for entities with no
+//                      customer or when the record no longer exists
+//   - ip_address    -> the real client IP for actions performed through
+//                      the admin panel; null for older entries and for
+//                      actions performed through the AI assistant
 export const getAuditLogs = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/audit-logs/", { signal, params });
 };
 
 // ----------------------------
-// API 82.1 - Get every distinct audit log entity value (Admin only)
+// Get every distinct audit log entity value (Admin only)
 // ----------------------------
-// NEW (16 Sep 2026, Filtering Fix pass). The Audit Logs page's Entity
-// filter dropdown used to be populated from whatever entity values
-// happened to already be on the current page of results — so it never
-// showed every real option, only whatever had scrolled past. This
-// returns every distinct entity value that has EVER actually been
-// logged, system-wide.
+// Powers the Audit Logs page's Entity filter dropdown. Returns every
+// distinct entity value that has ever actually been logged,
+// system-wide, rather than only the values on the current page of
+// results.
 // Response: a plain array of strings, alphabetically sorted, e.g.
-//   ["category", "discount", "inventory", "order", "product", ...]
+//   ["category", "discount", "inventory", "notification", "order", ...]
 export const getAuditLogEntities = (signal) => {
   return axiosInstance.get("/api/v1/admin/audit-logs/entities/", { signal });
 };
 
 // ----------------------------
-// API 82.2 - Get every distinct audit log user (Admin only)
+// Get every distinct audit log user (Admin only)
 // ----------------------------
-// NEW (16 Sep 2026, Filtering Fix pass). Same reasoning as API 82.1
-// above, but for the User/Admin filter dropdown. Returns every
-// admin/staff user who has actually performed at least one logged
-// action — NOT every admin account in the system — so the dropdown
-// only ever offers options that are guaranteed to return results.
+// Same idea as getAuditLogEntities(), but for the User/Admin filter
+// dropdown. Returns every admin/staff user who has actually performed
+// at least one logged action — NOT every admin account in the system —
+// so the dropdown only ever offers options that are guaranteed to
+// return results.
 // Response: [ { id, name, email }, ... ]
 export const getAuditLogUsers = (signal) => {
   return axiosInstance.get("/api/v1/admin/audit-logs/users/", { signal });

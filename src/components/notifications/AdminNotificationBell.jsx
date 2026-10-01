@@ -67,11 +67,11 @@ const AdminNotificationBell = () => {
   // =============================================
   // NOTIFICATIONS PREVIEW — GET /api/v1/notifications/
   // =============================================
-  // Same endpoint (API 75) the customer side uses. It returns whatever
-  // is visible to the CURRENTLY LOGGED-IN user, so when an admin is
-  // logged in this naturally returns notifications addressed to that
-  // admin account plus any broadcast notifications — no separate
-  // "admin notifications" endpoint exists or is needed.
+  // Same endpoint the customer side uses. It returns whatever is visible
+  // to the CURRENTLY LOGGED-IN user, so for an admin it returns only the
+  // notifications addressed to that admin account (new orders, returns,
+  // complaints, QR payment proofs and so on). Broadcasts and anything an
+  // admin sends to customers never appear here.
   //
   // staleTime/refetchInterval match NotificationHistory.jsx's own
   // cadence, so the bell badge feels just as "live" as the customer
@@ -88,7 +88,7 @@ const AdminNotificationBell = () => {
 
   // unreadCount — the CONFIRMED total unread count across the admin's
   // entire notification history, provided directly by the backend
-  // (API 75's top-level unread_count field). Not derived from the
+  // (the response's top-level unread_count field). Not derived from the
   // preview page above, which would silently under-count the moment
   // there are more than PREVIEW_PAGE_SIZE unread notifications.
   const unreadCount = notificationsResponse?.data?.unread_count ?? 0;
@@ -260,6 +260,12 @@ const AdminNotificationBell = () => {
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed line-clamp-2">
                       {notification.message}
                     </p>
+                    {/* The customer this notification is about, when there is one */}
+                    {notification.customer_name && (
+                      <p className="text-[11px] font-medium text-gray-600 mt-0.5 line-clamp-1">
+                        Customer: {notification.customer_name}
+                      </p>
+                    )}
                     <p
                       className={cn(
                         "text-[11px] mt-1",

@@ -5,24 +5,33 @@ import { AiOutlineQrcode, AiOutlineWarning } from "react-icons/ai";
 import { HiOutlineCheck, HiOutlineXMark } from "react-icons/hi2";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import {
-  getQrPendingPayments,
+  getQrPayments,
   approveQrPayment,
   rejectQrPayment,
   bulkApproveQrPayments,
   bulkRejectQrPayments,
 } from "../../api/payments.api";
+import { exportReport } from "../../api/analytics.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
+import { PAYMENT_STATUS } from "../../constants/statusTypes";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
 import chunkArray from "../../utils/chunkArray";
+import downloadExportCsv from "../../utils/downloadExportCsv";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import useDebounce from "../../hooks/useDebounce";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import PageHeader from "../../components/shared/PageHeader";
 import DataTable from "../../components/ui/DataTable";
+import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 import Modal from "../../components/ui/Modal";
 import Textarea from "../../components/ui/Textarea";
+import QrPaymentStatsCards from "../../components/admin-qr-payments/QrPaymentStatsCards";
+import QrPaymentFilters from "../../components/admin-qr-payments/QrPaymentFilters";
+import QrImageManagerModal from "../../components/admin-qr-payments/QrImageManagerModal";
 
 // Row-level "⋮" actions menu for the QR Payments table.
 //
@@ -159,21 +168,42 @@ const RowActionsMenu = ({ orderNumber, onApprove, onReject }) => {
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
+// Newest submission first, matching the backend's own default.
+const DEFAULT_ORDERING = "-submitted_at";
+
+// The backend caps an order's payment proof at this many rejections; the
+// third one cancels the order permanently.
+const MAX_REJECTIONS = 3;
+
+// Only a payment that is waiting for review can be approved or rejected.
+const isUnderReview = (payment) =>
+  payment.status === PAYMENT_STATUS.UNDER_REVIEW;
+
 const QrPaymentQueue = () => {
   const queryClient = useQueryClient();
+
+  // =============================================
+  // FILTER STATE — every value is sent to the backend; nothing is filtered
+  // in the browser.
+  // =============================================
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [duplicate, setDuplicate] = useState("");
+  const [sortBy, setSortBy] = useState(DEFAULT_ORDERING);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  // pageSize — how many pending QR payments the backend returns per
-  // page, controlled by the "Rows per page" dropdown in the table
-  // footer. Sent to the backend as `page_size` alongside `page`.
+  const [isExporting, setIsExporting] = useState(false);
+  const [isQrImageModalOpen, setIsQrImageModalOpen] = useState(false);
 
-  // Resets back to page 1 whenever the admin picks a different rows-per-
-  // page value, since staying on a deep page of a now-differently-sized
-  // result set could land on an empty page.
-  const handlePageSizeChange = (size) => {
-    setPageSize(size);
-    setCurrentPage(1);
-  };
+  // Waits 400ms after the admin stops typing before a request is sent, so
+  // typing does not fire a new request on every keystroke.
+  const debouncedSearch = useDebounce(search, 400);
+  const debouncedMinAmount = useDebounce(minAmount, 400);
+  const debouncedMaxAmount = useDebounce(maxAmount, 400);
 
   // Which order the Approve confirmation is currently open for.
   const [approveTarget, setApproveTarget] = useState(null);
@@ -190,7 +220,7 @@ const QrPaymentQueue = () => {
   const [selectedOrderNumbers, setSelectedOrderNumbers] = useState([]);
 
   // Changing this key remounts the table, which clears DataTable's internal
-  // checkbox selection once a bulk action has finished.
+  // checkbox selection.
   const [tableResetKey, setTableResetKey] = useState(0);
 
   // Bulk approve confirmation state.
@@ -198,28 +228,152 @@ const QrPaymentQueue = () => {
   const [isBulkApproving, setIsBulkApproving] = useState(false);
 
   // Bulk reject state — a single shared reason is required and applied
-  // to every selected order, since rejectQrPayment() has no way to
-  // accept a different reason per order in one request.
+  // to every selected order, since the bulk endpoint accepts one reason
+  // for the whole batch.
   const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
   const [bulkRejectReason, setBulkRejectReason] = useState("");
   const [bulkRejectReasonError, setBulkRejectReasonError] = useState("");
   const [isBulkRejecting, setIsBulkRejecting] = useState(false);
 
+  // Clears the checked rows. The selection always belongs to the rows
+  // currently on screen, so it is cleared whenever the visible rows are
+  // about to change (a filter, a page change) or after a bulk action.
+  const resetSelection = () => {
+    setSelectedOrderNumbers([]);
+    setTableResetKey((key) => key + 1);
+  };
+
+  // Wraps a filter setter so that changing the filter also returns to page
+  // 1 and clears the selection. Staying on, say, page 3 of a smaller result
+  // set would otherwise show an empty page.
+  const withPageReset = (setter) => (value) => {
+    setter(value);
+    setCurrentPage(1);
+    resetSelection();
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    resetSelection();
+  };
+
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    resetSelection();
+  };
+
+  const hasActiveFilters =
+    !!status ||
+    !!search ||
+    !!startDate ||
+    !!endDate ||
+    !!minAmount ||
+    !!maxAmount ||
+    !!duplicate ||
+    sortBy !== DEFAULT_ORDERING;
+
+  const handleClearFilters = () => {
+    setStatus("");
+    setSearch("");
+    setStartDate("");
+    setEndDate("");
+    setMinAmount("");
+    setMaxAmount("");
+    setDuplicate("");
+    setSortBy(DEFAULT_ORDERING);
+    setCurrentPage(1);
+    resetSelection();
+  };
+
+  // The parameters shared by the list request and the CSV export, so the
+  // downloaded file always matches what is filtered on screen.
+  const filterParams = {
+    status: status || undefined,
+    search: debouncedSearch || undefined,
+    start_date: startDate || undefined,
+    end_date: endDate || undefined,
+    min_amount: debouncedMinAmount || undefined,
+    max_amount: debouncedMaxAmount || undefined,
+    duplicate: duplicate || undefined,
+    ordering: sortBy,
+  };
+
   // =============================================
-  // GET QR PENDING PAYMENTS — GET /api/v1/admin/payments/qr/pending/
+  // GET QR PAYMENTS — GET /api/v1/admin/payments/qr/
   // =============================================
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [...QUERY_KEYS.QR_PENDING_PAYMENTS, currentPage, pageSize],
+  const {
+    data,
+    isLoading,
+    isError,
+    error: listError,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.QR_PAYMENTS,
+      "list",
+      { ...filterParams, page: currentPage, pageSize },
+    ],
     queryFn: ({ signal }) =>
-      getQrPendingPayments({ page: currentPage, page_size: pageSize }, signal),
+      getQrPayments(
+        { ...filterParams, page: currentPage, page_size: pageSize },
+        signal,
+      ),
   });
 
   const payments = extractListData(data);
   const totalCount = data?.data?.count ?? payments.length;
   const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
 
-  const invalidateQueue = () =>
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.QR_PENDING_PAYMENTS });
+  // When the backend rejects the filters (for example an invalid amount or
+  // date range), its own explanation is shown instead of only the generic
+  // table error.
+  useEffect(() => {
+    if (listError?.response?.status === 400) {
+      showError(getApiErrorMessage(listError));
+    }
+  }, [listError]);
+
+  // Bulk actions only apply to payments that are waiting for review, so a
+  // checked row in any other status is left out of the batch.
+  const reviewableOrderNumbers = new Set(
+    payments.filter(isUnderReview).map((payment) => payment.order_number),
+  );
+  const selectedReviewable = selectedOrderNumbers.filter((orderNumber) =>
+    reviewableOrderNumbers.has(orderNumber),
+  );
+  const skippedSelectionCount =
+    selectedOrderNumbers.length - selectedReviewable.length;
+
+  // Refreshes the list and the stat cards, which share one cache prefix.
+  const refreshPayments = () =>
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.QR_PAYMENTS });
+
+  // =============================================
+  // EXPORT — GET /api/v1/analytics/export/?type=qr_payments
+  // =============================================
+  // downloadExportCsv() downloads the returned blob as a real .csv file and,
+  // on a validation failure, reads the JSON error back out of the blob so
+  // the real reason reaches the toast. Every filter applied to the table is
+  // forwarded, so the file matches what the admin is looking at.
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const { success, message } = await downloadExportCsv(
+        exportReport,
+        { type: "qr_payments", ...filterParams },
+        `qr-payments-export-${new Date().toISOString().slice(0, 10)}`,
+      );
+
+      if (success) {
+        showSuccess("Export downloaded.");
+      } else {
+        showError(message || "Failed to export QR payments. Please try again.");
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // =============================================
   // APPROVE — PUT /api/v1/admin/payments/qr/{order_number}/approve/
@@ -228,19 +382,15 @@ const QrPaymentQueue = () => {
     mutationFn: (orderNumber) => approveQrPayment(orderNumber),
     onSuccess: () => {
       showSuccess(`${approveTarget} approved — order confirmed.`);
-      invalidateQueue();
+      refreshPayments();
       setApproveTarget(null);
     },
     onError: (error) => {
       // The backend returns validation/state errors under an "error"
       // key (e.g. "Order status is <status>, not pending_payment or
-      // on_hold."); "message" is checked as a fallback so the specific
-      // text stays visible instead of the generic message.
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to approve this payment.",
-      );
+      // on_hold."); the shared helper keeps that specific text visible
+      // instead of the generic message.
+      showError(getApiErrorMessage(error, "Failed to approve this payment."));
     },
   });
 
@@ -270,16 +420,12 @@ const QrPaymentQueue = () => {
                 : "."),
         );
       }
-      invalidateQueue();
+      refreshPayments();
       setRejectTarget(null);
       setRejectReason("");
     },
     onError: (error) => {
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to reject this payment.",
-      );
+      showError(getApiErrorMessage(error, "Failed to reject this payment."));
     },
   });
 
@@ -295,17 +441,16 @@ const QrPaymentQueue = () => {
   };
 
   // =============================================
-  // BULK APPROVE — API 74.5. All selected orders are sent in one
-  // request per batch of up to 100 order numbers instead of one
-  // request per order. Each order is still evaluated independently on
-  // the backend, so one that can no longer be approved (for example
-  // another admin already handled it) is reported in that batch's
-  // "failed" array without stopping the rest of the batch.
+  // BULK APPROVE — all selected orders are sent in one request per batch of
+  // up to 100 order numbers instead of one request per order. Each order is
+  // still evaluated independently on the backend, so one that can no longer
+  // be approved (for example another admin already handled it) is reported
+  // in that batch's "failed" array without stopping the rest of the batch.
   // =============================================
   const handleConfirmBulkApprove = async () => {
     setIsBulkApproving(true);
     try {
-      const batches = chunkArray(selectedOrderNumbers, 100);
+      const batches = chunkArray(selectedReviewable, 100);
       let approvedCount = 0;
       const failures = [];
 
@@ -330,14 +475,12 @@ const QrPaymentQueue = () => {
             `${failures.length} payment${failures.length === 1 ? "" : "s"} could not be approved.`,
         );
       }
-      invalidateQueue();
-      setSelectedOrderNumbers([]);
-      setTableResetKey((key) => key + 1);
+      refreshPayments();
+      resetSelection();
       setConfirmBulkApproveOpen(false);
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
-          "Failed to approve the selected payments.",
+        getApiErrorMessage(error, "Failed to approve the selected payments."),
       );
     } finally {
       setIsBulkApproving(false);
@@ -345,12 +488,11 @@ const QrPaymentQueue = () => {
   };
 
   // =============================================
-  // BULK REJECT — API 74.6. One shared, required reason is applied to
-  // every selected order, sent in one request per batch of up to 100
-  // order numbers instead of one request per order. Each order is
-  // still evaluated independently on the backend, so one that can no
-  // longer be rejected is reported in that batch's "failed" array
-  // without stopping the rest of the batch.
+  // BULK REJECT — one shared, required reason is applied to every selected
+  // order, sent in one request per batch of up to 100 order numbers instead
+  // of one request per order. Each order is still evaluated independently
+  // on the backend, so one that can no longer be rejected is reported in
+  // that batch's "failed" array without stopping the rest of the batch.
   // =============================================
   const handleConfirmBulkReject = async () => {
     if (!bulkRejectReason.trim()) {
@@ -361,7 +503,7 @@ const QrPaymentQueue = () => {
     }
     setIsBulkRejecting(true);
     try {
-      const batches = chunkArray(selectedOrderNumbers, 100);
+      const batches = chunkArray(selectedReviewable, 100);
       let rejectedCount = 0;
       let cancelledCount = 0;
       const failures = [];
@@ -398,15 +540,13 @@ const QrPaymentQueue = () => {
             `${failures.length} payment${failures.length === 1 ? "" : "s"} could not be rejected.`,
         );
       }
-      invalidateQueue();
-      setSelectedOrderNumbers([]);
-      setTableResetKey((key) => key + 1);
+      refreshPayments();
+      resetSelection();
       setBulkRejectOpen(false);
       setBulkRejectReason("");
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
-          "Failed to reject the selected payments.",
+        getApiErrorMessage(error, "Failed to reject the selected payments."),
       );
     } finally {
       setIsBulkRejecting(false);
@@ -428,19 +568,18 @@ const QrPaymentQueue = () => {
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-light text-danger text-xs font-semibold"
             >
               <AiOutlineWarning className="w-3.5 h-3.5" />
-              Duplicate
+              Possible duplicate
             </span>
           )}
-          {/* "Rejected n/3 before" badge on any row that has been rejected
+          {/* "Rejected n/3" badge on any row whose proof has been rejected
               at least once (rejection_count above zero) — tells the admin
-              this is a retry review and how close the order is to the
-              3-attempt cap. */}
+              how close the order is to the 3-attempt cap. */}
           {row.rejection_count > 0 && (
             <span
-              title="This order's payment proof was rejected before — this is a retry review."
+              title="How many times this order's payment proof has been rejected."
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-light text-warning text-xs font-semibold"
             >
-              Rejected {row.rejection_count}/3 before
+              Rejected {row.rejection_count}/{MAX_REJECTIONS}
             </span>
           )}
         </div>
@@ -472,22 +611,25 @@ const QrPaymentQueue = () => {
     {
       key: "screenshot",
       label: "Proof",
-      render: (row) => (
-        <a
-          href={row.screenshot_url}
-          target="_blank"
-          rel="noreferrer"
-          className="block w-8 h-8 rounded-lg overflow-hidden border border-gray-200 hover:border-primary transition-colors"
-          // The 32px thumbnail fits within the DataTable's fixed row height. It
-          // is a clickable link that opens the full screenshot in a new tab.
-        >
-          <img
-            src={row.screenshot_url}
-            alt={`Payment screenshot for ${row.order_number}`}
-            className="w-full h-full object-cover"
-          />
-        </a>
-      ),
+      render: (row) =>
+        row.screenshot_url ? (
+          <a
+            href={row.screenshot_url}
+            target="_blank"
+            rel="noreferrer"
+            className="block w-8 h-8 rounded-lg overflow-hidden border border-gray-200 hover:border-primary transition-colors"
+            // The 32px thumbnail fits within the DataTable's fixed row height. It
+            // is a clickable link that opens the full screenshot in a new tab.
+          >
+            <img
+              src={row.screenshot_url}
+              alt={`Payment screenshot for ${row.order_number}`}
+              className="w-full h-full object-cover"
+            />
+          </a>
+        ) : (
+          <span className="text-[10px] sm:text-[11px] text-gray-400">—</span>
+        ),
     },
     {
       key: "transaction_id",
@@ -508,41 +650,107 @@ const QrPaymentQueue = () => {
       ),
     },
     {
+      key: "status",
+      label: "Status",
+      render: (row) => (
+        // The rejection reason sits beside the badge on a single line: the
+        // table's rows have a fixed height with no room for a second line.
+        <div className="flex items-center gap-1.5">
+          <Badge label={row.status} status={row.status} size="sm" rounded />
+          {row.status === PAYMENT_STATUS.REJECTED && row.reject_reason && (
+            <span
+              title={row.reject_reason}
+              className="max-w-32 truncate text-[9px] text-gray-400"
+            >
+              {row.reject_reason}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: "actions",
       label: "Actions",
-      render: (row) => (
-        // Three-dot menu holding the Approve and Reject actions behind a
-        // single trigger, so the Actions column does not force the table
-        // wider than the viewport on small screens.
-        <RowActionsMenu
-          orderNumber={row.order_number}
-          onApprove={() => setApproveTarget(row.order_number)}
-          onReject={() => {
-            setRejectTarget(row.order_number);
-            setRejectReason("");
-            setRejectReasonError("");
-          }}
-        />
-      ),
+      render: (row) =>
+        // Approve and Reject only make sense while the proof is waiting for
+        // review; every other status has nothing left to decide.
+        isUnderReview(row) ? (
+          // Three-dot menu holding the Approve and Reject actions behind a
+          // single trigger, so the Actions column does not force the table
+          // wider than the viewport on small screens.
+          <RowActionsMenu
+            orderNumber={row.order_number}
+            onApprove={() => setApproveTarget(row.order_number)}
+            onReject={() => {
+              setRejectTarget(row.order_number);
+              setRejectReason("");
+              setRejectReasonError("");
+            }}
+          />
+        ) : (
+          <span className="text-[10px] sm:text-[11px] text-gray-400">—</span>
+        ),
     },
   ];
 
   return (
-    // Tight vertical spacing between the header, toolbar and table, matching
-    // the rhythm used on the other admin list pages.
+    // Tight vertical spacing between the header, cards, toolbar and table,
+    // matching the rhythm used on the other admin list pages.
     <div className="flex flex-col gap-2 flex-1 min-h-0">
-      <PageHeader icon={<AiOutlineQrcode />} title="QR Payment Verification" />
+      <PageHeader
+        icon={<AiOutlineQrcode />}
+        title="QR Payments"
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<AiOutlineQrcode className="w-4 h-4" />}
+            onClick={() => setIsQrImageModalOpen(true)}
+          >
+            Payment QR
+          </Button>
+        }
+      />
 
-      {/* Bulk action bar — appears only while one or more rows are
-          checked. Approve applies immediately per order; Reject opens
-          a modal for the one shared reason sent to every selected
-          order (the backend requires a reason and has no per-order
-          bulk variant). */}
-      {selectedOrderNumbers.length > 0 && (
+      {/* Stat cards follow the selected date range only; the status,
+          search and amount filters never change them. */}
+      <QrPaymentStatsCards startDate={startDate} endDate={endDate} />
+
+      <QrPaymentFilters
+        search={search}
+        onSearchChange={withPageReset(setSearch)}
+        status={status}
+        onStatusChange={withPageReset(setStatus)}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={withPageReset(setStartDate)}
+        onEndDateChange={withPageReset(setEndDate)}
+        minAmount={minAmount}
+        maxAmount={maxAmount}
+        onMinAmountChange={withPageReset(setMinAmount)}
+        onMaxAmountChange={withPageReset(setMaxAmount)}
+        duplicate={duplicate}
+        onDuplicateChange={withPageReset(setDuplicate)}
+        sortBy={sortBy}
+        onSortChange={withPageReset(setSortBy)}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
+
+      {/* Bulk action bar — appears only while at least one checked row is
+          waiting for review. Approve asks for confirmation; Reject opens
+          a modal for the one shared reason sent to every selected order
+          (the bulk endpoint requires a reason and has no per-order
+          variant). Checked rows in any other status are skipped. */}
+      {selectedReviewable.length > 0 && (
         <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <span className="text-xs font-medium text-gray-700">
-            {selectedOrderNumbers.length} payment
-            {selectedOrderNumbers.length === 1 ? "" : "s"} selected
+            {selectedReviewable.length} payment
+            {selectedReviewable.length === 1 ? "" : "s"} selected
+            {skippedSelectionCount > 0 &&
+              ` (${skippedSelectionCount} not pending review will be skipped)`}
           </span>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full sm:w-auto">
             <Button
@@ -585,12 +793,18 @@ const QrPaymentQueue = () => {
           currentPage={currentPage}
           totalPages={totalPages}
           totalResults={totalCount}
-          onPageChange={setCurrentPage}
+          onPageChange={handlePageChange}
           pageSize={pageSize}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           onPageSizeChange={handlePageSizeChange}
         />
       </div>
+
+      {/* Payment QR image — view, upload, replace and remove */}
+      <QrImageManagerModal
+        isOpen={isQrImageModalOpen}
+        onClose={() => setIsQrImageModalOpen(false)}
+      />
 
       {/* Approve confirmation */}
       <ConfirmModal
@@ -656,14 +870,14 @@ const QrPaymentQueue = () => {
       </Modal>
 
       {/* Bulk approve confirmation — separate modal instance from the
-          single-row one above, driven by selectedOrderNumbers instead
-          of approveTarget, so the two flows never interfere. */}
+          single-row one above, driven by the selection instead of
+          approveTarget, so the two flows never interfere. */}
       <ConfirmModal
         isOpen={confirmBulkApproveOpen}
         onClose={() => setConfirmBulkApproveOpen(false)}
         onConfirm={handleConfirmBulkApprove}
         title="Approve these payments?"
-        message={`${selectedOrderNumbers.length} order${selectedOrderNumbers.length === 1 ? "" : "s"} will be marked as paid and confirmed. This releases each order's reserved stock into a final sale.`}
+        message={`${selectedReviewable.length} order${selectedReviewable.length === 1 ? "" : "s"} will be marked as paid and confirmed. This releases each order's reserved stock into a final sale.`}
         confirmLabel="Approve"
         variant="primary"
         isLoading={isBulkApproving}
@@ -681,8 +895,8 @@ const QrPaymentQueue = () => {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-gray-500">
             <span className="font-semibold text-gray-800">
-              {selectedOrderNumbers.length} order
-              {selectedOrderNumbers.length === 1 ? "" : "s"}
+              {selectedReviewable.length} order
+              {selectedReviewable.length === 1 ? "" : "s"}
             </span>{" "}
             will stay pending payment so each customer can upload a new proof.
             Any order on its 3rd rejection will be cancelled permanently and its

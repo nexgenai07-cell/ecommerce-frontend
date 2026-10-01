@@ -72,18 +72,15 @@ const getNotifConfig = (type) => {
 //   - Same day as now      -> "Today, 3:45 PM"
 //   - One calendar day ago -> "Yesterday, 3:45 PM"
 //   - Anything older       -> "Jun 15, 3:45 PM"
-// This mirrors the TODAY / YESTERDAY / OLDER grouping already used on the
+// This mirrors the TODAY / YESTERDAY / OLDER grouping used on the
 // notifications page, so the label on each card always agrees with the
-// date-group heading it appears under.
-// FIX (Sep 2026): same calendar-day bug as NotificationHistory.jsx's
-// getDateGroup — this used to divide the raw millisecond gap by 24h
-// (Math.floor((now - date) / 86400000)), which measures elapsed HOURS,
-// not elapsed CALENDAR DAYS. A notification created at 11:30 PM
-// yesterday was still labeled "Today, 11:30 PM" the next morning as
-// long as fewer than 24 real hours had passed — even though the page's
-// own date-group heading right above it already said "YESTERDAY",
-// contradicting itself. Now compares calendar dates (midnight-anchored)
-// instead, so this label always agrees with the day it's grouped under.
+// date-group heading it appears under. It compares calendar dates
+// (midnight-anchored) rather than elapsed hours, so a notification from
+// 11:30 PM yesterday is labeled "Yesterday" the next morning even though
+// fewer than 24 hours have passed.
+//
+// The timestamp from the backend is already in Pakistan local time, so it
+// is formatted as received with no manual timezone adjustment.
 const getRelativeTime = (timestamp) => {
   // Without a timestamp there is nothing meaningful to display.
   if (!timestamp) return "";
@@ -127,14 +124,17 @@ const getRelativeTime = (timestamp) => {
 };
 
 // Define the NotificationItem functional component, receiving a single "notification" object as a prop
-// NEW: an optional "resolveLink" function prop, defaulting to the
-// customer-side resolveNotificationLink imported above. This lets the
-// SAME component be reused as-is on the admin notification page/bell —
-// the admin simply passes resolveAdminNotificationLink instead, which
-// maps the identical reference_type/reference_id fields to the admin
-// management routes rather than the customer account routes. No
-// existing caller that omits this prop is affected — behavior is
-// 100% unchanged for the customer Notification History page.
+// An optional "resolveLink" function prop defaults to the customer-side
+// resolveNotificationLink imported above. This lets the SAME component be
+// reused on the admin notification page — the admin passes
+// resolveAdminNotificationLink instead, which maps the identical
+// reference_type/reference_id fields to the admin management routes
+// rather than the customer account routes.
+//
+// For admin accounts the backend also supplies "customer_name", the
+// customer the notification is about. It is shown after the message when
+// present and is always null for customer accounts, so the customer page
+// renders nothing extra.
 const NotificationItem = ({
   notification,
   resolveLink = resolveNotificationLink,
@@ -147,7 +147,7 @@ const NotificationItem = ({
 
   // =============================================
   // MARK AS READ MUTATION
-  // API 61 — PUT /api/v1/notifications/{id}/read/
+  // PUT /api/v1/notifications/{id}/read/
   // =============================================
   // Set up a mutation for marking this specific notification as read via the API
   const markReadMutation = useMutation({
@@ -233,6 +233,12 @@ const NotificationItem = ({
         <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">
           {notification.message}
         </p>
+        {/* The customer this notification is about — only present for admin accounts */}
+        {notification.customer_name && (
+          <p className="text-xs font-medium text-gray-600 mt-1">
+            Customer: {notification.customer_name}
+          </p>
+        )}
         {/* Timestamp text showing the relative time since the notification was created; colored gray if read, primary-colored and bold if unread (to stand out) */}
         <p
           className={cn(
@@ -244,9 +250,8 @@ const NotificationItem = ({
         </p>
       </div>
 
-      {/* Unread dot — brand emerald gradient (was previously an off-brand
-          bg-blue-500, which didn't exist anywhere in the design system)
-          Only rendered for unread notifications, signaling "new" status     */}
+      {/* Unread dot — brand emerald gradient. Only rendered for unread
+          notifications, signaling "new" status */}
       {!notification.is_read && (
         <div className="w-2.5 h-2.5 rounded-full bg-linear-to-br from-primary to-primary-dark shrink-0 mt-1.5" />
       )}

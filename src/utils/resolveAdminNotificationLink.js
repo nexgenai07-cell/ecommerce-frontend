@@ -1,9 +1,9 @@
 import { ROUTES } from "../constants/routes";
 
 // Admin-side counterpart to utils/resolveNotificationLink.js. Every
-// notification the backend returns (List My Notifications — API 75,
-// Get Notification Detail — API 76, and the manual Send Notification —
-// API 78) carries the same reference_type ("order" | "return" |
+// notification the backend returns (the notification list, the
+// notification detail, and the manual Send Notification) carries the
+// same reference_type ("order" | "return" |
 // "complaint" | null) and reference_id fields regardless of whether the
 // logged-in user is a customer or an admin. The two roles simply need
 // to land on different pages when a notification is clicked, so this

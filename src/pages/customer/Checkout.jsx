@@ -14,16 +14,16 @@ import { z } from "zod";
 // Framer Motion's "motion" component used to animate sections sliding/fading in
 import { motion, AnimatePresence } from "framer-motion";
 // Stripe.js loader — dynamically loads Stripe using the publishable_key returned
-// by our OWN backend (API 69), never hardcoded on the frontend
+// by our OWN backend, never hardcoded on the frontend
 import { loadStripe } from "@stripe/stripe-js";
 // Elements — the provider component that gives Stripe context (clientSecret,
 // appearance, etc.) to PaymentElement/useStripe/useElements down the tree
 import { Elements } from "@stripe/react-stripe-js";
 // API function to fetch the current user's cart data, and to add items
 // back to it — used by the Cancel Order flow below to restore the cart
-// (per API_Documentation v3.0: Cancel Order / API 58 only restores
-// product STOCK and processes a refund — it does NOT touch the
-// customer's cart, so the frontend has to rebuild it manually)
+// (cancelling an order only restores product STOCK and processes a
+// refund — it does NOT touch the customer's cart, so the frontend has
+// to rebuild it manually)
 import { getCart, addToCart } from "../../api/cart.api";
 // API function to submit the checkout request and place the order, to
 // fetch an existing order's details (needed for the resume-payment flow),
@@ -36,15 +36,15 @@ import {
   sendCheckoutOtp,
   verifyCheckoutOtp,
 } from "../../api/orders.api";
-// API function to create a Stripe Payment Intent for an existing order (API 69)
+// API function to create a Stripe Payment Intent for an existing order
 import { createPaymentIntent } from "../../api/payments.api";
-// API 7 — the customer's own profile. Its email is shown read-only on this page
+// The customer's own profile. Its email is shown read-only on this page
 // (the Order Confirmation OTP and order emails always go to it), and its phone
 // is the ONLY source for the read-only phone field on this page (see the
 // PHONE PREFILL effect below) — it is never taken from the selected delivery
 // address. phone_verified drives the phone re-verification banner below.
 import { getMyProfile } from "../../api/auth.api";
-// API 55.1 — the customer's saved addresses (Address Book)
+// The customer's saved addresses (Address Book)
 import { getAddresses } from "../../api/addresses.api";
 // Normalizes a list response that may be a plain array or a paginated object
 import extractListData from "../../utils/extractListData";
@@ -111,9 +111,7 @@ const checkoutSchema = z.object({
     .regex(/^(\+92|0)[0-9]{10}$/, "Invalid Pakistani phone number"),
 
   // NOTE: the delivery address itself is intentionally NOT part of this
-  // schema anymore. It used to be five raw text fields (fullName, street,
-  // city, province, postalCode) typed directly into this form. Delivery
-  // addresses now live in the customer's Address Book instead — the
+  // schema. Delivery addresses live in the customer's Address Book — the
   // customer picks one (or adds a new one inline) via AddressForm.jsx,
   // and the chosen address's id is tracked separately as
   // "selectedAddressId" state below, then validated on submit and sent
@@ -163,12 +161,10 @@ const resolveProductImage = (product) =>
 // CHECKOUT LOADING SKELETON
 // =============================================
 // Shown while the cart request (used to populate both the form defaults
-// and the order summary sidebar) is still in flight. Previously this page
-// had no loading placeholder at all: the moment a visitor landed here, the
-// order summary rendered immediately with an empty item list and a Rs. 0
-// total, then suddenly snapped to the real items and price once the cart
-// request resolved — the exact "small skeleton, then everything jumps
-// bigger" problem this skeleton exists to prevent.
+// and the order summary sidebar) is still in flight. Without a placeholder
+// the order summary would render with an empty item list and a Rs. 0
+// total, then snap to the real items and price once the cart request
+// resolved — this skeleton prevents that layout jump.
 //
 // The page header (CheckoutStepper) never depends on the cart request, so
 // it is reused here directly instead of being re-implemented as a
@@ -325,13 +321,13 @@ const Checkout = () => {
   // Reading router state — specifically "buyNow", which ProductInfo.jsx
   // sets (via navigate(ROUTES.CHECKOUT, { state: { buyNow: {...} } }))
   // when the customer clicks Buy Now on a Product Detail page instead
-  // of going through the cart. API 55 (further change, Sep 2026).
+  // of going through the cart.
   const location = useLocation();
   const buyNowItem = location.state?.buyNow || null;
   const isBuyNow = !!buyNowItem;
   // The coupon applied on a Buy Now checkout. Unlike the cart flow
   // (where an applied coupon is persisted server-side on the cart via
-  // Apply Coupon / API 50), a Buy Now checkout never touches the cart at
+  // Apply Coupon), a Buy Now checkout never touches the cart at
   // all, so there is nothing on the backend to persist this against
   // until the order is actually placed. This page is therefore the only
   // place this coupon lives before that point — CheckoutOrderSummary
@@ -369,7 +365,7 @@ const Checkout = () => {
   // as "payment_method" on the Checkout request, and decides whether
   // "payment" (Stripe) or "qr" (QR) step is shown next.
   const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHOD.STRIPE);
-  // qr_image_url / payment_reference / qr_upload_deadline — only
+  // payment_reference / qr_upload_deadline — only
   // present in the Checkout response when payment_method: "qr" was
   // sent; passed straight into QrPaymentPanel on the "qr" step.
   const [qrPaymentDetails, setQrPaymentDetails] = useState(null);
@@ -385,12 +381,12 @@ const Checkout = () => {
   // The order created by the Checkout API — needed to build the redirect URL
   // and to display on the payment step
   const [orderNumber, setOrderNumber] = useState(null);
-  // Stripe's client_secret for the PaymentIntent created for this order (API 69)
+  // Stripe's client_secret for the PaymentIntent created for this order
   const [clientSecret, setClientSecret] = useState(null);
   // A promise resolving to the Stripe instance, initialized with the
   // publishable_key returned by OUR backend — never hardcoded here
   const [stripePromise, setStripePromise] = useState(null);
-  // BUGFIX (checkout page showing Rs. 0 during payment step): once the order
+  // Keeps the order summary correct during the payment step: once the order
   // is placed, checkoutMutation clears the cart and invalidates the CART
   // query so it refetches as empty. But the Order Summary sidebar below
   // stays mounted through the payment step and was reading subtotal/
@@ -409,7 +405,7 @@ const Checkout = () => {
   // =============================================
   // The details form's values, captured on submit and reused once
   // the code is verified — the checkout() call needs them, but the
-  // details step is no longer on screen by then.
+  // details step is not on screen by then.
   const [pendingCheckoutData, setPendingCheckoutData] = useState(null);
   // Current value of the 6-digit code input.
   const [otp, setOtp] = useState("");
@@ -431,11 +427,10 @@ const Checkout = () => {
   // =============================================
   // CANCEL ORDER (payment / qr steps)
   // Once the order is placed it sits as "pending_payment" while the
-  // customer is on the "payment" (Stripe) or "qr" step — at that point
-  // there was previously NO way to back out: going back just showed an
-  // empty cart (it was already cleared when the order was created), with
-  // no way to undo it. This lets the customer cancel that pending order
-  // and sends them back to a normal Cart page instead of stranding them.
+  // customer is on the "payment" (Stripe) or "qr" step. Going back would
+  // only show an empty cart (it was already cleared when the order was
+  // created), so this lets the customer cancel that pending order and
+  // sends them back to a normal Cart page instead of stranding them.
   // =============================================
   // showCancelModal controls whether the cancel confirmation dialog is visible
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -489,9 +484,9 @@ const Checkout = () => {
   // CART API
   // Checkout mein cart data chahiye — items, totals
   // =============================================
-  // Skipped entirely in Buy Now mode (isBuyNow) — API 55's contract is
-  // explicit that a Buy Now checkout "is left completely untouched — not
-  // read, not cleared", so this page has no reason to even fetch it.
+  // Skipped entirely in Buy Now mode (isBuyNow) — a Buy Now checkout
+  // leaves the cart completely untouched (not read, not cleared), so this
+  // page has no reason to even fetch it.
   const { data: cartData, isLoading: cartLoading } = useQuery({
     queryKey: QUERY_KEYS.CART, // Cache key used to identify and later invalidate this specific query
     queryFn: ({ signal }) => getCart(signal), // Function that performs the actual API call to fetch cart data
@@ -500,7 +495,7 @@ const Checkout = () => {
   });
 
   // =============================================
-  // REGISTERED PROFILE — API 7 — GET /api/v1/auth/me/
+  // REGISTERED PROFILE — GET /api/v1/auth/me/
   // =============================================
   // Supplies the registered account email (shown read-only, since the
   // Order Confirmation OTP and every order email always go to it) and the
@@ -516,7 +511,7 @@ const Checkout = () => {
   const profilePhone = profileData?.data?.phone || user?.phone || "";
 
   // =============================================
-  // SAVED ADDRESSES — API 55.1 — GET /api/v1/addresses/
+  // SAVED ADDRESSES — GET /api/v1/addresses/
   // =============================================
   // Same query and cache entry the address picker (AddressForm.jsx) uses.
   // It is read here as well because this page needs the selected address
@@ -541,7 +536,7 @@ const Checkout = () => {
     !!selectedAddress && !selectedAddress.city?.trim();
 
   // =============================================
-  // BUY NOW — API 55 (further change, Sep 2026)
+  // BUY NOW
   // =============================================
   // Builds a cart-SHAPED object out of just the one product + quantity
   // carried in router state, so every piece of this page below (the
@@ -549,17 +544,17 @@ const Checkout = () => {
   // keep working against a single "cart" value without needing an
   // isBuyNow branch scattered through each of them individually.
   // The subtotal is what the Buy Now coupon is validated against (see
-  // API 44 — Validate Coupon), so it is computed once here and reused
+  // the Validate Coupon call), so it is computed once here and reused
   // both for the synthetic cart below and for the validate call
   // CheckoutOrderSummary makes.
   const buyNowSubtotal = isBuyNow
     ? parseFloat(buyNowItem.product.price || 0) * buyNowItem.quantity
     : 0;
-  // discount_amount/coupon now reflect whatever the customer has applied
+  // discount_amount/coupon reflect whatever the customer has applied
   // via the Buy Now coupon input (see buyNowCoupon state above) — the
   // backend never applies a cart coupon to a Buy Now order, but a
   // coupon validated and sent as coupon_code directly on THIS order is
-  // fully supported (API 55, Sep 2026 update).
+  // fully supported.
   const buyNowCart = isBuyNow
     ? {
         items: [
@@ -649,11 +644,11 @@ const Checkout = () => {
   // =============================================
   // PHONE PREFILL
   // =============================================
-  // UPDATED (Sep 2026): the phone field is always read-only on this page
-  // and is now driven ONLY by the customer's registered account phone —
-  // the same number verified at registration (or re-verified via API
-  // 20.1/20.2), shown read-only on Profile too. It deliberately no
-  // longer follows the selected delivery address's own saved phone: a
+  // The phone field is always read-only on this page and is driven ONLY
+  // by the customer's registered account phone — the same number verified
+  // at registration (or re-verified through the phone verification link),
+  // shown on Profile too. It deliberately does not follow the selected
+  // delivery address's own saved phone: a
   // delivery address can carry its own, completely different phone
   // (e.g. ordering as a gift for someone else), and that number is for
   // the courier only — it must never leak into or override this
@@ -667,15 +662,15 @@ const Checkout = () => {
   }, [profilePhone, getValues, setValue]);
 
   // =============================================
-  // STEP 1 — CREATE PAYMENT INTENT (API 69)
-  // Runs immediately after Checkout (API 52) succeeds — this is what
+  // STEP 1 — CREATE PAYMENT INTENT
+  // Runs immediately after Checkout succeeds — this is what
   // actually switches the page into the "payment" step once it resolves.
   // =============================================
   const createIntentMutation = useMutation({
     mutationFn: (orderNum) => createPaymentIntent({ order_number: orderNum }),
 
     onSuccess: (response) => {
-      // UPDATED (API 73) — if a coupon reduced the order to Rs. 0, the
+      // If a coupon reduced the order to Rs. 0, the
       // backend confirms the order directly and never calls Stripe at
       // all. There is no client_secret in this case, so Stripe must be
       // skipped entirely here — attempting to render the Payment Element
@@ -709,8 +704,8 @@ const Checkout = () => {
     },
 
     onError: (error) => {
-      // NEW (API 73) — calling this again for an order that's already
-      // paid now returns a 400 instead of a fresh PaymentIntent. Most
+      // Calling this again for an order that's already paid returns a 400
+      // instead of a fresh PaymentIntent. Most
       // likely to happen on the resume-payment flow, if the customer
       // resumes an order that the Stripe webhook already confirmed as
       // paid in the background. Send them to their order instead of
@@ -751,7 +746,7 @@ const Checkout = () => {
   }, [resumeOrderNumber]);
 
   // The order summary sidebar reads its numbers from orderSnapshot (see
-  // BUGFIX comment on that state above). On a normal first-time checkout,
+  // the comment on that state above). On a normal first-time checkout,
   // that snapshot is built from the live cart right before it gets
   // cleared. On resume, the cart was already cleared when the order was
   // originally placed, so there is nothing live to snapshot from — the
@@ -823,8 +818,7 @@ const Checkout = () => {
     mutationFn: () => sendCheckoutOtp(),
 
     onSuccess: (response, checkoutData) => {
-      // UPDATED (v5.4, Sep 2026): verification is now permanent per
-      // customer account instead of single-use/30-minute — once a
+      // Verification is permanent per customer account — once a
       // customer has verified once, ever, this endpoint stops sending a
       // code at all and just replies with already_verified: true. A
       // returning, already-verified customer should never see the OTP
@@ -889,32 +883,32 @@ const Checkout = () => {
   });
 
   // =============================================
-  // CHECKOUT MUTATION (API 52)
+  // CHECKOUT MUTATION
   // POST /api/v1/orders/checkout/
-  // Success pe cart clear hoti hai aur turant Payment Intent create hoti hai
-  // (payment_method field ab is request mein bilkul nahi jaati)
+  // On success the cart is cleared and a Payment Intent is created
+  // immediately for Stripe orders
   // =============================================
   // Mutation hook to handle the actual order placement API call
   const checkoutMutation = useMutation({
-    // The delivery address is no longer sent as raw shipping_address/
-    // city/postal_code fields — the backend now resolves it from the
+    // The delivery address is not sent as raw shipping_address/
+    // city/postal_code fields — the backend resolves it from the
     // Address Book instead: "address_id" tells it exactly which saved
     // address to ship to. If this were ever omitted, the backend falls
     // back to whichever saved address is currently marked as default,
     // but this app always sends it explicitly since AddressForm.jsx
     // requires a selection before the customer can reach this point.
     // coupon_code isn't part of this endpoint's accepted fields at all
-    // — the coupon is already applied to the cart earlier (API 50), so
+    // — the coupon is already applied to the cart earlier, so
     // it doesn't need to be resent here.
-    // BUY NOW — API 55 (further change, Sep 2026): when isBuyNow, two
+    // BUY NOW: when isBuyNow, two
     // extra optional fields are sent — buy_now_product_id and
     // buy_now_quantity — which tell the backend to build the order from
     // this single product/quantity instead of the customer's persisted
     // cart. Every other field below is identical either way.
     //
-    // COUPON (API 55, Sep 2026 update): coupon_code is only sent here
+    // COUPON: coupon_code is only sent here
     // for a Buy Now order — a normal cart checkout doesn't need it,
-    // since a coupon applied to the cart via Apply Coupon (API 50) is
+    // since a coupon applied to the cart via Apply Coupon is
     // already attached to the cart itself and the backend picks it up
     // automatically. A Buy Now order has no cart to attach a coupon to,
     // so the code validated on this page (see buyNowCoupon state) has
@@ -922,7 +916,7 @@ const Checkout = () => {
     // validates it again against this product's price × quantity and
     // uses it for this order only, never writing it to the cart.
     mutationFn: async (data) => {
-      // UPDATED (Sep 2026): the phone field is never something the
+      // The phone field is never something the
       // customer edits on this page — it is always read-only and always
       // holds the account's registered/verified phone (see the PHONE
       // PREFILL effect above), regardless of what phone is saved on the
@@ -999,12 +993,11 @@ const Checkout = () => {
       }
 
       if (paymentMethod === PAYMENT_METHOD.QR) {
-        // QR orders never touch Stripe at all — qr_image_url,
-        // payment_reference and the 10-minute qr_upload_deadline come
-        // straight back on this same checkout response, so the
-        // customer can pay and upload proof right away.
+        // QR orders never touch Stripe at all — payment_reference and the
+        // 10-minute qr_upload_deadline come straight back on this same
+        // checkout response, so the customer can pay and upload proof
+        // right away. The QR image itself is loaded by QrPaymentPanel.
         setQrPaymentDetails({
-          qrImageUrl: response.data.qr_image_url,
           paymentReference: response.data.payment_reference,
           qrUploadDeadline: response.data.qr_upload_deadline,
         });
@@ -1018,8 +1011,8 @@ const Checkout = () => {
 
     // Runs if the checkout API call fails
     onError: (error) => {
-      // NOTE (Sep 2026, backend-confirmed): phone_verification_required
-      // is not expected here anymore — it only fires for a manual
+      // NOTE: phone_verification_required
+      // is not expected here — it only fires for a manual
       // one-off address without address_id, which this Address-Book
       // checkout never sends (see the PHONE PREFILL comment above). If
       // the backend ever does send it, the generic message/toast logic
@@ -1057,8 +1050,8 @@ const Checkout = () => {
         return;
       }
 
-      // COUPON REMOVED: the coupon already on the cart was no longer valid
-      // (minimum order amount no longer met, expired or deactivated). No
+      // COUPON REMOVED: the coupon already on the cart was not valid
+      // (minimum order amount not met, expired or deactivated). No
       // order was created and the backend has already removed the coupon
       // from the cart. The cart is fetched again so the total shown is the
       // real one, without the discount, and the customer is returned to the
@@ -1077,7 +1070,7 @@ const Checkout = () => {
       // COUPON: the backend re-validates the coupon at the moment the
       // order is actually placed, so a code that was valid when applied
       // can still be rejected here — it expired, was deactivated, or the
-      // order no longer meets its minimum amount (for example after an
+      // order does not meet its minimum amount (for example after an
       // item was removed from the cart). The coupon controls only exist
       // on the details step, so the customer is sent back there instead
       // of being left on the OTP screen with no way to remove the coupon.
@@ -1099,16 +1092,15 @@ const Checkout = () => {
 
   // =============================================
   // CANCEL ORDER MUTATION
-  // Same cancelOrder() API call OrderDetail.jsx already uses (API 58).
-  // Per API_Documentation v3.0: this endpoint restores the order's
-  // deducted STOCK and refunds the payment if one was made — it does
+  // Same cancelOrder() API call OrderDetail.jsx uses.
+  // This endpoint restores the order's deducted STOCK and refunds the payment if one was made — it does
   // NOT restore the customer's cart at all, so that has to be rebuilt
   // on the frontend right after.
   //
   // This is only reliably possible here because orderSnapshot (set in
   // checkoutMutation.onSuccess, BEFORE the cart was cleared) still holds
   // each item's real product.id, straight from the live cart response
-  // (Get Cart / API 45 always includes it). Get Order Detail (API 57) —
+  // (Get Cart always includes it). Get Order Detail —
   // used to rebuild orderSnapshot on the "resume" flow instead — does
   // NOT include a product id on its items, only product_name/product_image/
   // price/quantity, so items restored via THAT path can't be re-added to
@@ -1121,7 +1113,7 @@ const Checkout = () => {
         cancelReason === "other" ? cancelReasonOther.trim() : cancelReason;
       await cancelOrder(orderNumber, reason ? { reason } : undefined);
 
-      // BUY NOW — API 55 (further change, Sep 2026): a Buy Now order was
+      // BUY NOW: a Buy Now order was
       // never built from the customer's cart in the first place (the
       // backend never read or cleared it), so there's nothing to restore
       // here — re-adding this product to the cart on cancel would insert
@@ -1509,7 +1501,6 @@ const Checkout = () => {
 
                   <QrPaymentPanel
                     orderNumber={orderNumber}
-                    qrImageUrl={qrPaymentDetails?.qrImageUrl}
                     paymentReference={qrPaymentDetails?.paymentReference}
                     qrUploadDeadline={qrPaymentDetails?.qrUploadDeadline}
                     onProofUploaded={handleQrProofUploaded}

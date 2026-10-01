@@ -9,9 +9,9 @@ import { AiOutlineBell } from "react-icons/ai";
 // Import the QUERY_KEYS constants object that stores standardized React Query cache key names
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Import the API function that fetches the list of notifications from the backend — the exact
-// same endpoint (API 75) the customer Notification History page uses. It returns whatever is
-// visible to the currently logged-in user, so a logged-in admin naturally gets back
-// notifications addressed to that admin account plus any broadcast notifications.
+// same endpoint the customer Notification History page uses. It returns whatever is visible to
+// the currently logged-in user, so a logged-in admin gets back only the notifications addressed
+// to that admin account. Broadcasts and notifications the admin sends never appear here.
 import { getNotifications } from "../../api/notifications.api";
 // Import the shared, role-agnostic filter tabs component (All/Unread/Orders/Promotions/System)
 // plus the "mark all as read" button — the exact same component the customer page uses,

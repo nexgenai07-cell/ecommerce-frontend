@@ -1,358 +1,242 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
-import { useQuery, useQueries } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "framer-motion";
-import { AiOutlineLeft, AiOutlineRight } from "react-icons/ai";
+// ============================================================
+// HeroSection - COMPONENT (homepage hero)
+// ============================================================
+// A scroll driven, full screen showcase of up to three real store
+// categories. The hero pins itself below the navbar while the visitor
+// scrolls:
+//   1. The category name appears in the middle. Its silver letters, and
+//      the category's products scattered around it like sprinkles, fly in
+//      from all directions and settle into their places.
+//   2. Scrolling on makes the content scatter away while a WebGL silver
+//      "dissolve" (the Vengeance UI scroll-dissolve-reveal effect) opens
+//      from the centre and reveals the next category's backdrop.
+//   3. The next category then flies in with the very same effect.
+// Data comes from the real categories and products APIs.
 
-import { ROUTES } from "../../constants/routes";
-import { QUERY_KEYS } from "../../constants/queryKeys";
-import { searchProducts } from "../../api/products.api";
-import { getCategories } from "../../api/categories.api";
-import extractListData from "../../utils/extractListData";
-import Container from "../layouts/Container";
-import cn from "../../utils/cn";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react"; // React hooks used below
+import { Link } from "react-router-dom"; // Client side navigation for the fallback call-to-action
+import { useQuery, useQueries } from "@tanstack/react-query"; // Server state fetching and caching
+import { useScroll } from "framer-motion"; // Scroll progress of the hero track
 
-const FALLBACK_IMAGE = "/placeholder-product.svg";
-const AUTOPLAY_MS = 6000;
+import { ROUTES } from "../../constants/routes"; // Central route paths
+import { QUERY_KEYS } from "../../constants/queryKeys"; // Central TanStack Query keys
+import { searchProducts } from "../../api/products.api"; // Product search/filter endpoint (API 29)
+import { getCategories } from "../../api/categories.api"; // List categories endpoint (API 23)
+import extractListData from "../../utils/extractListData"; // Normalises list responses into plain arrays
+import {
+  HERO_MAX_CATEGORIES,
+  HERO_NAVBAR_OFFSET_PX,
+  resolveHeroFrame,
+} from "../../utils/heroScrollMap"; // Scroll progress -> hero frame state
+import {
+  createHeroBackdrop,
+  readHeroColor,
+} from "../../utils/createHeroBackdrop"; // Paints the WebGL backdrop artwork
+import cn from "../../utils/cn"; // Joins class names conditionally
+import Container from "../layouts/Container"; // Shared max width wrapper
+import HeroCategoryScene, { HERO_MAX_SPARKS } from "./hero/HeroCategoryScene"; // One category scene
+import HeroDissolveCanvas from "./hero/HeroDissolveCanvas"; // WebGL dissolve backdrop
 
-// =============================================
-// DATA HOOK — builds slide objects from real API data
-// (no local state here, purely derived from query results)
-// =============================================
-const useHeroSlides = () => {
-  // Same queryKey + queryFn as FlashSaleSection -> shares its cache,
-  // so this does NOT trigger a duplicate network request.
-  const { data: productsData, isLoading: productsLoading } = useQuery({
-    queryKey: [...QUERY_KEYS.PRODUCTS, "flash-sale"],
-    queryFn: ({ signal }) =>
-      searchProducts({ ordering: "-created_at", page: 1 }, signal),
-    staleTime: 1000 * 60 * 5,
-  });
+// Fallback colours used only if the CSS custom properties are missing.
+const FALLBACK_BASE = [5, 8, 12];
+const FALLBACK_TINTS = [
+  [16, 185, 129],
+  [99, 102, 241],
+  [245, 158, 11],
+];
 
-  // Same queryKey + queryFn as CollectionsGrid -> shares its cache too.
+// How long fetched hero data stays fresh before it is refetched (10 minutes).
+const HERO_STALE_TIME = 1000 * 60 * 10;
+
+const HeroSection = () => {
+  // Outer scroll track element; its height creates the scroll distance.
+  const trackRef = useRef(null);
+
+  // ---- Categories (same cache entry as the other homepage sections) ----
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
-    queryKey: QUERY_KEYS.CATEGORIES,
-    queryFn: ({ signal }) => getCategories(undefined, signal),
-    staleTime: 1000 * 60 * 10,
+    queryKey: QUERY_KEYS.CATEGORIES, // Shared cache key, so no duplicate request is made
+    queryFn: ({ signal }) => getCategories(undefined, signal), // Fetch the full category list
+    staleTime: HERO_STALE_TIME, // Keep the result fresh for a while
   });
 
-  // extractListData handles the documented-flat-array vs actual-paginated-object
-  // drift on this endpoint (same normalizer CollectionsGrid uses).
-  const categories = extractListData(categoriesData).slice(0, 3);
+  // Only the first few categories are presented in the hero.
+  const categories = useMemo(
+    () => extractListData(categoriesData).slice(0, HERO_MAX_CATEGORIES),
+    [categoriesData],
+  );
 
-  // Same per-category thumbnail queryKey pattern as CollectionsGrid -> shares cache.
-  const categoryImageQueries = useQueries({
+  // ---- Products of every presented category ----
+  const productQueries = useQueries({
     queries: categories.map((category) => ({
-      queryKey: [...QUERY_KEYS.PRODUCTS, "collection-thumbnail", category.id],
+      queryKey: [...QUERY_KEYS.PRODUCTS, "hero-category", category.id], // One cache entry per category
       queryFn: ({ signal }) =>
         searchProducts(
           {
-            category_id: category.id,
-            ordering: "-created_at",
-            page: 1,
+            category_id: category.id, // Only products of this category
+            ordering: "-created_at", // Newest products first
+            page: 1, // First page is enough for the sprinkles
+            page_size: HERO_MAX_SPARKS, // Ask for exactly as many as fit around the title
           },
           signal,
         ),
-      enabled: categories.length > 0,
-      staleTime: 1000 * 60 * 10,
+      staleTime: HERO_STALE_TIME, // Keep the result fresh for a while
     })),
   });
 
-  const isLoading =
-    productsLoading ||
-    categoriesLoading ||
-    categoryImageQueries.some((q) => q.isLoading);
-
-  const slides = (() => {
-    const built = [];
-
-    // ---- Flash sale slide — only if REAL discounted stock exists ----
-    // (never show a "Sale" banner when nothing is actually discounted)
-    const results = productsData?.data?.results || [];
-    const discounted = results.filter(
-      (p) => parseFloat(p.original_price) > parseFloat(p.price),
-    );
-
-    const discountPercentOf = (p) =>
-      ((parseFloat(p.original_price) - parseFloat(p.price)) /
-        parseFloat(p.original_price)) *
-      100;
-
-    if (discounted.length > 0) {
-      const topDiscount = discounted.reduce((max, p) =>
-        discountPercentOf(p) > discountPercentOf(max) ? p : max,
-      );
-
-      built.push({
-        id: "flash-sale",
-        badge: "Flash Sale",
-        badgeColor: "bg-danger",
-        title: `Up to ${Math.round(discountPercentOf(topDiscount))}% Off`,
-        subtitle: "On selected items — while stock lasts.",
-        image: topDiscount.primary_image || FALLBACK_IMAGE,
-        ctaLabel: "Shop the Sale",
-        ctaTo: ROUTES.PRODUCTS,
-      });
-    }
-
-    // ---- Featured category slides — real category + real product photo ----
-    categories.forEach((category, index) => {
-      const firstProduct =
-        categoryImageQueries[index]?.data?.data?.results?.[0];
-
-      built.push({
-        id: `category-${category.id}`,
-        badge: "Collection",
-        badgeColor: "bg-primary",
-        title: category.name,
-        subtitle:
-          category.description || `Discover our ${category.name} collection.`,
-        image: firstProduct?.primary_image || FALLBACK_IMAGE,
-        ctaLabel: `Shop ${category.name}`,
-        ctaTo: `${ROUTES.PRODUCTS}?category_id=${category.id}`,
-      });
-    });
-
-    // ---- Absolute fallback — hero should never render blank ----
-    if (built.length === 0 && !isLoading) {
-      built.push({
-        id: "welcome",
-        badge: "Zyron",
-        badgeColor: "bg-primary",
-        title: "Discover Quality, Curated for You",
-        subtitle: "Shop the latest products across every category.",
-        image: FALLBACK_IMAGE,
-        ctaLabel: "Shop Now",
-        ctaTo: ROUTES.PRODUCTS,
-      });
-    }
-
-    return built;
-  })();
-
-  return { slides, isLoading };
-};
-
-// =============================================
-// FRAMER MOTION VARIANTS — direction-aware crossfade + slide
-// =============================================
-const slideVariants = {
-  enter: (direction) => ({
-    opacity: 0,
-    x: direction >= 0 ? 40 : -40,
-  }),
-  center: {
-    opacity: 1,
-    x: 0,
-  },
-  exit: (direction) => ({
-    opacity: 0,
-    x: direction >= 0 ? -40 : 40,
-  }),
-};
-
-// =============================================
-// MAIN COMPONENT
-// =============================================
-const HeroSection = () => {
-  const { slides, isLoading } = useHeroSlides();
-  const slideCount = slides.length;
-
-  // [index, direction] kept together so Framer Motion knows which
-  // way to animate (1 = forward/next, -1 = backward/prev)
-  const [[index, direction], setSlideState] = useState([0, 0]);
-
-  const isPausedRef = useRef(false);
-  const touchStartXRef = useRef(null);
-  const autoplayIntervalRef = useRef(null);
-
-  const goTo = useCallback(
-    (targetIndex, dir) => {
-      if (slideCount === 0) return;
-      const wrapped = (targetIndex + slideCount) % slideCount;
-      setSlideState([wrapped, dir]);
-    },
-    [slideCount],
+  // Plain product arrays in the same order as the categories.
+  const productsByCategory = productQueries.map((query) =>
+    extractListData(query.data),
   );
 
-  const next = useCallback(() => goTo(index + 1, 1), [goTo, index]);
-  const prev = useCallback(() => goTo(index - 1, -1), [goTo, index]);
+  // ---- Backdrop artwork for the WebGL dissolve ----
+  // Identifies the current category set so artwork is repainted only when it changes.
+  const categoryKey = categories.map((category) => category.id).join(",");
 
-  // Reset to the first slide whenever the underlying slide set changes
-  // size (e.g. real data just finished loading in)
-  useEffect(() => {
-    setSlideState([0, 0]);
-  }, [slideCount]);
+  const backdrops = useMemo(() => {
+    // Nothing to paint until categories exist.
+    if (categories.length === 0) return [];
 
-  // ---- Autoplay — pauses on hover / keyboard focus / active touch ----
-  useEffect(() => {
-    if (slideCount <= 1) return undefined;
+    // Colours come from the CSS custom properties defined in index.css.
+    const root = document.documentElement;
+    const base = readHeroColor(root, "--hero-base", FALLBACK_BASE);
 
-    autoplayIntervalRef.current = setInterval(() => {
-      if (!isPausedRef.current) {
-        setSlideState(([currentIndex]) => [(currentIndex + 1) % slideCount, 1]);
-      }
-    }, AUTOPLAY_MS);
-
-    return () => clearInterval(autoplayIntervalRef.current);
-  }, [slideCount]);
-
-  // ---- Keyboard navigation ----
-  const handleKeyDown = (e) => {
-    if (e.key === "ArrowRight") next();
-    if (e.key === "ArrowLeft") prev();
-  };
-
-  // ---- Touch swipe navigation (mobile) ----
-  const handleTouchStart = (e) => {
-    isPausedRef.current = true;
-    touchStartXRef.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e) => {
-    if (touchStartXRef.current !== null) {
-      const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-      if (Math.abs(deltaX) > 50) {
-        if (deltaX < 0) next();
-        else prev();
-      }
-    }
-    touchStartXRef.current = null;
-    isPausedRef.current = false;
-  };
-
-  // ---- Loading skeleton (only while there's truly nothing to show yet) ----
-  if (isLoading && slideCount === 0) {
-    return (
-      <section className="px-4 sm:px-6 lg:px-8 pt-6">
-        <Container className="px-0">
-          <div className="h-90 sm:h-110 lg:h-130 rounded-2xl bg-gray-100 animate-pulse" />
-        </Container>
-      </section>
+    // One artwork per category, tinted with its own accent colour.
+    return categories.map((category, index) =>
+      createHeroBackdrop({
+        tint: readHeroColor(
+          root,
+          `--hero-tint-${index % FALLBACK_TINTS.length}`,
+          FALLBACK_TINTS[index % FALLBACK_TINTS.length],
+        ),
+        base,
+        seed: Number(category.id) * 7919 + index * 104729 + 13,
+      }),
     );
-  }
+    // categoryKey changes exactly when the category list changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryKey]);
 
-  const activeSlide = slides[index];
-  if (!activeSlide) return null;
+  // ---- Scroll tracking ----
+  // Overall progress (0 to 1) from the moment the hero pins until it releases.
+  const { scrollYProgress } = useScroll({
+    target: trackRef, // The tall outer track
+    offset: [`start ${HERO_NAVBAR_OFFSET_PX}px`, "end end"], // Starts when the stage pins under the navbar
+  });
+
+  // Number of categories actually presented.
+  const count = categories.length;
+
+  // Lets React subscribe to the scroll progress value from outside React.
+  const subscribeToScroll = useCallback(
+    (onChange) => scrollYProgress.on("change", onChange), // Returns the unsubscribe function
+    [scrollYProgress],
+  );
+
+  // Index of the category whose content is currently visible (-1 between two).
+  // It is derived straight from the live scroll progress, so it also stays
+  // correct when the category count changes after the data finishes loading,
+  // and React re-renders only when this number actually changes.
+  const visibleIndex = useSyncExternalStore(
+    subscribeToScroll, // How to listen for scroll progress changes
+    () => resolveHeroFrame(scrollYProgress.get(), count).visibleIndex, // Current snapshot
+  );
+
+  // Track height class: one scroll segment per category transition.
+  const trackSize = Math.min(Math.max(count, 1), HERO_MAX_CATEGORIES);
+
+  // True while data is still loading and no category is known yet.
+  const showSkeleton = categoriesLoading && count === 0;
+
+  // True once loading finished and the store has no categories.
+  const showEmptyState = !categoriesLoading && count === 0;
 
   return (
-    <section className="px-2  lg:px-5 pt-6 pb-2">
-      <Container className="px-0">
-        <div
-          className="relative h-90 sm:h-110 lg:h-130 rounded-2xl overflow-hidden group outline-none select-none"
-          tabIndex={0}
-          role="region"
-          aria-roledescription="carousel"
-          aria-label="Promotional slider"
-          onKeyDown={handleKeyDown}
-          onMouseEnter={() => (isPausedRef.current = true)}
-          onMouseLeave={() => (isPausedRef.current = false)}
-          onFocus={() => (isPausedRef.current = true)}
-          onBlur={() => (isPausedRef.current = false)}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          <AnimatePresence custom={direction} mode="wait">
-            <motion.div
-              key={activeSlide.id}
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.5, ease: "easeInOut" }}
-              className="absolute inset-0"
-            >
-              {/* Real product/category photo as the slide background */}
-              <img
-                src={activeSlide.image}
-                alt={activeSlide.title}
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = FALLBACK_IMAGE;
-                }}
-                className="w-full h-full object-cover"
+    // Tall outer track: its height provides the scroll distance for the transitions.
+    <section
+      ref={trackRef}
+      className={cn("hero-track", `hero-track-${trackSize}`)}
+      aria-label="Featured categories"
+    >
+      {/* Page level heading for assistive technology; the visual titles are per category */}
+      <h1 className="sr-only">Shop by category at Zyron</h1>
+
+      {/* Pinned wrapper that stays below the navbar while the track scrolls */}
+      <div className="hero-sticky">
+        <Container className="h-full">
+          {/* The rounded stage that holds the backdrop and every scene */}
+          <div
+            className={cn("hero-stage", showSkeleton && "hero-stage-loading")}
+          >
+            {/* WebGL silver dissolve backdrop, only once artwork exists */}
+            {backdrops.length > 0 && (
+              <HeroDissolveCanvas
+                backdrops={backdrops}
+                progress={scrollYProgress}
+                count={count}
               />
+            )}
 
-              {/* Bottom-anchored dark gradient — keeps white text readable over any photo */}
-              <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-black/10" />
+            {/* Dark gradient over the backdrop that keeps text and tiles readable */}
+            <div className="hero-shade" aria-hidden="true" />
 
-              {/* Slide content */}
-              <div className="absolute inset-0 flex flex-col justify-end sm:justify-center px-6 sm:px-12 lg:px-16 pb-12 sm:pb-0">
-                <span
-                  className={cn(
-                    "inline-flex w-fit px-2.5 py-1 text-white text-xs font-bold rounded-md uppercase tracking-wide mb-3",
-                    activeSlide.badgeColor,
-                  )}
-                >
-                  {activeSlide.badge}
-                </span>
+            {/* One scene per category; only the active one is visible and focusable */}
+            {categories.map((category, index) => (
+              <HeroCategoryScene
+                key={category.id}
+                category={category}
+                products={productsByCategory[index] || []}
+                index={index}
+                total={count}
+                isActive={visibleIndex === index}
+              />
+            ))}
 
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight max-w-lg">
-                  {activeSlide.title}
-                </h1>
-
-                <p className="text-sm sm:text-base text-white/80 mt-2 max-w-md">
-                  {activeSlide.subtitle}
-                </p>
-
-                <Link
-                  to={activeSlide.ctaTo}
-                  className="inline-flex w-fit items-center gap-2 mt-5 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded-lg transition-colors duration-200"
-                >
-                  {activeSlide.ctaLabel}
-                  <AiOutlineRight className="w-4 h-4" />
+            {/* Friendly static message when the store has no categories yet */}
+            {showEmptyState && (
+              <div className="hero-center">
+                <p className="hero-kicker">Zyron</p>
+                <h2 className="hero-title hero-title-md">
+                  <span className="hero-letter-face">Shop the Future</span>
+                </h2>
+                <Link to={ROUTES.PRODUCTS} className="hero-cta">
+                  <span>Browse Products</span>
                 </Link>
               </div>
-            </motion.div>
-          </AnimatePresence>
+            )}
 
-          {/* Prev / Next arrows + dot pagination — only when there's more than 1 slide */}
-          {slideCount > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={prev}
-                aria-label="Previous slide"
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
-              >
-                <AiOutlineLeft className="w-5 h-5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={next}
-                aria-label="Next slide"
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
-              >
-                <AiOutlineRight className="w-5 h-5" />
-              </button>
-
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-                {slides.map((s, i) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => goTo(i, i > index ? 1 : -1)}
-                    aria-label={`Go to slide ${i + 1}`}
-                    aria-current={i === index}
+            {/* Progress dots showing which of the categories is on screen */}
+            {count > 1 && (
+              <ol className="hero-progress" aria-hidden="true">
+                {categories.map((category, index) => (
+                  <li
+                    key={category.id}
                     className={cn(
-                      "h-2 rounded-full transition-all duration-300",
-                      i === index
-                        ? "w-6 bg-white"
-                        : "w-2 bg-white/50 hover:bg-white/70",
+                      "hero-progress-dot",
+                      visibleIndex === index && "is-current",
                     )}
                   />
                 ))}
+              </ol>
+            )}
+
+            {/* Scroll hint, shown only on the first category */}
+            {count > 1 && (
+              <div
+                className={cn(
+                  "hero-scroll-hint",
+                  visibleIndex !== 0 && "is-hidden",
+                )}
+                aria-hidden="true"
+              >
+                <span className="hero-scroll-hint-text">Scroll</span>
+                <span className="hero-scroll-hint-line" />
               </div>
-            </>
-          )}
-        </div>
-      </Container>
+            )}
+          </div>
+        </Container>
+      </div>
     </section>
   );
 };
 
-// Exporting this component so it can be imported and used in Home.jsx
-// (same export name/path as before — nothing else needs to change)
-export default HeroSection;
+export default HeroSection; // Make the component available to Home.jsx

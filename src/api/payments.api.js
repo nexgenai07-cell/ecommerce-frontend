@@ -1,10 +1,12 @@
+// ============================================================
 // PAYMENTS API MODULE — Stripe + QR (Easypaisa/JazzCash)
 // ============================================================
-// This file contains the API calls related to payments. Stripe
-// remains a fully automated card flow; QR is a static-image,
-// manual-verification flow the customer completes outside the
-// system, then proves with an uploaded screenshot. The admin
-// verification calls (queue, approve, reject) are grouped here too.
+// This file contains the API calls related to payments. Stripe is a
+// fully automated card flow; QR is a manual-verification flow the
+// customer completes outside the system and then proves with an
+// uploaded screenshot. The admin calls (QR payments list and stats,
+// approve, reject, bulk actions and the store QR image management)
+// are grouped here too.
 
 import axiosInstance from "../lib/axiosInstance";
 
@@ -35,29 +37,127 @@ export const createPaymentIntent = (data, signal) => {
 // ----------------------------
 
 // ----------------------------
-// Get the admin QR verification queue (Admin only)
+// Get the store's payment QR image (customer)
 // ----------------------------
-// Every QR order currently sitting at payment.status: "under_review"
-// — i.e. the customer has uploaded proof and it's waiting on a manual
-// decision. This includes both first-time reviews and retry reviews
-// after an earlier rejection; in both cases the order itself is still
-// "pending_payment". Standard DRF pagination shape:
-// { count, next, previous, results }. Each result: { order_number,
-// customer: { id, name, phone }, amount, screenshot_url,
-// transaction_id, submitted_at, duplicate_warning, rejection_count,
-// order_status }. duplicate_warning is a flag only — the backend never
-// auto-rejects on a match, it just surfaces it so the admin can look
-// closer before deciding.
+// Returns the QR image the customer scans on the QR payment screen, as
+// uploaded by the store admin. One image exists per store.
 //
-// rejection_count is how many times this order's proof has been
-// rejected so far. A value above 0 marks a retry review, so it — not
-// the order status — is what the queue uses to tell a first review
-// from a retry and to show how close the order is to the 3-attempt cap.
-export const getQrPendingPayments = (params, signal) => {
-  return axiosInstance.get("/api/v1/admin/payments/qr/pending/", {
+// Response (200): { store_id, qr_image_url, is_default, updated_at }
+// - qr_image_url — absolute https URL of the image to display
+// - is_default   — true when the admin has not uploaded a real QR yet.
+//                  The URL then points to a sample image that must never
+//                  be shown as a payment target.
+// - updated_at   — when the store record was last saved
+// A 404 with { error: "Store not found." } means the store record is
+// missing.
+export const getStoreQrImage = (signal) => {
+  return axiosInstance.get("/api/v1/payments/qr/image/", { signal });
+};
+
+// ----------------------------
+// Get the admin QR payments list (Admin only)
+// ----------------------------
+// Every QR payment that has a submitted proof, in any status
+// (under_review, paid, rejected or refunded), with filtering,
+// searching, sorting and pagination all done on the server. QR orders
+// still waiting for the customer to upload a proof are not rows here;
+// they are only counted as awaiting_proof by getQrPaymentStats().
+//
+// Query params (all optional):
+// - status      -> under_review | paid | rejected | refunded | all
+//                  (omitted or any other value means all)
+// - search      -> order number, customer name, phone or email, or
+//                  transaction ID
+// - start_date / end_date -> YYYY-MM-DD, the day the proof was submitted
+// - min_amount / max_amount -> bounds on the order total
+// - duplicate   -> true | false (proofs flagged / not flagged as a
+//                  possible duplicate)
+// - ordering    -> submitted_at | -submitted_at | amount | -amount |
+//                  customer_name | -customer_name (default -submitted_at)
+// - page, page_size -> standard pagination
+//
+// Response (200): { count, next, previous, results: [ { id,
+// order_number, customer: { id, name, phone }, amount, status,
+// screenshot_url, transaction_id, submitted_at, paid_at,
+// duplicate_warning, rejection_count, reject_reason, order_status } ] }
+//
+// duplicate_warning is a flag only — the backend never auto-rejects on
+// a match, it just surfaces it so the admin can look closer before
+// deciding. rejection_count is how many times the proof has been
+// rejected so far, and reject_reason is the admin's reason for a
+// rejected payment (an empty string otherwise).
+//
+// A 400 response carries a field-keyed message for an invalid amount
+// bound or date range.
+export const getQrPayments = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/payments/qr/", { signal, params });
+};
+
+// ----------------------------
+// Get the admin QR payments stats (Admin only)
+// ----------------------------
+// The numbers behind the stat cards at the top of the QR payments
+// page. The optional start_date / end_date narrow the counts to proofs
+// submitted in that period. The list's status and search filters do
+// not apply here: the cards always show the overall picture for the
+// period. awaiting_proof is a live count and ignores the dates.
+//
+// Response (200): { total, pending_review, approved, rejected,
+// refunded, duplicate_warnings, submitted_today, awaiting_proof,
+// approved_amount, pending_amount } — the two amounts are decimal
+// strings.
+export const getQrPaymentStats = (params, signal) => {
+  return axiosInstance.get("/api/v1/admin/payments/qr/stats/", {
     signal,
     params,
   });
+};
+
+// ----------------------------
+// Get the store's payment QR image (Admin only)
+// ----------------------------
+// Returns the image currently shown to customers, in the same shape as
+// getStoreQrImage(). is_default is true while no custom image is
+// uploaded.
+export const getAdminQrImage = (signal) => {
+  return axiosInstance.get("/api/v1/admin/payments/qr/image/", { signal });
+};
+
+// ----------------------------
+// Upload or replace the store's payment QR image (Admin only)
+// ----------------------------
+// Uploads the image, or replaces the existing one (the previous file is
+// deleted from storage). The file must be a real image of at most 5 MB;
+// the backend validates both and answers with a 400 carrying an
+// "image" error list otherwise.
+//
+// Request is multipart/form-data:
+// - image: image file (required)
+//
+// Response (200): the same shape as getAdminQrImage().
+export const uploadAdminQrImage = (file, signal) => {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  // axiosInstance sets a default JSON Content-Type at the instance
+  // level, so it must be explicitly cleared here for axios and the
+  // browser to generate the correct "multipart/form-data; boundary=..."
+  // header on their own.
+  return axiosInstance.post("/api/v1/admin/payments/qr/image/", formData, {
+    signal,
+    headers: { "Content-Type": undefined },
+  });
+};
+
+// ----------------------------
+// Remove the store's custom payment QR image (Admin only)
+// ----------------------------
+// Deletes the custom image. Customers see the default sample image
+// afterwards, which the response reports with is_default: true.
+//
+// Response (200): the same shape as getAdminQrImage().
+export const removeAdminQrImage = (signal) => {
+  return axiosInstance.delete("/api/v1/admin/payments/qr/image/", { signal });
 };
 
 // ----------------------------
@@ -108,14 +208,13 @@ export const rejectQrPayment = (orderNumber, reason, signal) => {
 };
 
 // ----------------------------
-// API 74.5 - Approve multiple QR payments in one request (Admin only)
+// Approve multiple QR payments in one request (Admin only)
 // ----------------------------
-// Approves several QR payments in a single call. Replaces the old
-// pattern of calling approveQrPayment() once per selected row — each
-// order in the batch still goes through the exact same rule as
-// approveQrPayment() (only a QR order whose payment is under review
-// can be approved), independently of the others, so one order failing
-// never blocks the rest of the batch.
+// Approves several QR payments in a single call. Each order in the
+// batch goes through the exact same rule as approveQrPayment() (only a
+// QR order whose payment is under review can be approved),
+// independently of the others, so one order failing never blocks the
+// rest of the batch.
 //
 // orderNumbers — a non-empty array of order numbers, maximum 100 per
 // call. A selection larger than 100 rows must be split into batches
@@ -128,7 +227,7 @@ export const rejectQrPayment = (orderNumber, reason, signal) => {
 //   approved_ids — order numbers approved successfully
 //   missing_ids  — order numbers that no longer exist, or are stale in
 //                  the current selection; these should be dropped from
-//                  the queue and the selection quietly, without an error
+//                  the list and the selection quietly, without an error
 //   failed       — orders that exist but could not be approved (for
 //                  example the payment is no longer under review, or
 //                  the order isn't a QR payment order); each entry is
@@ -139,8 +238,8 @@ export const rejectQrPayment = (orderNumber, reason, signal) => {
 //
 // A 400 response means the request itself was invalid (empty ids,
 // invalid order numbers, or more than 100 ids) and nothing was
-// processed. Refresh the verification queue (getQrPendingPayments)
-// after this call, the same as after the single-order approve.
+// processed. Refresh the QR payments list after this call, the same as
+// after the single-order approve.
 export const bulkApproveQrPayments = (orderNumbers, signal) => {
   return axiosInstance.post(
     "/api/v1/admin/payments/qr/bulk-approve/",
@@ -150,15 +249,14 @@ export const bulkApproveQrPayments = (orderNumbers, signal) => {
 };
 
 // ----------------------------
-// API 74.6 - Reject multiple QR payments in one request (Admin only)
+// Reject multiple QR payments in one request (Admin only)
 // ----------------------------
 // Rejects several QR payment proofs in a single call, all with the
-// same reason. Replaces the old pattern of calling rejectQrPayment()
-// once per selected row — each order in the batch still goes through
-// the exact same rule as rejectQrPayment() (payment.qr_rejection_count
-// goes up by 1; the 3rd rejection cancels the order permanently and
-// releases its reserved stock), independently of the others, so one
-// order failing never blocks the rest of the batch.
+// same reason. Each order in the batch goes through the exact same
+// rule as rejectQrPayment() (payment.qr_rejection_count goes up by 1;
+// the 3rd rejection cancels the order permanently and releases its
+// reserved stock), independently of the others, so one order failing
+// never blocks the rest of the batch.
 //
 // orderNumbers — a non-empty array of order numbers, maximum 100 per
 // call. A selection larger than 100 rows must be split into batches
@@ -173,7 +271,7 @@ export const bulkApproveQrPayments = (orderNumbers, signal) => {
 //   rejected_ids — order numbers rejected successfully
 //   missing_ids  — order numbers that no longer exist, or are stale in
 //                  the current selection; these should be dropped from
-//                  the queue and the selection quietly, without an error
+//                  the list and the selection quietly, without an error
 //   failed       — orders that exist but could not be rejected; each
 //                  entry is { id, error }
 //   message      — a ready-made summary sentence, suitable for a toast
@@ -185,9 +283,8 @@ export const bulkApproveQrPayments = (orderNumbers, signal) => {
 //
 // A 400 response means the request itself was invalid (empty ids,
 // invalid order numbers, more than 100 ids, or a missing/blank reason)
-// and nothing was processed. Refresh the verification queue
-// (getQrPendingPayments) after this call, the same as after the
-// single-order reject.
+// and nothing was processed. Refresh the QR payments list after this
+// call, the same as after the single-order reject.
 export const bulkRejectQrPayments = (orderNumbers, reason, signal) => {
   return axiosInstance.post(
     "/api/v1/admin/payments/qr/bulk-reject/",
@@ -261,8 +358,8 @@ export const extendQrUploadTime = (orderNumber, signal) => {
 // reopened_after_rejection is true when this upload is a retry after
 // an earlier rejection. Errors are returned under an "error" key —
 // e.g. "This order has been cancelled.", "Maximum re-upload attempts
-// (3) reached for this order...", or the new "the time window ... has
-// expired and the order has been cancelled." message.
+// (3) reached for this order...", or "the time window ... has
+// expired and the order has been cancelled."
 export const uploadQrProof = (data, signal) => {
   const formData = new FormData();
   formData.append("order_number", data.order_number);
