@@ -56,6 +56,7 @@ import OrderStatusBadge from "../../components/shared/OrderStatusBadge";
 import OrderStatusStepper from "../../components/shared/OrderStatusStepper";
 import OrderStatusTimeline from "../../components/order-detail/OrderStatusTimeline";
 import QrRejectionHistory from "../../components/order-detail/QrRejectionHistory";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Every real, admin-settable ORDER_STATUS value, in the exact forward
 // sequence the backend enforces: pending_payment -> confirmed ->
@@ -328,13 +329,9 @@ const AdminOrderDetail = () => {
       // is final and cannot be changed.") come back under an "error"
       // key; "message" is checked as a fallback so every specific
       // message stays visible instead of the generic text below.
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to update status.",
-      ),
+      showError(getApiErrorMessage(error, "Failed to update status.")),
     // Falls back to a generic message if the backend didn't send
-    // a specific error message field
+    // a readable error message
   });
 
   const handleSaveStatus = () => {

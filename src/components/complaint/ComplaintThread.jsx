@@ -36,6 +36,7 @@ import {
 import Spinner from "../ui/Spinner";
 import Avatar from "../ui/Avatar";
 import { showError } from "../ui/Toast";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
   const queryClient = useQueryClient();
@@ -84,9 +85,7 @@ const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
       setDraft("");
     },
     onError: (error) => {
-      showError(
-        error?.response?.data?.message || "Failed to send your message.",
-      );
+      showError(getApiErrorMessage(error, "Failed to send your message."));
     },
   });
 

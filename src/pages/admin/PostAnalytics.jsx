@@ -28,6 +28,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the SAME shared gradient icon + title header already
 // used on every other admin screen,
 import useBreadcrumb from "../../hooks/useBreadcrumb";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // useBreadcrumb — publishes this post's number into the shared,
 // globally-mounted <Breadcrumbs /> component (rendered once inside
 // AdminLayout), swapping in "Post #{id}" for the config's static
@@ -76,7 +77,8 @@ const PostAnalytics = () => {
       showSuccess("Post duplicated as a new draft.");
       navigate(ROUTES.ADMIN_SOCIAL_POSTS);
     },
-    onError: () => showError("Failed to duplicate post."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to duplicate post.")),
   });
 
   const isLoading = isPostLoading || isAnalyticsLoading;

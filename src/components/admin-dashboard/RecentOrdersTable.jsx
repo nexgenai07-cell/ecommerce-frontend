@@ -130,8 +130,21 @@ const RecentOrdersTable = () => {
       // two cards in this grid row always match, regardless of how
       // many orders or low-stock items either one has to show.
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-gray-900">Recent Orders</h2>
+        {/* "View All Orders" sits at the top right of the card, in line
+            with the title, so the table below can use ALL of the card's
+            remaining height instead of sharing it with a button. */}
+        {/* Outlined pill: green border + soft tint at rest, fills with the
+            brand color (and a gentle glow) on hover. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(ROUTES.ADMIN_ORDERS)}
+          className="shrink-0 rounded-full px-4 font-semibold bg-primary-50/60 border-primary/50 shadow-sm hover:bg-primary hover:text-white hover:border-primary hover:shadow-md hover:shadow-primary/25"
+        >
+          View All Orders
+        </Button>
       </div>
 
       <DataTable
@@ -148,23 +161,8 @@ const RecentOrdersTable = () => {
         // This widget only ever shows a fixed 5-order preview, never a
         // real page the admin can move through — the footer strip
         // DataTable would otherwise render has nothing functional to do
-        // here and only leaves unused space above the "View All Orders"
-        // button below.
+        // here and would only take away room from the order rows.
       />
-
-      <div className="flex-1 flex items-center justify-center">
-        {/* flex-1 + items-center: the table above only takes the height its
-            5 rows actually need, so this button sits vertically centered in
-            whatever space is left over inside the fixed-height card, rather
-            than hugging the top edge of that leftover space. */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(ROUTES.ADMIN_ORDERS)}
-        >
-          View All Orders
-        </Button>
-      </div>
     </div>
   );
 };

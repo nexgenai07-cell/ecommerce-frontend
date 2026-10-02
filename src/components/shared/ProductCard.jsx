@@ -16,6 +16,7 @@ import useFlyToIcon from "../../hooks/useFlyToIcon";
 import { showSuccess, showError } from "../ui/Toast";
 import { addToCart } from "../../api/cart.api";
 import { addToWishlist, removeFromWishlist } from "../../api/wishlist.api";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Local placeholder image shown whenever a product has no image,
 // or its image URL fails to load (broken link, expired signed URL, etc.)
@@ -191,11 +192,11 @@ const ProductCard = ({
       // tax/discount recalculation, etc.) now that the request has landed.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
-    onError: (_err, _vars, context) => {
+    onError: (error, _vars, context) => {
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
-      showError("Failed to add to cart");
+      showError(getApiErrorMessage(error, "Failed to add to cart"));
     },
   });
 
@@ -222,7 +223,8 @@ const ProductCard = ({
       }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
-    onError: () => showError("Failed to update wishlist"),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to update wishlist")),
   });
 
   // Whether this card is being rendered in "controlled" mode (Wishlist page)

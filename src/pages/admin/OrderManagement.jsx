@@ -39,6 +39,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // admin screen (Products, Categories, Dashboard, etc).
 import OrderStatsCards from "../../components/admin-orders/OrderStatsCards";
 import OrderFilters from "../../components/admin-orders/OrderFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // --------------------------------------------------
 // STATUS TABS — one pill per real ORDER_STATUS value, plus "All".
@@ -234,7 +235,8 @@ const OrderManagement = () => {
   // range), show the reason it gives instead of only the generic table
   // error.
   useEffect(() => {
-    const message = listError?.response?.data?.error;
+    if (!listError?.response) return;
+    const message = getApiErrorMessage(listError, "");
     if (message) showError(message);
   }, [listError]);
 
@@ -356,8 +358,7 @@ const OrderManagement = () => {
       setConfirmBulkStatusOpen(false);
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
-          "Failed to update the selected orders.",
+        getApiErrorMessage(error, "Failed to update the selected orders."),
       );
     } finally {
       setIsBulkUpdating(false);

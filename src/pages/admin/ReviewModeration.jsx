@@ -30,6 +30,7 @@ import Pagination from "../../components/ui/Pagination";
 import EmptyState from "../../components/ui/EmptyState";
 import ErrorState from "../../components/ui/ErrorState";
 import ConfirmModal from "../../components/ui/ConfirmModal";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Number of reviews per page, matching the server's default page size.
 const PAGE_SIZE = 10;
@@ -61,19 +62,6 @@ const EMPTY_STATE_COPY = {
     title: "No reviews yet",
     description: "Customer reviews will appear here once they are submitted.",
   },
-};
-
-// Reads the most useful message out of a failed moderation request.
-const getErrorMessage = (error, fallbackMessage) => {
-  const data = error?.response?.data;
-  if (typeof data?.error === "string") return data.error;
-
-  const actionError = data?.action;
-  if (Array.isArray(actionError) && typeof actionError[0] === "string") {
-    return actionError[0];
-  }
-
-  return fallbackMessage;
 };
 
 const ReviewModeration = () => {
@@ -127,7 +115,7 @@ const ReviewModeration = () => {
       );
     },
     onError: (error, { review }) => {
-      showError(getErrorMessage(error, "Failed to update the review."));
+      showError(getApiErrorMessage(error, "Failed to update the review."));
 
       // The review no longer exists (for example the customer deleted
       // it), so the closing refresh below removes it from the list.

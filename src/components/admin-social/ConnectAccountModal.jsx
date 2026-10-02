@@ -22,6 +22,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ConnectAccountModal = ({ isOpen, onClose, platform, platformLabel }) => {
   const queryClient = useQueryClient();
@@ -83,7 +84,7 @@ const ConnectAccountModal = ({ isOpen, onClose, platform, platformLabel }) => {
       setSubmitAttempted(false);
     },
     onError: (error) =>
-      showError(error?.response?.data?.message || "Failed to connect account."),
+      showError(getApiErrorMessage(error, "Failed to connect account.")),
   });
 
   const handleConnect = () => {

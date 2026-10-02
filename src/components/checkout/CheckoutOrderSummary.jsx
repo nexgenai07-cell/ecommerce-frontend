@@ -20,6 +20,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import formatPrice from "../../utils/formatPrice";
 // Finds order lines whose quantity is higher than the stock available right now
 import getCartStockIssues from "../../utils/getCartStockIssues";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Main functional component for the Checkout Order Summary sidebar
 // Props:
@@ -142,12 +143,8 @@ const CheckoutOrderSummary = ({
     },
     // Runs if the coupon application API call fails
     onError: (error) => {
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Invalid coupon code.",
-        // Show the specific error message from the server if available, otherwise show a generic fallback message
-      );
+      // Show the specific error message from the server if available, otherwise a generic fallback message
+      showError(getApiErrorMessage(error, "Invalid coupon code."));
     },
     // Refetches in the background afterwards purely to reconcile with the
     // server; the cache is already correct by the time this runs. Not
@@ -215,7 +212,7 @@ const CheckoutOrderSummary = ({
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
-      showError("Failed to remove coupon.");
+      showError(getApiErrorMessage(error, "Failed to remove coupon."));
     },
 
     // Refetches in the background afterwards so the cache matches the

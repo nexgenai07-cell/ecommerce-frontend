@@ -100,6 +100,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // PageHeader — the shared gradient icon + title header used on every
 // admin screen (Orders, Products, Categories, Dashboard...).
 import ReturnFilters from "../../components/admin-returns/ReturnFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // ReturnFilters — the toolbar above the table (status filter, search,
 // Filters toggle, Export, Date Range/Sort chips). The sort option list
 // lives inside that file.
@@ -208,7 +209,7 @@ const ReturnDetailModal = ({
       setMessageBody("");
     },
     onError: (error) =>
-      showError(error?.response?.data?.message || "Failed to send message."),
+      showError(getApiErrorMessage(error, "Failed to send message.")),
   });
 
   // canSendMessage — guards against sending an empty message, and against
@@ -667,7 +668,8 @@ const ReturnsManagement = () => {
   // range), show the reason it gives instead of only the generic table
   // error.
   useEffect(() => {
-    const message = listError?.response?.data?.error;
+    if (!listError?.response) return;
+    const message = getApiErrorMessage(listError, "");
     if (message) showError(message);
   }, [listError]);
 
@@ -784,11 +786,7 @@ const ReturnsManagement = () => {
     onError: async (error) => {
       // The backend answers an invalid decision with an "error" message —
       // for example when another admin already decided this return.
-      showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to update return.",
-      );
+      showError(getApiErrorMessage(error, "Failed to update return."));
 
       const failedReturnId = decisionTarget?.returnItem?.id;
       setDecisionTarget(null);
@@ -874,8 +872,7 @@ const ReturnsManagement = () => {
       setBulkAction(null);
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
-          "Failed to update the selected returns.",
+        getApiErrorMessage(error, "Failed to update the selected returns."),
       );
     } finally {
       setIsBulkDeciding(false);

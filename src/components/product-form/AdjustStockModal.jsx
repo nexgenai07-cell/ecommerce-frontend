@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { adjustProductStock } from "../../api/products.api";
-import { QUERY_KEYS } from "../../constants/queryKeys";
+import invalidateProductQueries from "../../utils/invalidateProductQueries";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const REASON_OPTIONS = [
   { value: "restock", label: "Restock" },
@@ -34,23 +35,10 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
       const newStock = response?.data?.total_stock ?? response?.data?.stock;
       showSuccess(`Stock updated. New total quantity: ${newStock}.`);
 
-      // Refresh every place that displays stock, so the admin sees the
-      // real, authoritative number everywhere immediately.
-      // QUERY_KEYS.PRODUCTS ("products") is the storefront's cache key.
-      // The Admin Products list (ProductList.jsx) reads from a separate
-      // cache key ("adminProducts"), so it must be invalidated here too —
-      // otherwise the new stock count would not appear in the admin list
-      // until the page is manually refreshed.
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
-      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.PRODUCT_DETAIL(productId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.LOW_STOCK_PRODUCTS,
-      });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.INVENTORY_ALERTS });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_SUMMARY });
+      // The stock change is stored by the server as soon as it is applied, so
+      // it counts as a product update. The shared helper refreshes the same
+      // views that saving the product form refreshes.
+      invalidateProductQueries(queryClient, productId);
 
       resetAndClose();
     },
@@ -59,9 +47,9 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
       // 0. Current stock: 12, requested change: -20") — don't replace
       // it with a generic one, and don't close the modal so the admin
       // can correct the number.
-      const backendMessage =
-        error?.response?.data?.error || error?.response?.data?.message;
-      showError(backendMessage || "Failed to adjust stock. Please try again.");
+      showError(
+        getApiErrorMessage(error, "Failed to adjust stock. Please try again."),
+      );
     },
   });
 

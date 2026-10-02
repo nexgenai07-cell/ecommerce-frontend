@@ -10,6 +10,7 @@ import AuthLayout from "../../components/layouts/AuthLayout";
 import Button from "../../components/ui/Button";
 import { verifyEmail } from "../../api/auth.api";
 import { ROUTES } from "../../constants/routes";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
@@ -124,8 +125,10 @@ const VerifyEmail = () => {
           Verification Failed
         </h1>
         <p className="text-sm text-gray-500">
-          {verifyQuery.error?.response?.data?.error ||
-            "This link has expired or has already been used. Please request a new verification email from your Profile Settings page."}
+          {getApiErrorMessage(
+            verifyQuery.error,
+            "This link has expired or has already been used. Please request a new verification email from your Profile Settings page.",
+          )}
         </p>
       </>
     );

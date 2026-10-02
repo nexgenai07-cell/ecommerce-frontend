@@ -34,6 +34,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import Button from "../ui/Button";
 // Import a utility function "cn" used to conditionally join/merge Tailwind class names
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Validation schema
 // Define a Zod object schema describing the validation rules for every field in the complaint form
@@ -193,9 +194,10 @@ const ComplaintForm = ({ onSuccess }) => {
       // Show an error toast, preferring the specific message returned by the API, falling back to a generic message
       // The backend reports refusals (invalid, cancelled or returned order) under an "error" key
       showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to submit complaint. Please try again.",
+        ),
       );
     },
   });

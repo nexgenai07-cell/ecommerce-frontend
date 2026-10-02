@@ -11,6 +11,7 @@ import { BsMicFill, BsMicMuteFill } from "react-icons/bs";
 import { uploadChatFile } from "../../api/chat.api";
 import { showError } from "../ui/Toast";
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB — mirrors the backend's own upload limit
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp"]; // mirrors the backend's allowed types
@@ -57,8 +58,10 @@ const ChatInput = ({
       // Surfaces the backend's specific validation message (e.g. file
       // too large / wrong type) if available, otherwise a generic one.
       showError(
-        error?.response?.data?.error ||
+        getApiErrorMessage(
+          error,
           "Couldn't attach that file. Please try another one.",
+        ),
       );
     },
   });

@@ -20,6 +20,8 @@ import {
 import { exportReport } from "../../api/analytics.api";
 // Normalises plain-array and paginated responses into one array
 import extractListData from "../../utils/extractListData";
+// Query options that keep the audit views up to date without a refresh
+import { AUDIT_LOG_REFRESH_OPTIONS } from "../../constants/auditLogRefresh";
 // Formats an ISO date string for display
 import formatDate from "../../utils/formatDate";
 // Delays a fast-changing value so it is not used on every keystroke
@@ -39,12 +41,20 @@ import AuditLogDetailModal from "../../components/admin-audit/AuditLogDetailModa
 // Toolbar above the table: search, filters toggle, export, entity and user chips
 import AuditLogFilters from "../../components/admin-audit/AuditLogFilters";
 
-// Badge colour for each action type
+// Badge colour for each kind of action. A stock adjustment is a kind of
+// update, so it shares the update colour.
 const ACTION_BADGE_VARIANT = {
   create: "success",
   update: "info",
+  adjust: "info",
   delete: "danger",
 };
+
+// The backend sends specific actions such as "update_product" or
+// "adjust_stock", so the colour is chosen from the leading word of the
+// action. Any other action gets the neutral gray badge.
+const getActionBadgeVariant = (action = "") =>
+  ACTION_BADGE_VARIANT[String(action).toLowerCase().split("_")[0]] || "gray";
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -147,6 +157,7 @@ const AuditLogs = () => {
         },
         signal,
       ),
+    ...AUDIT_LOG_REFRESH_OPTIONS,
   });
 
   // The rows for the current page of the table
@@ -203,16 +214,19 @@ const AuditLogs = () => {
   const { data: createResponse } = useQuery({
     queryKey: ["auditLogs", "count", "create"],
     queryFn: ({ signal }) => getAuditLogs({ action: "create" }, signal),
+    ...AUDIT_LOG_REFRESH_OPTIONS,
   });
   // Number of logged update actions
   const { data: updateResponse } = useQuery({
     queryKey: ["auditLogs", "count", "update"],
     queryFn: ({ signal }) => getAuditLogs({ action: "update" }, signal),
+    ...AUDIT_LOG_REFRESH_OPTIONS,
   });
   // Number of logged delete actions
   const { data: deleteResponse } = useQuery({
     queryKey: ["auditLogs", "count", "delete"],
     queryFn: ({ signal }) => getAuditLogs({ action: "delete" }, signal),
+    ...AUDIT_LOG_REFRESH_OPTIONS,
   });
 
   // Reads the total count from a paginated response, with a safe fallback
@@ -288,7 +302,7 @@ const AuditLogs = () => {
       render: (row) => (
         <Badge
           label={row.action}
-          variant={ACTION_BADGE_VARIANT[row.action] || "gray"}
+          variant={getActionBadgeVariant(row.action)}
           size="sm"
           rounded
         />

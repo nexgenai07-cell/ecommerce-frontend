@@ -22,6 +22,7 @@ import {
   PASSWORD_STRENGTH,
   PASSWORD_REQUIREMENTS,
 } from "../../utils/passwordStrength";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const resetPasswordSchema = z
   .object({
@@ -91,11 +92,10 @@ const ResetPassword = () => {
     },
 
     onError: (error) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        error?.response?.data?.token?.[0] ||
-        "Reset link is invalid or expired. Please request a new one.";
+      const message = getApiErrorMessage(
+        error,
+        "Reset link is invalid or expired. Please request a new one.",
+      );
       showError(message);
     },
   });

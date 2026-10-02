@@ -22,6 +22,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
 import { showError } from "../ui/Toast";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // orderNumber — required, identifies which order this proof belongs to.
 // onUploaded(responseData) — called with the FULL response body right
@@ -85,10 +86,10 @@ const QrProofUploadForm = ({ orderNumber, onUploaded, onWindowExpired }) => {
       // "error" key (e.g. "Maximum re-upload attempts (3) reached for
       // this order..."); "message" is checked as a fallback so every
       // error message from this endpoint stays visible to the customer.
-      const message =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        "Failed to upload payment proof. Please try again.";
+      const message = getApiErrorMessage(
+        error,
+        "Failed to upload payment proof. Please try again.",
+      );
       showError(message);
 
       // The upload window (plus its one-time extension) had already

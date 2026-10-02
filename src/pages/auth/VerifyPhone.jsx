@@ -11,6 +11,7 @@ import Button from "../../components/ui/Button";
 import { verifyPhone } from "../../api/auth.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // VerifyPhone — the phone-number counterpart to VerifyEmail.jsx, reached
 // from the link sendPhoneVerification() emails to the account's own
@@ -131,8 +132,10 @@ const VerifyPhone = () => {
           Verification Failed
         </h1>
         <p className="text-sm text-gray-500">
-          {verifyQuery.error?.response?.data?.error ||
-            "This link has expired or has already been used. Please return to Checkout and request a new verification link."}
+          {getApiErrorMessage(
+            verifyQuery.error,
+            "This link has expired or has already been used. Please return to Checkout and request a new verification link.",
+          )}
         </p>
       </>
     );

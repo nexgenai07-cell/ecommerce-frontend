@@ -49,6 +49,7 @@ import Modal from "../ui/Modal";
 import ConfirmModal from "../ui/ConfirmModal";
 import Pagination from "../ui/Pagination";
 import ReviewPicturePicker from "./ReviewPicturePicker";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Fixed page size, matching the backend's default page size for this
 // list (the same assumption every other simple paginated list in this
@@ -58,25 +59,6 @@ const PAGE_SIZE = 10;
 // Star ratings run 5 -> 1 for the breakdown bar chart, matching the
 // order a customer naturally scans a rating summary in (best first).
 const BREAKDOWN_ORDER = ["5", "4", "3", "2", "1"];
-
-// Reads the most useful error text out of a failed review request. The
-// server answers with { error: "..." } for most failures and with
-// field-keyed arrays (for example { rating: ["..."] }) for validation
-// failures; both shapes are supported.
-const getErrorMessage = (error, fallbackMessage) => {
-  const data = error?.response?.data;
-
-  if (typeof data?.error === "string") return data.error;
-
-  if (data && typeof data === "object") {
-    for (const value of Object.values(data)) {
-      if (Array.isArray(value) && typeof value[0] === "string") return value[0];
-      if (typeof value === "string") return value;
-    }
-  }
-
-  return fallbackMessage;
-};
 
 // Small, self-contained clickable 1-5 star input, used only inside the
 // Write / Edit Review form below. RatingStars (imported above) is
@@ -266,7 +248,7 @@ const ProductReviews = ({ productId }) => {
       setPage(1);
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to submit your review.");
+      const message = getApiErrorMessage(error, "Failed to submit your review.");
       const status = error?.response?.status;
 
       // The product has not been received by this customer yet.
@@ -327,7 +309,7 @@ const ProductReviews = ({ productId }) => {
       refreshReviews();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to update your review.");
+      const message = getApiErrorMessage(error, "Failed to update your review.");
       const status = error?.response?.status;
 
       // The image itself was rejected. Nothing was saved, so the form
@@ -359,7 +341,7 @@ const ProductReviews = ({ productId }) => {
       refreshReviews();
     },
     onError: (error) => {
-      showError(getErrorMessage(error, "Failed to delete your review."));
+      showError(getApiErrorMessage(error, "Failed to delete your review."));
       setDeletingReview(null);
     },
   });

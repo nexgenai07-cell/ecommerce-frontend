@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getAuditLogs } from "../../api/admin.api";
 
 import extractListData from "../../utils/extractListData";
+import { AUDIT_LOG_REFRESH_OPTIONS } from "../../constants/auditLogRefresh";
 import formatRelativeTime from "../../utils/formatRelativeTime";
 import Spinner from "../ui/Spinner";
 import EmptyState from "../ui/EmptyState";
@@ -69,15 +70,19 @@ const describeLog = (log) => {
   return { userLabel, action, detail };
 };
 
+// How many of the most recent log entries the dashboard widget shows
+const MAX_VISIBLE_LOGS = 4;
+
 const ActivityLogWidget = () => {
   const { data: logsResponse, isLoading } = useQuery({
     queryKey: ["adminDashboard", "auditLogs"],
     queryFn: ({ signal }) => getAuditLogs(undefined, signal),
-    staleTime: 1000 * 60 * 2,
+    ...AUDIT_LOG_REFRESH_OPTIONS,
   });
 
-  const logs = extractListData(logsResponse).slice(0, 6);
-  // Dashboard preview only — the full log lives on ROUTES.ADMIN_AUDIT_LOGS
+  const logs = extractListData(logsResponse).slice(0, MAX_VISIBLE_LOGS);
+  // Dashboard preview only — the 4 most recent entries; the full log
+  // lives on ROUTES.ADMIN_AUDIT_LOGS
 
   return (
     <div

@@ -15,6 +15,7 @@ import Button from "../../components/ui/Button";
 import { forgotPassword } from "../../api/auth.api";
 import { showError } from "../../components/ui/Toast";
 import { ROUTES } from "../../constants/routes";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const forgotPasswordSchema = z.object({
   email: z
@@ -58,10 +59,10 @@ const ForgotPassword = () => {
     },
 
     onError: (error) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        "Something went wrong. Please try again.";
+      const message = getApiErrorMessage(
+        error,
+        "Something went wrong. Please try again.",
+      );
       showError(message);
     },
   });

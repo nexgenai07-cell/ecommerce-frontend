@@ -30,6 +30,7 @@ import PageHeader from "../../components/shared/PageHeader";
 // header row so it finally matches the rest of the panel.
 import PostCard from "../../components/admin-social/PostCard";
 import PostFilters from "../../components/admin-social/PostFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // PostFilters — the shared-style toolbar above the grid (status tabs,
 // search, Filters toggle, Platform chip). The platform option list
 // itself now lives inside that file.
@@ -137,7 +138,8 @@ const PostsList = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SOCIAL_POSTS });
       setPostToDelete(null);
     },
-    onError: () => showError("Failed to delete post."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to delete post.")),
   });
 
   const handleConfirmDelete = async () => {

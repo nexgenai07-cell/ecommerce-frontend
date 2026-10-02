@@ -18,6 +18,7 @@ import Avatar from "../ui/Avatar";
 import ChangeEmailModal from "./ChangeEmailModal";
 import PhoneVerifyModal from "./PhoneVerifyModal";
 import CameraCaptureModal from "./CameraCaptureModal";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const personalInfoSchema = z.object({
   name: z
@@ -216,9 +217,10 @@ const PersonalInfoForm = ({ user }) => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to update profile. Please try again.",
+        ),
       );
     },
   });
@@ -266,8 +268,10 @@ const PersonalInfoForm = ({ user }) => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to send verification email. Please try again.",
+        ),
       );
     },
   });

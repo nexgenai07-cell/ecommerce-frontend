@@ -19,6 +19,7 @@ import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 // Import the real Delete Account API function (API 11 — v2 backend doc)
 import { deleteMyAccount } from "../../api/auth.api";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const DangerZone = () => {
   const navigate = useNavigate();
@@ -53,12 +54,18 @@ const DangerZone = () => {
     },
     onError: (error) => {
       // Wrong password — backend returns 400 { error: "Incorrect password." }
-      const message = error?.response?.data?.error;
-      if (error?.response?.status === 400 && message) {
-        setPasswordError(message);
+      const passwordMessage =
+        error?.response?.status === 400 ? getApiErrorMessage(error, "") : "";
+      if (passwordMessage) {
+        setPasswordError(passwordMessage);
         return;
       }
-      showError("Failed to delete account. Please contact support.");
+      showError(
+        getApiErrorMessage(
+          error,
+          "Failed to delete account. Please contact support.",
+        ),
+      );
       closeModal();
     },
   });

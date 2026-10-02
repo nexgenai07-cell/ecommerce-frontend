@@ -90,6 +90,7 @@ import CheckoutOrderSummary from "../../components/checkout/CheckoutOrderSummary
 import EmptyState from "../../components/ui/EmptyState";
 // Formats a raw number into a readable "Rs. X,XXX" string
 import formatPrice from "../../utils/formatPrice";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // =============================================
 // ZOD VALIDATION SCHEMA
@@ -718,7 +719,10 @@ const Checkout = () => {
       }
 
       showError(
-        "Failed to initialize payment. Please try placing your order again.",
+        getApiErrorMessage(
+          error,
+          "Failed to initialize payment. Please try placing your order again.",
+        ),
       );
     },
   });
@@ -855,8 +859,10 @@ const Checkout = () => {
       }
 
       showError(
-        error?.response?.data?.error ||
+        getApiErrorMessage(
+          error,
           "Failed to send the Order Confirmation OTP. Please try again.",
+        ),
       );
     },
   });
@@ -878,7 +884,7 @@ const Checkout = () => {
     },
 
     onError: (error) => {
-      setOtpError(error?.response?.data?.error || "Invalid or expired OTP.");
+      setOtpError(getApiErrorMessage(error, "Invalid or expired OTP."));
     },
   });
 
@@ -1018,17 +1024,13 @@ const Checkout = () => {
       // the backend ever does send it, the generic message/toast logic
       // below still surfaces its "error" text to the customer.
 
-      // Extracting the most specific error message available from the API
-      // response, with fallbacks. The documented error shape for this
-      // endpoint (otp_required, Buy Now, and coupon_code failures alike)
-      // is { "error": "..." } — checked first — with message/detail kept
-      // as fallbacks in case a different error path on the backend still
-      // uses one of those instead.
-      const message =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        "Failed to place order. Please try again.";
+      // The most specific message the backend sent. This covers a plain
+      // { "error": "..." } body as well as validation failures such as an
+      // invalid phone number, which arrive as a list or keyed by field name.
+      const message = getApiErrorMessage(
+        error,
+        "Failed to place order. Please try again.",
+      );
       // Displaying the error message to the user via toast notification
       showError(message);
 
@@ -1194,8 +1196,7 @@ const Checkout = () => {
 
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
-          "Failed to cancel order. Please try again.",
+        getApiErrorMessage(error, "Failed to cancel order. Please try again."),
       );
     },
   });

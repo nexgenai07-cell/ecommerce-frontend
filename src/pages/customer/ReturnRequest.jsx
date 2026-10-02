@@ -41,6 +41,7 @@ import ReturnDetailsStep from "../../components/return-request/ReturnDetailsStep
 import SuccessModal from "../../components/ui/SuccessModal";
 // Import the history table listing the customer's previous return requests — renders below the form
 import PreviousReturns from "../../components/return-request/PreviousReturns";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Main functional component for the Return Request page
 const ReturnRequest = () => {
@@ -122,9 +123,10 @@ const ReturnRequest = () => {
       // window has passed. The orders are refreshed so the dropdown no
       // longer offers an order that cannot be returned.
       showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to submit return request. Please try again.",
+        ),
       );
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_ORDERS_FULL });

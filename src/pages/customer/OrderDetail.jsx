@@ -34,6 +34,7 @@ import Modal from "../../components/ui/Modal"; // Base modal used to build the c
 import Select from "../../components/ui/Select"; // Optional cancellation reason dropdown
 import Textarea from "../../components/ui/Textarea"; // Free-text field shown when "Other" is picked as the reason
 import Button from "../../components/ui/Button"; // Cancel dialog's own action buttons
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // How long (ms) we're willing to keep polling for the Stripe webhook to land
 // before giving up and just showing the order in whatever state it's in.
@@ -234,9 +235,7 @@ const OrderDetail = () => {
       // longer be cancelled."); "message" is checked as a fallback so
       // either response shape is handled.
       showError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Failed to cancel order. Please try again.",
+        getApiErrorMessage(error, "Failed to cancel order. Please try again."),
       );
     },
   });

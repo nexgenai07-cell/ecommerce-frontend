@@ -30,6 +30,7 @@ import {
   PASSWORD_REQUIREMENTS,
   generateStrongPassword,
 } from "../../utils/passwordStrength";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // =============================================
 // ZOD VALIDATION SCHEMA
@@ -288,11 +289,10 @@ const Register = () => {
       // Every other kind of registration failure (validation errors on
       // other fields, network issues, server errors, etc.) keeps the
       // existing toast behavior, unchanged.
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.email?.[0] ||
-        error?.response?.data?.detail ||
-        "Registration failed. Please try again.";
+      const message = getApiErrorMessage(
+        error,
+        "Registration failed. Please try again.",
+      );
       showError(message);
     },
   });
@@ -312,8 +312,10 @@ const Register = () => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to resend verification email. Please try again.",
+        ),
       );
     },
   });

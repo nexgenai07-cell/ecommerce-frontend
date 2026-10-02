@@ -12,6 +12,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import { Spinner } from "../ui/Spinner";
 // Import a utility function "cn" used to conditionally join/merge Tailwind class names
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Filter tabs config
 // Export a static array defining each filter tab's internal ID and display label, reusable by parent components if needed
@@ -51,8 +52,13 @@ const NotificationFilters = ({
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
     },
     // Callback executed if the bulk mark-as-read call fails
-    onError: () => {
-      showError("Couldn't mark all notifications as read. Please try again.");
+    onError: (error) => {
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't mark all notifications as read. Please try again.",
+        ),
+      );
     },
   });
 

@@ -25,6 +25,7 @@ import { showSuccess } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Messages that mean the pending change can no longer be confirmed and a
 // new code has to be requested from the form.
@@ -63,9 +64,10 @@ const ChangePasswordOtpModal = ({
     },
 
     onError: (error) => {
-      const message =
-        error?.response?.data?.error ||
-        "Failed to confirm the code. Please try again.";
+      const message = getApiErrorMessage(
+        error,
+        "Failed to confirm the code. Please try again.",
+      );
 
       if (RESTART_MESSAGE_PATTERN.test(message)) {
         resetState();

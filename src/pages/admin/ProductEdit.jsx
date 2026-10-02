@@ -48,7 +48,7 @@ import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // Toast helpers for success and error feedback
 import { showSuccess, showError } from "../../components/ui/Toast";
 // Pulls the backend's own error text out of a failed request
-import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import getApiErrorMessage, { getApiFieldError } from "../../utils/getApiErrorMessage";
 // Shared UI building blocks
 import Button from "../../components/ui/Button";
 import Spinner from "../../components/ui/Spinner";
@@ -165,16 +165,6 @@ const productSchema = z
 // error was not about that field, so the caller can fall back to a
 // generic error message instead. The Add Product page reads errors the
 // same way, so both pages report field errors identically.
-const extractFieldError = (error, fieldName) => {
-  // The error value the backend attached to this field
-  const fieldError = error?.response?.data?.[fieldName];
-  // A list of messages: use the first one
-  if (Array.isArray(fieldError)) return fieldError[0];
-  // A single message
-  if (typeof fieldError === "string") return fieldError;
-  // The error was not about this field
-  return null;
-};
 
 const ProductEdit = () => {
   // The product id taken from the route
@@ -493,8 +483,8 @@ const ProductEdit = () => {
     } catch (error) {
       // A rejected SKU or purchase price is shown right under its own
       // field (not just in a toast) and the admin stays on the page.
-      const skuError = extractFieldError(error, "sku");
-      const purchasePriceError = extractFieldError(error, "purchase_price");
+      const skuError = getApiFieldError(error, "sku");
+      const purchasePriceError = getApiFieldError(error, "purchase_price");
       if (skuError) {
         setError("sku", { type: "manual", message: skuError });
         showError(skuError);

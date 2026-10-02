@@ -35,6 +35,7 @@ import Avatar from "../ui/Avatar";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
 import Spinner from "../ui/Spinner";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ChatPanel = ({ phoneNumber, customerName }) => {
   const queryClient = useQueryClient();
@@ -70,7 +71,8 @@ const ChatPanel = ({ phoneNumber, customerName }) => {
         queryKey: ["whatsappBotLogs", "thread", phoneNumber],
       });
     },
-    onError: () => showError("Failed to send message."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to send message.")),
   });
 
   // --------------------------------------------------

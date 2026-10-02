@@ -28,6 +28,7 @@ import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
   // "request" -> step 1 (password + new email), "confirm" -> step 2 (OTP)
@@ -70,8 +71,10 @@ const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
       // (e.g. "Incorrect password.", "That is already your current
       // email address.", "A user with this email already exists.")
       showError(
-        error?.response?.data?.error ||
+        getApiErrorMessage(
+          error,
           "Failed to start the email change. Please try again.",
+        ),
       );
     },
   });
@@ -98,8 +101,10 @@ const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
       // (e.g. "Invalid code.", "Code has expired. Please request a
       // new one.", "That email is no longer available.")
       showError(
-        error?.response?.data?.error ||
+        getApiErrorMessage(
+          error,
           "Failed to confirm the code. Please try again.",
+        ),
       );
     },
   });

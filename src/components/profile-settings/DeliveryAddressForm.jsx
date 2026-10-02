@@ -16,6 +16,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import { updateMyProfile } from "../../api/auth.api";
 // Import toast notification helper functions for showing success and error messages
 import { showSuccess, showError } from "../ui/Toast";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Validation schema
 // Define a zod object schema describing the validation rules for each address field
@@ -143,8 +144,8 @@ const DeliveryAddressForm = ({ user }) => {
 
     // Callback executed when the mutation fails
     onError: (error) => {
-      // Show an error toast, using the server's error message if available, otherwise a generic fallback message
-      showError(error?.response?.data?.message || "Failed to update address.");
+      // Show the server's own explanation, with a generic fallback
+      showError(getApiErrorMessage(error, "Failed to update address."));
     },
   });
 

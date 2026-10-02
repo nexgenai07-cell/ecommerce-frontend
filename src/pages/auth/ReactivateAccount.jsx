@@ -24,6 +24,7 @@ import {
 } from "../../api/auth.api";
 import { showError } from "../../components/ui/Toast";
 import { ROUTES } from "../../constants/routes";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Same validation shape as ForgotPassword's schema — just an email field
 const requestSchema = z.object({
@@ -122,10 +123,10 @@ const ReactivateAccount = () => {
       // everything else (including "no such account") comes back as a
       // generic 200 success, by design, so there's little for this
       // branch to normally hit besides a real network/server failure.
-      const message =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        "Something went wrong. Please try again.";
+      const message = getApiErrorMessage(
+        error,
+        "Something went wrong. Please try again.",
+      );
       showError(message);
     },
   });
@@ -175,8 +176,10 @@ const ReactivateAccount = () => {
                 Reactivation Failed
               </h1>
               <p className="text-sm text-gray-500 leading-relaxed">
-                {confirmQuery.error?.response?.data?.error ||
-                  "This reactivation link is invalid or has expired. Please request a new one."}
+                {getApiErrorMessage(
+                  confirmQuery.error,
+                  "This reactivation link is invalid or has expired. Please request a new one.",
+                )}
               </p>
             </>
           )}

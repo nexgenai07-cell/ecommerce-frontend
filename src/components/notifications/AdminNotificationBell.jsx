@@ -36,6 +36,7 @@ import Popover from "../ui/Popover";
 import { Spinner } from "../ui/Spinner";
 import { showError, showSuccess } from "../ui/Toast";
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // How many of the admin's most recent notifications the dropdown
 // preview shows. The full, paginated history lives on the dedicated
@@ -104,8 +105,13 @@ const AdminNotificationBell = () => {
       // Notifications page's query both refresh from this one call.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
     },
-    onError: () => {
-      showError("Couldn't mark this notification as read. Please try again.");
+    onError: (error) => {
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't mark this notification as read. Please try again.",
+        ),
+      );
     },
   });
 
@@ -118,8 +124,13 @@ const AdminNotificationBell = () => {
       showSuccess("All notifications marked as read");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
     },
-    onError: () => {
-      showError("Couldn't mark all notifications as read. Please try again.");
+    onError: (error) => {
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't mark all notifications as read. Please try again.",
+        ),
+      );
     },
   });
 

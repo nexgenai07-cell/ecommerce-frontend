@@ -7,14 +7,90 @@ import cn from "../../utils/cn";
 import Pagination from "./Pagination";
 // Pagination component — renders page number buttons and results count below the table
 
-import { SkeletonTable } from "./Skeleton";
-// SkeletonTable — renders animated placeholder rows while data is loading
+import Skeleton from "./Skeleton";
+// Skeleton — base placeholder block used to build the loading rows
 
 import EmptyState from "./EmptyState";
 // EmptyState — renders the "No Results Found" illustration when data array is empty
 
 import Checkbox from "./Checkbox";
 // Checkbox component — used for both the "select all" header checkbox and per-row checkboxes
+
+// ------------------------------------------------------------
+// LOADING SKELETON HELPERS
+// While data loads, the table keeps its REAL header and renders
+// placeholder rows built from the same <tr>/<td> classes as the real
+// rows (36px high, zebra striping, same cell padding), so nothing jumps
+// when the data arrives. Each cell gets a placeholder shaped like what
+// the real cell shows:
+//   text   - one text line (default)
+//   badge  - pill (status / category / type ...)
+//   media  - small rounded image + two text lines (product)
+//   avatar - round avatar + two text lines (customer)
+//   image  - small rounded thumbnail only
+//   icon   - one icon button      icons - two icon buttons
+// A column can force a shape with `skeleton: "<shape>"`; otherwise the
+// shape is guessed from the column key.
+// ------------------------------------------------------------
+const SKELETON_BADGE_KEYS =
+  /^(status|payment_status|stockHealth|visibility|is_active|is_admin|priority|category|type|action)$/;
+const SKELETON_TEXT_WIDTHS = ["w-16", "w-20", "w-12", "w-24", "w-14"];
+
+const getSkeletonShape = (col) => {
+  if (col.skeleton) return col.skeleton;
+  if (col.key === "actions") return "icon";
+  if (col.key === "product") return "media";
+  if (col.key === "image" || col.key === "screenshot") return "image";
+  if (SKELETON_BADGE_KEYS.test(col.key)) return "badge";
+  return "text";
+};
+
+const renderSkeletonCell = (col, rowIndex, colIndex) => {
+  switch (getSkeletonShape(col)) {
+    case "badge":
+      return <Skeleton className="h-5 w-16 rounded-full" />;
+    case "media":
+    case "avatar":
+      return (
+        <div className="flex items-center gap-2">
+          <Skeleton
+            className={cn(
+              "w-7 h-7 shrink-0",
+              getSkeletonShape(col) === "avatar"
+                ? "rounded-full"
+                : "rounded-lg",
+            )}
+          />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-2.5 w-24" />
+            <Skeleton className="h-2 w-16" />
+          </div>
+        </div>
+      );
+    case "image":
+      return <Skeleton className="w-7 h-7 rounded-lg" />;
+    case "icon":
+      return <Skeleton className="w-7 h-7 rounded-lg" />;
+    case "icons":
+      return (
+        <div className="flex items-center gap-1">
+          <Skeleton className="w-7 h-7 rounded-lg" />
+          <Skeleton className="w-7 h-7 rounded-lg" />
+        </div>
+      );
+    default:
+      return (
+        <Skeleton
+          className={cn(
+            "h-3",
+            SKELETON_TEXT_WIDTHS[
+              (rowIndex + colIndex) % SKELETON_TEXT_WIDTHS.length
+            ],
+          )}
+        />
+      );
+  }
+};
 
 const DataTable = ({
   // --- Data and structure ---
@@ -48,7 +124,8 @@ const DataTable = ({
   onSelectionChange, // Called with the updated array of selected row ids whenever selection changes
 
   // --- States ---
-  isLoading = false, // When true, replaces the table body with SkeletonTable placeholder rows
+  isLoading = false, // When true, replaces the table body with placeholder rows that copy the real row layout
+  skeletonRows, // How many placeholder rows to show while loading — defaults to the page size (max 10), or 5
   error = false, // When true, replaces the table body with an error message and retry button
   onRetry, // Called when the user clicks "Try again" in the error state
   emptyTitle, // Optional override for the empty-state heading — falls back to
@@ -379,14 +456,36 @@ const DataTable = ({
               {/* bg-white: white body background contrasts with the gradient header */}
 
               {isLoading ? (
-                // Loading state — full-width skeleton placeholder replaces the data rows
-                <tr>
-                  <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                    {/* colSpan spans all data columns plus the optional checkbox column */}
-                    <SkeletonTable rows={5} cols={columns.length} />
-                    {/* 5 skeleton rows matching the number of real columns */}
-                  </td>
-                </tr>
+                // Loading state — placeholder rows with the same height, zebra
+                // striping and cell padding as real rows, one cell per real
+                // column (plus the checkbox column), so the header above stays
+                // perfectly aligned with the placeholders under it
+                Array.from({
+                  length: skeletonRows ?? Math.min(pageSize || 5, 10),
+                }).map((_, rowIndex) => (
+                  <tr
+                    key={`skeleton-row-${rowIndex}`}
+                    aria-hidden="true"
+                    className={cn("h-9", rowIndex % 2 === 1 && "bg-gray-50/60")}
+                  >
+                    {selectable && (
+                      <td className="w-8 px-2.5 py-1 h-9 max-h-9 overflow-hidden align-middle">
+                        <Skeleton className="w-4 h-4 rounded" />
+                      </td>
+                    )}
+                    {columns.map((col, colIndex) => (
+                      <td
+                        key={col.key}
+                        className={cn(
+                          "px-2.5 py-1 h-9 max-h-9 whitespace-nowrap align-middle overflow-hidden",
+                          col.className,
+                        )}
+                      >
+                        {renderSkeletonCell(col, rowIndex, colIndex)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : error ? (
                 // Error state — shown when the data fetch failed
                 <tr>

@@ -44,6 +44,7 @@ import PageHeader from "../../components/shared/PageHeader";
 import ComplaintStatsCards from "../../components/admin-complaints/ComplaintStatsCards";
 import ComplaintDetailModal from "../../components/admin-complaints/ComplaintDetailModal";
 import ComplaintFilters from "../../components/admin-complaints/ComplaintFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // --------------------------------------------------
 // STATUS TABS — one pill per real COMPLAINT_STATUS value, plus "All".
@@ -399,8 +400,7 @@ const ComplaintsManagement = () => {
       setBulkStatusAction(null);
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
-          "Failed to update the selected complaints.",
+        getApiErrorMessage(error, "Failed to update the selected complaints."),
       );
     } finally {
       setIsBulkUpdating(false);

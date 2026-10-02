@@ -7,6 +7,7 @@ import { markNotificationRead } from "../../api/notifications.api"; // API funct
 import resolveNotificationLink from "../../utils/resolveNotificationLink"; // Maps reference_type/reference_id to the actual account page
 import { showError } from "../ui/Toast"; // Error toast helper — gives feedback if the mark-as-read call fails
 import cn from "../../utils/cn"; // Utility that merges Tailwind class names conditionally without conflicts
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // getNotifIcon — maps a notification type string to the appropriate icon element
 // Falls back to a gray shield icon for any unknown or system notification type
@@ -38,8 +39,13 @@ const RecentNotifications = ({ notifications, unreadCount }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS }); // refresh notification data across the app
     },
-    onError: () => {
-      showError("Couldn't mark this notification as read. Please try again."); // surfaces failures instead of the button silently resetting
+    onError: (error) => {
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't mark this notification as read. Please try again.",
+        ),
+      ); // surfaces failures instead of the button silently resetting
     },
   });
 

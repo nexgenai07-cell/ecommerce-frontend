@@ -49,6 +49,7 @@ import formatPrice from "../../utils/formatPrice";
 // Finds cart lines whose quantity is higher than the stock available right now,
 // so the customer cannot proceed to checkout with items that cannot be fulfilled.
 import getCartStockIssues from "../../utils/getCartStockIssues";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // Utility function that turns a raw number like 1200 into a nicely formatted
 // currency string like "Rs. 1,200" for display purposes.
 
@@ -174,10 +175,10 @@ const CartSummary = ({ cart }) => {
     onError: (error) => {
       // Try to read a specific error message from the server's response;
       // if none exists, fall back to a generic message.
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        "Invalid or expired coupon code.";
+      const message = getApiErrorMessage(
+        error,
+        "Invalid or expired coupon code.",
+      );
       // Show a red toast with whichever message we ended up with.
       showError(message);
     },

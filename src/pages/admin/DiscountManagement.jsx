@@ -31,6 +31,7 @@ import PageHeader from "../../components/shared/PageHeader";
 import DiscountStatsCards from "../../components/admin-discounts/DiscountStatsCards";
 import DiscountFormModal from "../../components/admin-discounts/DiscountFormModal";
 import DiscountFilters from "../../components/admin-discounts/DiscountFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 /**
  * Status filter tabs shown above the table. Each tab's key maps
@@ -222,7 +223,7 @@ const DiscountManagement = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DISCOUNTS });
       setDiscountToDelete(null);
     } catch (error) {
-      showError(error?.response?.data?.message || "Failed to delete discount.");
+      showError(getApiErrorMessage(error, "Failed to delete discount."));
     } finally {
       setIsDeleting(false);
     }
@@ -273,7 +274,7 @@ const DiscountManagement = () => {
       setSelectedIds([]);
       setConfirmBulkDeleteOpen(false);
     } catch (error) {
-      showError(error?.response?.data?.detail || "Failed to delete discounts.");
+      showError(getApiErrorMessage(error, "Failed to delete discounts."));
     } finally {
       setIsDeleting(false);
     }
@@ -418,6 +419,7 @@ const DiscountManagement = () => {
     },
     {
       key: "actions",
+      skeleton: "icons", // loading placeholder shape (see DataTable)
       label: "Actions",
       render: (row) => (
         <div className="flex items-center gap-1">

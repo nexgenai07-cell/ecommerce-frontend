@@ -17,6 +17,7 @@ import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Textarea from "../ui/Textarea";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ManualEntryModal = ({ isOpen, onClose }) => {
   const queryClient = useQueryClient();
@@ -63,7 +64,8 @@ const ManualEntryModal = ({ isOpen, onClose }) => {
       setSubmitAttempted(false);
       onClose();
     },
-    onError: () => showError("Failed to send message."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to send message.")),
   });
 
   const handleSend = () => {

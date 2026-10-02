@@ -20,6 +20,7 @@ import {
   PASSWORD_REQUIREMENTS,
 } from "../../utils/passwordStrength";
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // NOTE: password fields are intentionally NOT trimmed. A leading/trailing
 // space is a valid character in a password, and silently stripping it
@@ -145,21 +146,26 @@ const ChangePasswordForm = () => {
     },
 
     onError: (error) => {
-      const message = error?.response?.data?.error;
       const status = error?.response?.status;
+      const backendMessage = getApiErrorMessage(error, "");
 
       // The server rejected the passwords themselves. Any code screen is
       // closed so the message is shown next to the field it concerns.
-      if (status === 400 && message) {
+      if (status === 400 && backendMessage) {
         setIsOtpModalOpen(false);
-        if (/new password/i.test(message)) {
-          setError("newPassword", { type: "server", message });
+        if (/new password/i.test(backendMessage)) {
+          setError("newPassword", { type: "server", message: backendMessage });
         } else {
-          setError("currentPassword", { type: "server", message });
+          setError("currentPassword", {
+            type: "server",
+            message: backendMessage,
+          });
         }
         return;
       }
-      showError(message || "Failed to change password. Please try again.");
+      showError(
+        backendMessage || "Failed to change password. Please try again.",
+      );
     },
   });
 

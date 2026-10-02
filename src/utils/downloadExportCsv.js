@@ -26,6 +26,8 @@
 // Resolves to { success: true } once the download has started, or
 // { success: false, message } with the backend's own error text where
 // available, so the caller can show it in a toast.
+import getApiErrorMessage from "./getApiErrorMessage";
+
 const downloadExportCsv = async (exportReportFn, params, filename) => {
   try {
     const response = await exportReportFn(params);
@@ -44,13 +46,21 @@ const downloadExportCsv = async (exportReportFn, params, filename) => {
       try {
         const text = await errorBody.text();
         const parsed = JSON.parse(text);
-        return { success: false, message: parsed?.error };
+        // The blob held the backend's JSON error body; read it the same way
+        // every other failed request is read.
+        return {
+          success: false,
+          message: getApiErrorMessage(
+            { response: { status: error.response.status, data: parsed } },
+            "",
+          ),
+        };
       } catch {
         // The blob wasn't parseable JSON after all — fall through and
         // let the caller show its own generic fallback message.
       }
     }
-    return { success: false, message: errorBody?.error };
+    return { success: false, message: getApiErrorMessage(error, "") };
   }
 };
 

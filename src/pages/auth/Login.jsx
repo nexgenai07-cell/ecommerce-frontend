@@ -26,6 +26,7 @@ import useGoogleSignIn from "../../hooks/useGoogleSignIn";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const loginSchema = z.object({
   email: z
@@ -346,7 +347,7 @@ const Login = () => {
 
     onError: (error) => {
       const data = error?.response?.data;
-      const message = data?.message || data?.detail || "";
+      const message = getApiErrorMessage(error, "");
 
       // Some backends return this same gate as an HTTP error response
       // (400/401) instead of a 200 success body with a flag. The
@@ -389,7 +390,7 @@ const Login = () => {
     },
 
     onError: (error) => {
-      setOtpError(error?.response?.data?.error || "Invalid or expired code.");
+      setOtpError(getApiErrorMessage(error, "Invalid or expired code."));
     },
   });
 
@@ -408,8 +409,10 @@ const Login = () => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to resend verification email. Please try again.",
+        ),
       );
     },
   });

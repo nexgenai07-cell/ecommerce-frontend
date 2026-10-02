@@ -18,6 +18,7 @@ import Input from "../ui/Input";
 import Select from "../ui/Select";
 import Toggle from "../ui/Toggle";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Only 2 real values — matches API 27's documented "type": "percent │ fixed"
 const TYPE_OPTIONS = [
@@ -482,7 +483,7 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
         return;
       }
 
-      showError(responseData?.message || "Failed to save discount.");
+      showError(getApiErrorMessage(error, "Failed to save discount."));
     },
   });
 

@@ -36,6 +36,7 @@ import Button from "../ui/Button";
 import Avatar from "../ui/Avatar";
 import Spinner from "../ui/Spinner";
 import ComplaintThread from "../complaint/ComplaintThread";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Display labels for every complaint status listed in the status dropdown.
 const STATUS_LABELS = {
@@ -123,7 +124,7 @@ const ComplaintDetailModal = ({ isOpen, onClose, complaint }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPLAINTS });
     },
     onError: (error) =>
-      showError(error?.response?.data?.error || "Failed to update status."),
+      showError(getApiErrorMessage(error, "Failed to update status.")),
   });
 
   if (!complaint) return null;

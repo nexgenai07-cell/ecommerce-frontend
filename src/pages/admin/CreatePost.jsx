@@ -22,6 +22,7 @@ import ProductPicker from "../../components/admin-social/ProductPicker";
 import PostPreview, {
   getCharacterLimit,
 } from "../../components/admin-social/PostPreview";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const PLATFORMS = [
   { key: "facebook", label: "Facebook", icon: BsFacebook },
@@ -116,8 +117,7 @@ const CreatePost = () => {
       navigate(ROUTES.ADMIN_SOCIAL_POSTS);
     } catch (error) {
       showError(
-        error?.response?.data?.message ||
-          "Something went wrong. Please try again.",
+        getApiErrorMessage(error, "Something went wrong. Please try again."),
       );
     } finally {
       setIsSubmitting(false);

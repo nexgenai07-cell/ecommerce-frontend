@@ -26,6 +26,7 @@ import {
 } from "../../api/addresses.api";
 import { showSuccess, showError } from "../../components/ui/Toast";
 import extractListData from "../../utils/extractListData";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const AddressBook = () => {
   const queryClient = useQueryClient();
@@ -65,9 +66,7 @@ const AddressBook = () => {
       setAddressToDelete(null);
     },
     onError: (error) => {
-      showError(
-        error?.response?.data?.message || "Failed to delete this address.",
-      );
+      showError(getApiErrorMessage(error, "Failed to delete this address."));
     },
   });
 
@@ -83,8 +82,7 @@ const AddressBook = () => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
-          "Failed to update your default address.",
+        getApiErrorMessage(error, "Failed to update your default address."),
       );
     },
     onSettled: () => setSettingDefaultId(null),

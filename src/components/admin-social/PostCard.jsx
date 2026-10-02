@@ -30,6 +30,7 @@ import formatRelativeTime from "../../utils/formatRelativeTime";
 import formatDate from "../../utils/formatDate";
 import { showSuccess, showError } from "../ui/Toast";
 import Badge from "../ui/Badge";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const PLATFORM_BADGE_VARIANT = {
   facebook: "info",
@@ -74,7 +75,8 @@ const PostCard = ({ post, onEdit, onDeleteRequest }) => {
       showSuccess("Post duplicated.");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SOCIAL_POSTS });
     },
-    onError: () => showError("Failed to duplicate post."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to duplicate post.")),
   });
 
   // Real, honest timestamp text — matches what's actually knowable

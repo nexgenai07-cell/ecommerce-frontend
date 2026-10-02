@@ -41,6 +41,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import { ROUTES } from "../../constants/routes";
 import { showError, showSuccess } from "../ui/Toast";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Turns an ISO deadline timestamp into whole seconds remaining until
 // it, clamped to 0 rather than going negative once it's passed.
@@ -137,8 +138,10 @@ const QrPaymentPanel = ({
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.error ||
+        getApiErrorMessage(
+          error,
           "Couldn't extend the upload window. Please try uploading your proof now.",
+        ),
       );
     },
   });

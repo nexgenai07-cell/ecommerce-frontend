@@ -198,6 +198,7 @@ const CustomerManagement = () => {
   const columns = [
     {
       key: "customer",
+      skeleton: "avatar", // loading placeholder shape (see DataTable)
       label: "Customer",
       render: (row) => (
         <div className="flex items-center gap-2">

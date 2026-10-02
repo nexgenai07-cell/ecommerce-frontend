@@ -6,6 +6,7 @@ import { confirmAdminAction, cancelAdminAction } from "../../api/chat.api";
 import { showError } from "../ui/Toast";
 import Spinner from "../ui/Spinner";
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const PendingActionCard = ({ pendingAction }) => {
   // Tracks the LOCAL outcome once the admin taps a button — "confirmed"
@@ -43,7 +44,12 @@ const PendingActionCard = ({ pendingAction }) => {
         setIsExpired(true);
         showError("This confirmation has expired. Please repeat the request.");
       } else {
-        showError("Couldn't confirm this action. Please try again.");
+        showError(
+          getApiErrorMessage(
+            error,
+            "Couldn't confirm this action. Please try again.",
+          ),
+        );
       }
     },
   });
@@ -51,7 +57,13 @@ const PendingActionCard = ({ pendingAction }) => {
   const cancelMutation = useMutation({
     mutationFn: () => cancelAdminAction(pendingAction.action_id),
     onSuccess: () => setResolution("cancelled"),
-    onError: () => showError("Couldn't cancel this action. Please try again."),
+    onError: (error) =>
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't cancel this action. Please try again.",
+        ),
+      ),
   });
 
   const isBusy = confirmMutation.isPending || cancelMutation.isPending;

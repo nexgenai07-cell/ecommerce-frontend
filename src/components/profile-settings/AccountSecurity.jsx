@@ -29,6 +29,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import Toggle from "../ui/Toggle";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Maps a session's device name to a representative icon.
 // Backend sends a free-text "device" string (e.g. "Windows PC", "iPhone 15 Pro"),
@@ -147,9 +148,7 @@ const AccountSecurity = ({ user }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_SESSIONS });
     },
     onError: (error) => {
-      showError(
-        error?.response?.data?.error || "Failed to sign out that device.",
-      );
+      showError(getApiErrorMessage(error, "Failed to sign out that device."));
     },
     onSettled: () => setRevokingSessionId(null),
   });
@@ -185,8 +184,10 @@ const AccountSecurity = ({ user }) => {
     },
     onError: (error) => {
       showError(
-        error?.response?.data?.message ||
+        getApiErrorMessage(
+          error,
           "Failed to start 2FA setup. Please try again.",
+        ),
       );
     },
   });
@@ -206,7 +207,7 @@ const AccountSecurity = ({ user }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
     },
     onError: (error) => {
-      setOtpError(error?.response?.data?.error || "Invalid or expired code.");
+      setOtpError(getApiErrorMessage(error, "Invalid or expired code."));
     },
   });
 
@@ -224,7 +225,7 @@ const AccountSecurity = ({ user }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MY_PROFILE });
     },
     onError: (error) => {
-      setDisableError(error?.response?.data?.error || "Incorrect password.");
+      setDisableError(getApiErrorMessage(error, "Incorrect password."));
     },
   });
 

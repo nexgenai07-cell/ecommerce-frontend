@@ -27,6 +27,7 @@ import PriceDisplay from "../shared/PriceDisplay";
 import QuantitySelector from "../shared/QuantitySelector";
 import RatingStars from "../shared/RatingStars";
 import Badge from "../ui/Badge";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ProductInfo = ({ product, imageRef }) => {
   const navigate = useNavigate();
@@ -156,7 +157,7 @@ const ProductInfo = ({ product, imageRef }) => {
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
-      const message = error?.response?.data?.message || "Failed to add to cart";
+      const message = getApiErrorMessage(error, "Failed to add to cart");
       showError(message);
     },
   });
@@ -181,7 +182,8 @@ const ProductInfo = ({ product, imageRef }) => {
       }
       return queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
-    onError: () => showError("Failed to update wishlist"),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to update wishlist")),
   });
 
   const handleAddToCart = () => {

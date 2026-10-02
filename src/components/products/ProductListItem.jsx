@@ -35,6 +35,7 @@ import Button from "../ui/Button"; // Standard button (used for "Add to Cart")
 import { AiOutlineHeart, AiFillHeart } from "react-icons/ai";
 // Box icon shown inside the "N sold" pill, the same icon the product cards use
 import { BsBoxSeam } from "react-icons/bs";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Local placeholder image — shown when a product has no image or the image
 // URL fails to load. Same fallback path ProductCard uses, for consistency.
@@ -168,7 +169,8 @@ const ProductListItem = ({ product }) => {
       }
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
     },
-    onError: () => showError("Failed to update wishlist"),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to update wishlist")),
   });
 
   // Decide which image to show — real image, or the fallback if missing/broken

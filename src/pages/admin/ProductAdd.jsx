@@ -23,7 +23,7 @@ import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
-import getApiErrorMessage from "../../utils/getApiErrorMessage"; // Pulls the backend's own error text out of a failed request
+import getApiErrorMessage, { getApiFieldError } from "../../utils/getApiErrorMessage"; // Pulls the backend's own error text out of a failed request
 import generateSku from "../../utils/generateSku";
 import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — builds a readable candidate SKU from name + category,
@@ -143,12 +143,6 @@ const productSchema = z
 // commonly, a plain string under the same key. Returns null when the
 // error was not about that field, so the caller can fall back to a
 // generic error message instead.
-const extractFieldError = (error, fieldName) => {
-  const fieldError = error?.response?.data?.[fieldName];
-  if (Array.isArray(fieldError)) return fieldError[0];
-  if (typeof fieldError === "string") return fieldError;
-  return null;
-};
 
 const ProductAdd = () => {
   const navigate = useNavigate();
@@ -361,8 +355,8 @@ const ProductAdd = () => {
       // A rejected SKU or purchase price is shown right under its own
       // field (not just in a toast) and the admin stays on the page, so
       // it can be fixed and resubmitted immediately.
-      const skuError = extractFieldError(error, "sku");
-      const purchasePriceError = extractFieldError(error, "purchase_price");
+      const skuError = getApiFieldError(error, "sku");
+      const purchasePriceError = getApiFieldError(error, "purchase_price");
       if (skuError) {
         setError("sku", { type: "manual", message: skuError });
         showError(skuError);

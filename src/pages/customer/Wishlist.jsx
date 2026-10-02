@@ -22,6 +22,7 @@ import WishlistCard from "../../components/wishlist/WishlistCard"; // Single pro
 import WishlistAIBanner from "../../components/wishlist/WishlistAIBanner"; // AI recommendation banner shown below the grid
 import EmptyState from "../../components/ui/EmptyState"; // Generic empty state UI with a configurable action button
 import { SkeletonCard } from "../../components/ui/Skeleton"; // Animated placeholder card shown while wishlist data is loading
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const Wishlist = () => {
   const navigate = useNavigate(); // used by the empty state button to send the user to the products listing page
@@ -166,13 +167,13 @@ const Wishlist = () => {
       return { previousWishlist };
     },
 
-    onError: (_err, _itemId, context) => {
+    onError: (error, _itemId, context) => {
       // Undoes the optimistic cache write above, since the removal never
       // actually happened server-side.
       if (context?.previousWishlist) {
         queryClient.setQueryData(QUERY_KEYS.WISHLIST, context.previousWishlist);
       }
-      showError("Failed to remove item."); // red toast if the API call fails
+      showError(getApiErrorMessage(error, "Failed to remove item.")); // red toast if the API call fails
     },
   });
 
@@ -220,13 +221,13 @@ const Wishlist = () => {
       );
     },
 
-    onError: (_err, _itemIds, context) => {
+    onError: (error, _itemIds, context) => {
       // Undoes the optimistic cache write above, since the removal
       // never actually happened server-side.
       if (context?.previousWishlist) {
         queryClient.setQueryData(QUERY_KEYS.WISHLIST, context.previousWishlist);
       }
-      showError("Failed to remove selected items.");
+      showError(getApiErrorMessage(error, "Failed to remove selected items."));
     },
   });
 
@@ -258,12 +259,12 @@ const Wishlist = () => {
       showSuccess(response?.data?.message || "Wishlist cleared");
     },
 
-    onError: (_err, _vars, context) => {
+    onError: (error, _vars, context) => {
       if (context?.previousWishlist) {
         queryClient.setQueryData(QUERY_KEYS.WISHLIST, context.previousWishlist);
       }
       setIsClearConfirmOpen(false);
-      showError("Failed to clear wishlist.");
+      showError(getApiErrorMessage(error, "Failed to clear wishlist."));
     },
   });
 
@@ -335,11 +336,11 @@ const Wishlist = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART }); // refetch cart so the dropdown shows the new item
     },
 
-    onError: (_err, _productId, context) => {
+    onError: (error, _productId, context) => {
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
-      showError("Failed to add to cart."); // red toast if the API call fails
+      showError(getApiErrorMessage(error, "Failed to add to cart.")); // red toast if the API call fails
     },
   });
 

@@ -17,6 +17,7 @@ import { markNotificationRead } from "../../api/notifications.api";
 import { showError } from "../ui/Toast";
 // Import a utility function "cn" used to conditionally join/merge Tailwind class names
 import cn from "../../utils/cn";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Notification type se icon + color
 // Helper function that returns the appropriate icon and color styling configuration based on the notification's "type" value
@@ -158,8 +159,13 @@ const NotificationItem = ({
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS });
     },
     // Callback executed if the API call fails (network drop, expired session, server error) — without this, the click would silently do nothing and the user wouldn't know it failed
-    onError: () => {
-      showError("Couldn't mark this notification as read. Please try again.");
+    onError: (error) => {
+      showError(
+        getApiErrorMessage(
+          error,
+          "Couldn't mark this notification as read. Please try again.",
+        ),
+      );
     },
   });
 

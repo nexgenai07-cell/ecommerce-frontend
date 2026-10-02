@@ -30,7 +30,6 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
 import formatPrice from "../../utils/formatPrice";
 import formatPriceOrDash from "../../utils/formatPriceOrDash";
-import formatPercent from "../../utils/formatPercent";
 import downloadExportCsv from "../../utils/downloadExportCsv";
 import chunkArray from "../../utils/chunkArray";
 import { toLocalISODate } from "../../utils/getReportDateRanges";
@@ -43,6 +42,7 @@ import DataTable from "../../components/ui/DataTable";
 import PageHeader from "../../components/shared/PageHeader";
 import ProductStatsCards from "../../components/admin-products/ProductStatsCards";
 import ProductFilters from "../../components/admin-products/ProductFilters";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
@@ -194,9 +194,10 @@ const ProductList = () => {
   useEffect(() => {
     if (isErrorSearch && searchQueryError) {
       showError(
-        searchQueryError?.response?.data?.error ||
-          searchQueryError?.response?.data?.message ||
+        getApiErrorMessage(
+          searchQueryError,
           "Failed to load products. Please check your filters and try again.",
+        ),
       );
     }
   }, [isErrorSearch, searchQueryError]);
@@ -362,8 +363,10 @@ const ProductList = () => {
       refetch();
     } catch (error) {
       showError(
-        error?.response?.data?.detail ||
+        getApiErrorMessage(
+          error,
           "Some products couldn't be deleted. Please try again.",
+        ),
       );
     } finally {
       setIsDeleting(false);
@@ -515,26 +518,6 @@ const ProductList = () => {
       },
     },
     {
-      // Profit as a percentage of the cost price.
-      key: "markupPercent",
-      label: "Markup %",
-      render: (row) => (
-        <span className="text-[10px] sm:text-[11px] text-gray-700">
-          {formatPercent(row.markup_percent)}
-        </span>
-      ),
-    },
-    {
-      // Profit as a percentage of the selling price.
-      key: "profitMarginPercent",
-      label: "Margin %",
-      render: (row) => (
-        <span className="text-[10px] sm:text-[11px] text-gray-700">
-          {formatPercent(row.profit_margin_percent)}
-        </span>
-      ),
-    },
-    {
       key: "stock",
       label: "Stock",
       render: (row) => {
@@ -610,6 +593,7 @@ const ProductList = () => {
     },
     {
       key: "actions",
+      skeleton: "icons", // loading placeholder shape (see DataTable)
       label: "Actions",
       render: (row) => (
         <div className="flex items-center gap-1">

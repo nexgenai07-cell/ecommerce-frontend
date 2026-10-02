@@ -7,6 +7,7 @@ import { addToCart } from "../../api/cart.api"; // API function that calls POST 
 import useCart from "../../hooks/useCart"; // Custom hook that exposes handleAddItem to sync the local cart UI state
 import { showSuccess, showError } from "../ui/Toast"; // Toast notification helpers for mutation feedback
 import formatPrice from "../../utils/formatPrice"; // Formats a raw number into a display currency string e.g. "$49.99"
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const WishlistPreview = ({ wishlistItems }) => {
   // queryClient lets us manually invalidate the cart cache after a successful add
@@ -89,11 +90,11 @@ const WishlistPreview = ({ wishlistItems }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
     },
 
-    onError: (_err, _productId, context) => {
+    onError: (error, _productId, context) => {
       if (context?.previousCart) {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
-      showError("Failed to add to cart."); // red toast if the API call fails for any reason
+      showError(getApiErrorMessage(error, "Failed to add to cart.")); // red toast if the API call fails for any reason
     },
   });
 

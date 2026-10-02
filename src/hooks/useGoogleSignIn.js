@@ -54,6 +54,7 @@ import useAuth from "./useAuth";
 import { showSuccess, showError } from "../components/ui/Toast";
 import { ROUTES } from "../constants/routes";
 import { QUERY_KEYS } from "../constants/queryKeys";
+import getApiErrorMessage from "../utils/getApiErrorMessage";
 
 // Read once from the environment. Vite only exposes variables prefixed with
 // VITE_ to client-side code, and only variables that exist at build time —
@@ -140,10 +141,10 @@ const useGoogleSignIn = (containerId, redirectOptions = {}) => {
             : {}),
         });
       } catch (error) {
-        const backendErrorMessage =
-          error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          "Google sign-in failed. Please try again.";
+        const backendErrorMessage = getApiErrorMessage(
+          error,
+          "Google sign-in failed. Please try again.",
+        );
         showError(backendErrorMessage);
       }
     };

@@ -259,8 +259,9 @@ const CategoryManagement = () => {
   // range), show the reason it gives instead of only the generic table
   // error.
   useEffect(() => {
+    if (!listError?.response) return;
     // Read the backend's explanation, when there is one
-    const message = listError?.response?.data?.error;
+    const message = getApiErrorMessage(listError, "");
     // Surface it to the admin as a toast
     if (message) showError(message);
   }, [listError]);
@@ -455,6 +456,7 @@ const CategoryManagement = () => {
     {
       // Edit and delete buttons for the row
       key: "actions",
+      skeleton: "icons", // loading placeholder shape (see DataTable)
       label: "Actions",
       render: (row) => (
         <div className="flex items-center gap-1">
@@ -500,7 +502,7 @@ const CategoryManagement = () => {
       setCategoryToDelete(null);
     } catch (error) {
       // Show the backend's message, with a generic fallback
-      showError(error?.response?.data?.message || "Failed to delete category.");
+      showError(getApiErrorMessage(error, "Failed to delete category."));
     } finally {
       // Unlock the dialog again
       setIsDeleting(false);
@@ -540,9 +542,7 @@ const CategoryManagement = () => {
       setConfirmBulkDeleteOpen(false);
     } catch (error) {
       // Show the backend's message, with a generic fallback
-      showError(
-        error?.response?.data?.message || "Failed to delete categories.",
-      );
+      showError(getApiErrorMessage(error, "Failed to delete categories."));
     } finally {
       // Unlock the dialog again
       setIsDeleting(false);

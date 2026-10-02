@@ -49,6 +49,7 @@ import QuantitySelector from "../shared/QuantitySelector";
 // Reusable "-  [number]  +" control shared across the Cart and Product Detail pages.
 
 import formatPrice from "../../utils/formatPrice";
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // Utility that converts a raw number (e.g. 1200) into a formatted currency
 // string (e.g. "Rs. 1,200") for display.
 
@@ -165,7 +166,7 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
     },
 
     // Runs when the update fails (e.g. network error, out of stock, etc.).
-    onError: (_err, _newQty, context) => {
+    onError: (error, _newQty, context) => {
       // Undoes the optimistic cache write from onMutate above, since the
       // change never actually happened server-side.
       if (context?.previousCart) {
@@ -174,7 +175,9 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
       // Rolls the displayed quantity back to whatever the server last confirmed.
       setQuantity(item.quantity);
       // Shows a red error toast explaining the failure to the user.
-      showError("Failed to update quantity. Please try again.");
+      showError(
+        getApiErrorMessage(error, "Failed to update quantity. Please try again."),
+      );
     },
   });
 
@@ -251,7 +254,7 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
     },
 
     // Runs when the removal fails.
-    onError: (_err, _vars, context) => {
+    onError: (error, _vars, context) => {
       // Undoes the optimistic cache write from onMutate above, bringing
       // the row and the totals back since the deletion never actually
       // happened server-side.
@@ -259,7 +262,9 @@ const CartItem = ({ item, onRemove, isSelected, onToggleSelect }) => {
         queryClient.setQueryData(QUERY_KEYS.CART, context.previousCart);
       }
       // Shows a red error toast telling the user to try again.
-      showError("Failed to remove item. Please try again.");
+      showError(
+        getApiErrorMessage(error, "Failed to remove item. Please try again."),
+      );
     },
   });
 
