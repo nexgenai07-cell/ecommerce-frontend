@@ -26,6 +26,9 @@
 // 4. Once uploaded, payment.status becomes "under_review" and this
 //    panel switches to a waiting state — the order itself stays
 //    "pending_payment" until an admin manually approves the proof.
+//    When the parent passes redirectAfterReviewSeconds, the customer is
+//    taken to the order's detail page automatically once that many
+//    seconds have passed in the waiting state.
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -34,7 +37,7 @@ import {
   HiOutlineClock,
   HiOutlineExclamationTriangle,
 } from "react-icons/hi2";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import QrProofUploadForm from "../payments/QrProofUploadForm"; // Form component for uploading payment screenshot
 import { extendQrUploadTime, getStoreQrImage } from "../../api/payments.api";
 import { QUERY_KEYS } from "../../constants/queryKeys";
@@ -63,6 +66,11 @@ const formatCountdown = (totalSeconds) => {
 // when the order was first placed) and freeze its order-summary
 // snapshot, matching the backend's own cart-preservation behavior.
 //
+// redirectAfterReviewSeconds — optional. When greater than zero, the
+// panel counts down in its "Payment Under Review" state and then
+// navigates to the order's detail page. Left at 0 (no redirect) on pages
+// that already are the order's detail page.
+//
 // qrExtensionUsed — the REAL, backend-confirmed value of the order's
 // qr_extension_used field, as of whenever this panel last received
 // fresh order data. Only ever meaningful on a page (like Order Detail)
@@ -78,8 +86,11 @@ const QrPaymentPanel = ({
   paymentReference,
   qrUploadDeadline,
   qrExtensionUsed = false,
+  redirectAfterReviewSeconds = 0,
   onProofUploaded,
 }) => {
+  const navigate = useNavigate();
+
   // Tracks whether proof has been submitted yet in THIS session — once
   // true, the upload form is replaced with the "Under Review" state.
   const [proofSubmitted, setProofSubmitted] = useState(false);
@@ -122,6 +133,29 @@ const QrPaymentPanel = ({
   }, [deadline, proofSubmitted, windowCancelled]);
 
   const windowExpired = !!deadline && secondsLeft <= 0;
+
+  // Seconds left before the customer is taken to the order's detail page
+  // from the "Payment Under Review" state. Only counts down while proof
+  // has been submitted and a redirect delay was requested.
+  const [redirectSecondsLeft, setRedirectSecondsLeft] = useState(
+    redirectAfterReviewSeconds,
+  );
+
+  useEffect(() => {
+    if (!proofSubmitted || redirectAfterReviewSeconds <= 0) return undefined;
+
+    const interval = setInterval(() => {
+      setRedirectSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+    const redirectTimeout = setTimeout(() => {
+      navigate(ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber));
+    }, redirectAfterReviewSeconds * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(redirectTimeout);
+    };
+  }, [proofSubmitted, redirectAfterReviewSeconds, navigate, orderNumber]);
 
   // =============================================
   // "NEED MORE TIME?" — one-time 5-minute extension
@@ -186,6 +220,17 @@ const QrPaymentPanel = ({
           Our team will verify it shortly and confirm your order — you'll get a
           notification either way.
         </p>
+        {redirectAfterReviewSeconds > 0 && (
+          <p className="text-xs text-gray-400">
+            Taking you to your order in {redirectSecondsLeft}s...{" "}
+            <Link
+              to={ROUTES.ACCOUNT_ORDER_DETAIL.replace(":id", orderNumber)}
+              className="font-semibold text-primary hover:underline"
+            >
+              View order now
+            </Link>
+          </p>
+        )}
       </div>
     );
   }

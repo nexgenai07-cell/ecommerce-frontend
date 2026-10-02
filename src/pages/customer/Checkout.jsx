@@ -142,6 +142,10 @@ const SHIPPING_COSTS = {
 // disagrees.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
+// How long the "Payment Under Review" screen stays visible after a QR payment
+// proof is uploaded, before the customer is taken to the order's detail page.
+const QR_REVIEW_REDIRECT_SECONDS = 5;
+
 // =============================================
 // BUY NOW PRODUCT IMAGE
 // =============================================
@@ -1504,6 +1508,7 @@ const Checkout = () => {
                     orderNumber={orderNumber}
                     paymentReference={qrPaymentDetails?.paymentReference}
                     qrUploadDeadline={qrPaymentDetails?.qrUploadDeadline}
+                    redirectAfterReviewSeconds={QR_REVIEW_REDIRECT_SECONDS}
                     onProofUploaded={handleQrProofUploaded}
                   />
                 </motion.div>
