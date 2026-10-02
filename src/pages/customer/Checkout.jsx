@@ -369,8 +369,9 @@ const Checkout = () => {
   const [step, setStep] = useState("details");
   // Which payment method the customer picked on the details step — sent
   // as "payment_method" on the Checkout request, and decides whether
-  // "payment" (Stripe) or "qr" (QR) step is shown next.
-  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHOD.STRIPE);
+  // "payment" (Stripe) or "qr" (QR) step is shown next. QR is the
+  // starting choice because the card option is blocked in the selector.
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHOD.QR);
   // payment_reference / qr_upload_deadline — only
   // present in the Checkout response when payment_method: "qr" was
   // sent; passed straight into QrPaymentPanel on the "qr" step.

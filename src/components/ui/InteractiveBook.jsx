@@ -5,8 +5,10 @@ import cn from "../../utils/cn"; // Tailwind class-merging helper used to combin
 // ============================================================
 // INTERACTIVE BOOK
 // A 3D page-flip book. It rests tilted until it scrolls into view,
-// then spins quickly and lands straight. It opens when the cover is
-// clicked and turns one page each time a page is clicked.
+// then spins quickly and lands straight. Half a second after it has
+// landed it opens by itself, once, unless the reader has already
+// opened or closed it. It also opens when the cover is clicked and
+// turns one page each time a page is clicked.
 //
 // When the reader reaches the last spread and does nothing for a few
 // seconds, all pages immediately turn back in fast motion and the book
@@ -56,6 +58,8 @@ const REWIND_CLOSE_DELAY_MS = 280; // Short wait for the first page to land befo
 const REWIND_FINISH_MS = 1100; // Time the fast-motion styling stays active while the cover finishes closing
 const REWIND_RESTART_SETTLE_MS = 450; // Time the fast-motion styling stays active while the first page lands after a restart
 const REVEAL_THRESHOLD = 0.35; // Share of the book area that must be visible before its entrance spin starts
+const SPIN_IN_DURATION_MS = 1150; // Length of the entrance spin; must match the zyronBookSpinIn animation duration in index.css
+const AUTO_OPEN_PAUSE_MS = 500; // Pause between the book landing straight and the cover opening by itself
 
 const InteractiveBook = ({
   title, // Main title printed on the front cover
@@ -78,6 +82,7 @@ const InteractiveBook = ({
   const [rewindMode, setRewindMode] = useState(null); // Null when idle; "close" while the book turns back and closes by itself; "restart" while it turns back to the first spread and stays open
   const sceneRef = useRef(null); // The element watched by the scroll observer
   const lastActivityRef = useRef(0); // Timestamp of the latest reader activity, used by the idle timer
+  const autoOpenHandledRef = useRef(false); // True once the automatic opening has happened or the reader has taken control of the cover
   const totalPages = pages.length; // Number of sheets in the book
 
   // Records reader activity and stops any automatic rewind in progress
@@ -88,6 +93,7 @@ const InteractiveBook = ({
 
   // Opens the front cover
   const openBook = useCallback(() => {
+    autoOpenHandledRef.current = true; // The cover is open now, so the automatic opening must never run again
     markActivity();
     setIsRevealed(true); // An opened book is always straight
     setIsOpen(true);
@@ -97,6 +103,7 @@ const InteractiveBook = ({
   const closeBook = useCallback(
     (event) => {
       event?.stopPropagation(); // Prevents the click from also triggering the page underneath
+      autoOpenHandledRef.current = true; // The reader chose to close the book, so it must not reopen by itself
       markActivity();
       setIsOpen(false);
       setCurrentPageIndex(-1);
@@ -157,6 +164,17 @@ const InteractiveBook = ({
     observer.observe(scene);
     return () => observer.disconnect(); // Stops observing when the book unmounts
   }, [isRevealed]);
+
+  // Opens the cover by itself shortly after the entrance spin has finished, one time only
+  useEffect(() => {
+    if (!isRevealed || autoOpenHandledRef.current) return undefined; // Wait for the reveal, and never repeat the automatic opening
+
+    const timerId = setTimeout(
+      openBook,
+      SPIN_IN_DURATION_MS + AUTO_OPEN_PAUSE_MS,
+    ); // Spin time plus the pause, so the cover opens a moment after the book lands straight
+    return () => clearTimeout(timerId); // Cancels the pending opening if the book unmounts or is already handled
+  }, [isRevealed, openBook]);
 
   // Starts the automatic rewind after a period of inactivity on the last spread
   useEffect(() => {
@@ -410,13 +428,13 @@ const InteractiveBook = ({
           disabled={!isOpen}
           aria-label="Close the book"
           className={cn(
-            "zyron-book__close flex size-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-lg transition-all duration-300 hover:scale-110 hover:bg-gray-900 hover:text-white hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:size-10",
+            "zyron-book__close flex size-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-lg transition-all duration-300 hover:scale-110 hover:bg-gray-900 hover:text-white hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:size-7",
             isOpen
               ? "scale-100 opacity-100"
               : "pointer-events-none scale-50 opacity-0",
           )}
         >
-          <AiOutlineClose className="size-4 sm:size-5" aria-hidden="true" />
+          <AiOutlineClose className="size-3 sm:size-3.5" aria-hidden="true" />
         </button>
 
         {/* Hint below the closed book; removed while the book is open */}

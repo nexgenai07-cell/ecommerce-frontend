@@ -2,7 +2,8 @@
 // PAYMENT METHOD SELECTOR — CHECKOUT
 // ============================================================
 // Lets the customer choose how they'll pay before placing the order:
-// - Card (Stripe) — the existing fully-automated flow, unchanged.
+// - Card (Stripe) — the fully-automated flow; currently blocked, so it is
+//   shown greyed out and cannot be selected.
 // - QR Payment (Easypaisa/JazzCash) — a static QR code the customer
 //   pays outside the system, then proves with an uploaded screenshot.
 // Whichever is selected here is sent as "payment_method" on the
@@ -19,6 +20,7 @@ const OPTIONS = [
     label: "Card",
     description: "Pay instantly with a debit or credit card",
     icon: HiOutlineCreditCard,
+    disabled: true, // Blocks this option: it is shown but cannot be selected
   },
   {
     value: PAYMENT_METHOD.QR,
@@ -36,17 +38,22 @@ const PaymentMethodSelector = ({ value, onChange }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {OPTIONS.map((option) => {
           const Icon = option.icon;
-          const selected = value === option.value;
+          const isDisabled = Boolean(option.disabled); // Whether this option is blocked from selection
+          const selected = !isDisabled && value === option.value; // A blocked option never appears selected
           return (
             <button
               key={option.value}
               type="button"
               onClick={() => onChange(option.value)}
+              disabled={isDisabled} // Native disabled attribute stops clicks and keyboard selection
+              aria-disabled={isDisabled}
               className={cn(
                 "flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
-                selected
-                  ? "border-primary bg-primary/5"
-                  : "border-gray-200 hover:border-gray-300",
+                isDisabled
+                  ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                  : selected
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300",
               )}
             >
               <span
@@ -66,6 +73,11 @@ const PaymentMethodSelector = ({ value, onChange }) => {
                 <p className="text-xs text-gray-500 mt-0.5">
                   {option.description}
                 </p>
+                {isDisabled && (
+                  <p className="text-xs font-medium text-gray-400 mt-1">
+                    Currently unavailable
+                  </p>
+                )}
               </div>
             </button>
           );
