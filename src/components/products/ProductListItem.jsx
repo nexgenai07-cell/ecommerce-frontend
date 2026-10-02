@@ -20,23 +20,30 @@ import useWishlist from "../../hooks/useWishlist";
 // into the centered bag/cart graphic. flyBackToWishlistCard reverses it
 // when a product is un-hearted right here on a listing page (the row
 // stays visible, so the item flies back down into it). Same hook
-// ProductCard (grid view) and ProductInfo (detail page) already use —
-// this list view was just never wired up to it.
+// ProductCard (grid view) and ProductInfo (detail page) use.
 import useFlyToIcon from "../../hooks/useFlyToIcon";
 // Toast helpers for success/error feedback
 import { showSuccess, showError } from "../ui/Toast";
 
-// -------- Reusable shared components (now actually reused here) --------
+// -------- Reusable shared components --------
 import PriceDisplay from "../shared/PriceDisplay"; // Price + strikethrough + discount badge
+import RatingStars from "../shared/RatingStars"; // Star rating with the review count
 import Badge from "../ui/Badge"; // Small status pill (used for "Out of Stock")
 import Button from "../ui/Button"; // Standard button (used for "Add to Cart")
 // Small icon-only heart button doesn't have a shared component of its own,
 // so the two heart icons are kept local, matching the icons ProductCard uses
 import { AiOutlineHeart, AiFillHeart } from "react-icons/ai";
+// Box icon shown inside the "N sold" pill, the same icon the product cards use
+import { BsBoxSeam } from "react-icons/bs";
 
 // Local placeholder image — shown when a product has no image or the image
 // URL fails to load. Same fallback path ProductCard uses, for consistency.
 const FALLBACK_IMAGE = "/placeholder-product.svg";
+
+// Formats a units-sold figure compactly so it always fits on the row
+// (for example 950 stays "950" and 12400 becomes "12K")
+const formatSoldCount = (value) =>
+  new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 
 const ProductListItem = ({ product }) => {
   // Used to invalidate cached cart/wishlist queries after a successful mutation
@@ -231,6 +238,20 @@ const ProductListItem = ({ product }) => {
   const availableStock = product.available_stock ?? 0;
   const isInStock = availableStock > 0;
 
+  // Rating and sales figures supplied by the backend. The wishlist response
+  // names the average "rating", so both names are accepted.
+  const rawAverageRating = product.average_rating ?? product.rating;
+  const averageRating = Number(rawAverageRating) || 0;
+  const reviewCount = Number(product.review_count) || 0;
+  const soldCount = Number(product.total_sold) || 0;
+
+  // The row is drawn only when the backend actually sent at least one of
+  // these figures, so no empty or invented row is shown otherwise
+  const hasSocialProofData =
+    rawAverageRating !== undefined ||
+    product.review_count !== undefined ||
+    product.total_sold !== undefined;
+
   return (
     // The entire row is a single Link — clicking anywhere (except the two
     // action buttons, which call preventDefault) opens the product detail page
@@ -270,6 +291,32 @@ const ProductListItem = ({ product }) => {
           {product.name}
         </p>
 
+        {/* Rating and sold row — star rating with its review count, then the
+            units sold pill. A product with no reviews yet shows a quiet
+            "No reviews yet" label instead of empty stars. */}
+        {hasSocialProofData && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {/* Rating block: stars, average and review count, or the empty state */}
+            {reviewCount > 0 ? (
+              <RatingStars
+                rating={averageRating}
+                count={reviewCount}
+                size="sm"
+              />
+            ) : (
+              <span className="text-xs text-gray-400">No reviews yet</span>
+            )}
+
+            {/* Units sold pill, shown only once the product has sold at least one unit */}
+            {soldCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                <BsBoxSeam className="w-3 h-3" />
+                {formatSoldCount(soldCount)} sold
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Stock status dot + label */}
         <div className="flex items-center gap-1.5">
           <span
@@ -289,8 +336,8 @@ const ProductListItem = ({ product }) => {
 
       {/* ===== Right column — price + action buttons ===== */}
       <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-        {/* Price block — now the shared PriceDisplay component (handles the
-            strikethrough original price and the discount badge automatically) */}
+        {/* Price block — the shared PriceDisplay component handles the
+            strikethrough original price and the discount badge automatically */}
         <PriceDisplay
           price={parseFloat(product.price)}
           originalPrice={parseFloat(product.original_price)}

@@ -81,6 +81,8 @@ const ProductList = () => {
   const [isExporting, setIsExporting] = useState(false);
 
   const debouncedSearch = useDebounce(filters.search, 400);
+  const debouncedMinPrice = useDebounce(filters.minPrice, 400);
+  const debouncedMaxPrice = useDebounce(filters.maxPrice, 400);
 
   const hasActiveFilters =
     !!filters.search ||
@@ -149,8 +151,8 @@ const ProductList = () => {
       debouncedSearch,
       filters.categoryId,
       filters.status,
-      filters.minPrice,
-      filters.maxPrice,
+      debouncedMinPrice,
+      debouncedMaxPrice,
       filters.ordering,
       currentPage,
       pageSize,
@@ -166,8 +168,8 @@ const ProductList = () => {
               : filters.status === "out_of_stock"
                 ? false
                 : undefined,
-          min_price: filters.minPrice || undefined,
-          max_price: filters.maxPrice || undefined,
+          min_price: debouncedMinPrice || undefined,
+          max_price: debouncedMaxPrice || undefined,
           ordering: filters.ordering,
           page: currentPage,
           page_size: pageSize,
@@ -234,8 +236,8 @@ const ProductList = () => {
       "lowStockTable",
       debouncedSearch,
       filters.categoryId,
-      filters.minPrice,
-      filters.maxPrice,
+      debouncedMinPrice,
+      debouncedMaxPrice,
       filters.ordering,
       currentPage,
       pageSize,
@@ -245,8 +247,8 @@ const ProductList = () => {
         {
           q: debouncedSearch || undefined,
           category_id: filters.categoryId || undefined,
-          min_price: filters.minPrice || undefined,
-          max_price: filters.maxPrice || undefined,
+          min_price: debouncedMinPrice || undefined,
+          max_price: debouncedMaxPrice || undefined,
           ordering: filters.ordering,
           page: currentPage,
           page_size: pageSize,
@@ -389,8 +391,8 @@ const ProductList = () => {
         type: "products",
         q: debouncedSearch || undefined,
         category_id: filters.categoryId || undefined,
-        min_price: filters.minPrice || undefined,
-        max_price: filters.maxPrice || undefined,
+        min_price: debouncedMinPrice || undefined,
+        max_price: debouncedMaxPrice || undefined,
         ordering: filters.ordering,
       };
 

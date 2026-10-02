@@ -2,10 +2,12 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AiOutlineClose } from "react-icons/ai";
+import { BsBoxSeam } from "react-icons/bs";
 import cn from "../../utils/cn";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import PriceDisplay from "./PriceDisplay";
+import RatingStars from "./RatingStars";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import useWishlist from "../../hooks/useWishlist";
@@ -18,6 +20,11 @@ import { addToWishlist, removeFromWishlist } from "../../api/wishlist.api";
 // Local placeholder image shown whenever a product has no image,
 // or its image URL fails to load (broken link, expired signed URL, etc.)
 const FALLBACK_IMAGE = "/placeholder-product.svg";
+
+// Formats a units-sold figure compactly so it always fits on the card
+// (for example 950 stays "950" and 12400 becomes "12K")
+const formatSoldCount = (value) =>
+  new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 
 const ProductCard = ({
   product, // The full product data object
@@ -296,8 +303,8 @@ const ProductCard = ({
   if (!product) return null;
 
   // ─────────────────────────────────────────
-  // STOCK STATUS PILL — replaces the old separate "Low Stock" / "Out of Stock"
-  // badges with a single, always-present overlay so every card looks identical
+  // STOCK STATUS PILL — a single, always-present overlay that covers the
+  // in-stock, low-stock and out-of-stock states, so every card looks identical
   // ─────────────────────────────────────────
   const stock = product.available_stock ?? 0;
   const isOutOfStock = stock <= 0;
@@ -325,18 +332,33 @@ const ProductCard = ({
   // Convert both prices to real numbers ONCE here — product.original_price
   // and product.price arrive from the API as decimal strings (e.g.
   // "10000.00"), and comparing raw strings with > does a lexicographic
-  // (character-by-character) comparison instead of a numeric one. That
-  // silently breaks whenever the original price's leading digit is smaller
-  // than the sale price's leading digit — e.g. "10000.00" > "9000.00"
-  // evaluates to false as strings ("1" < "9"), even though 10000 is
-  // numerically larger — which is why a real discount like 10,000 → 9,000
-  // could fail to show its badge while a discount like 130,000 → 120,000
-  // worked fine by coincidence.
+  // (character-by-character) comparison instead of a numeric one. For
+  // example "10000.00" > "9000.00" is false as strings even though 10000
+  // is numerically larger, so the discount check must use real numbers.
   const numericOriginalPrice = Number(product.original_price);
   const numericPrice = Number(product.price);
 
   const hasDiscount =
     numericOriginalPrice > numericPrice && numericOriginalPrice > 0;
+
+  // ─────────────────────────────────────────
+  // RATING AND SALES — real figures supplied by the backend
+  // ─────────────────────────────────────────
+  // The average rating, the number of approved reviews and the units sold
+  // all come straight from the product object. The wishlist response names
+  // the average "rating", so both names are accepted.
+  const rawAverageRating = product.average_rating ?? product.rating;
+  const reviewCount = Number(product.review_count) || 0;
+  const averageRating = Number(rawAverageRating) || 0;
+  const soldCount = Number(product.total_sold) || 0;
+
+  // The row is drawn only when the backend actually sent at least one of
+  // these figures. When none of them is present there is nothing real to
+  // show, so no empty or invented row is added to the card.
+  const hasSocialProofData =
+    rawAverageRating !== undefined ||
+    product.review_count !== undefined ||
+    product.total_sold !== undefined;
 
   return (
     <div
@@ -388,13 +410,11 @@ const ProductCard = ({
             and the icon turns white — a clear "this will delete" signal right before
             the click, without a heavy red outline at rest. */}
         {isControlledRemove ? (
-          // Plain white circle with a muted gray icon by default — matches
-          // the subtler look of the wishlist heart button below instead of
-          // standing out with a heavy red ring at rest. Only fills solid
-          // red on hover, which is a clearer "this will delete" cue than
-          // an always-on red outline.
-          // w-6 h-6: scaled down from w-8 h-8 — the larger circle looked
-          // oversized next to the rest of the card's compact overlay elements
+          // Plain white circle with a muted gray icon by default, matching
+          // the subtle look of the wishlist heart button below. It fills
+          // solid red only on hover, which is a clear "this will delete"
+          // cue right before the click.
+          // w-6 h-6: a compact size that fits the card's other overlay elements
           <button
             onClick={handleRemoveClick}
             aria-label="Remove from wishlist"
@@ -408,8 +428,8 @@ const ProductCard = ({
             <AiOutlineClose className="w-3 h-3" strokeWidth={1.5} />
           </button>
         ) : (
-          // w-6 h-6: scaled down to match the remove button above, keeping
-          // both overlay buttons visually consistent in size
+          // w-6 h-6: same size as the remove button above, keeping both
+          // overlay buttons visually consistent
           <button
             onClick={handleWishlistToggle}
             disabled={wishlistMutation.isPending}
@@ -465,6 +485,37 @@ const ProductCard = ({
         <h3 className="text-sm font-semibold text-gray-800 truncate leading-snug">
           {product.name}
         </h3>
+
+        {/* Social proof row — star rating with its review count on the left,
+            units sold on the right. The row has a fixed height, so every
+            card in a grid stays the same height whether a product has
+            reviews, sales, both or neither. A product with no reviews yet
+            shows a quiet "No reviews yet" label instead of empty stars. */}
+        {hasSocialProofData && (
+          <div className="flex items-center justify-between gap-2 h-5">
+            {/* Rating block: stars, average and review count, or the empty state */}
+            {reviewCount > 0 ? (
+              <RatingStars
+                rating={averageRating}
+                count={reviewCount}
+                size="sm"
+                className="min-w-0"
+              />
+            ) : (
+              <span className="text-[11px] text-gray-400 truncate">
+                No reviews yet
+              </span>
+            )}
+
+            {/* Units sold pill, shown only once the product has sold at least one unit */}
+            {soldCount > 0 && (
+              <span className="inline-flex items-center gap-1 shrink-0 text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                <BsBoxSeam className="w-3 h-3" />
+                {formatSoldCount(soldCount)} sold
+              </span>
+            )}
+          </div>
+        )}
 
         {/* size="sm" + nowrap: keeps the sale price and (if any) strikethrough
             original price locked to ONE line at a smaller, more compact text

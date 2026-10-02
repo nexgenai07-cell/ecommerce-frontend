@@ -79,9 +79,18 @@ const SkeletonCard = ({ withFooter = false }) => {
         {/* w-4/5 h-5: one line, slightly short of full width — mimics a typical
             truncated product title without looking like a perfectly full bar */}
 
+        {/* Rating and sold row placeholder — the real card has a fixed h-5 row
+            between the title and the price: star rating on the left and the
+            "N sold" pill on the right */}
+        <div className="flex items-center justify-between gap-2 h-5">
+          {/* w-20 h-3: mimics the five small stars with the rating number */}
+          <Skeleton className="w-20 h-3" />
+          {/* w-14 h-4 rounded-full: mimics the rounded "N sold" pill */}
+          <Skeleton className="w-14 h-4 rounded-full" />
+        </div>
+
         {/* Price row placeholder — real card's PriceDisplay renders sale price +
-            (optionally) strikethrough original price on ONE row, no rating row
-            exists anywhere on the real card, so it is intentionally omitted here */}
+            (optionally) strikethrough original price on ONE row */}
         <div className="flex items-center gap-2 mt-0.5">
           <Skeleton className="w-16 h-6" />
           {/* w-16 h-6: mimics the bold "md" size sale price (text-base font-semibold) */}

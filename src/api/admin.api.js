@@ -71,6 +71,19 @@ export const updateMyStore = (data, signal) => {
 //   - ip_address    -> the real client IP for actions performed through
 //                      the admin panel; null for older entries and for
 //                      actions performed through the AI assistant
+//   - entity_name   -> the name of the record the action was about: the
+//                      customer's name for order, payment, return and
+//                      complaint entries (and a notification sent to one
+//                      customer), the product's name for product and
+//                      inventory entries, the category's name for a
+//                      category, and the coupon code for a discount. It
+//                      is read live from the record, so a renamed record
+//                      shows its new name on older rows too; null when no
+//                      name could be found
+//   - entity_label  -> ready-made text for the Entity ID column, such as
+//                      "7 — Red Cotton Shirt", or just "7" when there is
+//                      no name (an empty string when the row has no
+//                      entity id)
 export const getAuditLogs = (params, signal) => {
   return axiosInstance.get("/api/v1/admin/audit-logs/", { signal, params });
 };

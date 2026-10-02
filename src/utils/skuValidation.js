@@ -13,11 +13,13 @@
 //   8. Contains at least one letter or number (not just hyphens/underscores)
 //   9. Is not a reserved word ("NULL", "TEST", "ADMIN")
 //
-// Uniqueness (rule 9 on the product spec — no two products share a SKU)
-// and immutability (a SKU can't be changed once the product is created)
-// are enforced separately: uniqueness by the backend and the existing
-// checkProductSkuExists() duplicate check on blur, immutability by
-// disabling the SKU field in the Edit Product form.
+// Uniqueness (no two products share a SKU) and immutability (a SKU is not
+// changed after the product is created) are enforced separately:
+// uniqueness by the backend and the checkProductSkuExists() duplicate check
+// on blur, immutability by keeping the SKU field read-only in the Edit
+// Product form. An admin can deliberately unlock that field to correct a
+// wrong SKU; the request then carries an explicit override flag, and the
+// new value must pass the same rules as a SKU on the Add Product form.
 
 export const SKU_MIN_LENGTH = 3;
 export const SKU_MAX_LENGTH = 25;

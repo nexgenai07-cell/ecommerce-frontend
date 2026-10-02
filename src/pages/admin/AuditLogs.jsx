@@ -1,5 +1,8 @@
+// React state hook for filters, paging and the selected log
 import { useState } from "react";
+// TanStack Query hook for server data fetching
 import { useQuery } from "@tanstack/react-query";
+// Ant Design outline icons used by the header and the stat cards
 import {
   AiOutlineFileText,
   AiOutlinePlusCircle,
@@ -7,29 +10,36 @@ import {
   AiOutlineDelete,
 } from "react-icons/ai";
 
+// Audit log API calls: the log list and the two filter option lists
 import {
   getAuditLogs,
   getAuditLogEntities,
   getAuditLogUsers,
 } from "../../api/admin.api";
+// Analytics API used to download the audit log CSV export
 import { exportReport } from "../../api/analytics.api";
+// Normalises plain-array and paginated responses into one array
 import extractListData from "../../utils/extractListData";
+// Formats an ISO date string for display
 import formatDate from "../../utils/formatDate";
+// Delays a fast-changing value so it is not used on every keystroke
 import useDebounce from "../../hooks/useDebounce";
+// Downloads a backend-generated CSV file and reports success or failure
 import downloadExportCsv from "../../utils/downloadExportCsv";
+// Toast helpers for success and error feedback
 import { showSuccess, showError } from "../../components/ui/Toast";
+// Shared UI building blocks
 import StatsCard from "../../components/ui/StatsCard";
 import Badge from "../../components/ui/Badge";
 import DataTable from "../../components/ui/DataTable";
+// Shared gradient icon and title header used on every admin screen
 import PageHeader from "../../components/shared/PageHeader";
-// PageHeader — the SAME shared gradient icon + title header already
-// used on every other admin screen, replacing this page's own plain
-// <h1> so it finally matches the rest of the panel.
+// Modal that shows the full details of one log entry
 import AuditLogDetailModal from "../../components/admin-audit/AuditLogDetailModal";
+// Toolbar above the table: search, filters toggle, export, entity and user chips
 import AuditLogFilters from "../../components/admin-audit/AuditLogFilters";
-// AuditLogFilters — the shared-style toolbar above the table (search,
-// Filters toggle, Export, Entity/User chips).
 
+// Badge colour for each action type
 const ACTION_BADGE_VARIANT = {
   create: "success",
   update: "info",
@@ -39,36 +49,68 @@ const ACTION_BADGE_VARIANT = {
 // Selectable "rows per page" values shown in the pagination dropdown,
 // matching the backend's page_size cap of 100.
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+// The page size used until the admin picks a different one
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
+// Returns the text shown in the Entity ID column for one log row.
+// The backend sends a ready-made entity_label such as "7 — Red Cotton Shirt"
+// (or just "7" when no name exists). When the label is missing, the text is
+// assembled from the entity id and customer name so the column never
+// goes blank for a row that has an id.
+const getEntityLabel = (row) => {
+  // Preferred value: the label prepared by the backend
+  if (row.entity_label) return row.entity_label;
+
+  // Fallback: join whichever of the id and the customer name exist
+  const fallbackLabel = [row.entity_id, row.customer_name]
+    .filter((part) => part !== null && part !== undefined && part !== "")
+    .join(" — ");
+
+  // A dash tells the admin that this row has no entity to show
+  return fallbackLabel || "—";
+};
+
 const AuditLogs = () => {
+  // Free-text search typed into the toolbar
   const [search, setSearch] = useState("");
+  // Selected entity type filter ("" means all entities)
   const [entityFilter, setEntityFilter] = useState("");
+  // Selected acting user filter ("" means all users)
   const [userFilter, setUserFilter] = useState("");
+  // The page of results currently shown
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // pageSize — how many logs the backend returns per page, controlled by
   // the "Rows per page" dropdown in the table footer. Sent to the
   // backend as `page_size` alongside `page` on every request.
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // The log row whose details are open in the modal, or null
   const [selectedLog, setSelectedLog] = useState(null);
 
   // Resets back to page 1 whenever the admin picks a different rows-per-
   // page value, since staying on a deep page of a now-differently-sized
   // result set could land on an empty page.
   const handlePageSizeChange = (size) => {
+    // Store the newly chosen page size
     setPageSize(size);
+    // Return to the first page of the re-sized result set
     setCurrentPage(1);
   };
 
+  // Waits 400ms after the admin stops typing before searching
   const debouncedSearch = useDebounce(search, 400);
 
-  const hasActiveFilters = !!search || !!entityFilter || !!userFilter;
   // Drives the "Clear all" link's visibility in the toolbar.
+  const hasActiveFilters = !!search || !!entityFilter || !!userFilter;
 
+  // Restores every filter to its default value
   const handleClearFilters = () => {
+    // Empty the search box
     setSearch("");
+    // Show every entity again
     setEntityFilter("");
+    // Show every user again
     setUserFilter("");
+    // Start again from the first page
     setCurrentPage(1);
   };
 
@@ -83,6 +125,7 @@ const AuditLogs = () => {
     isError,
     refetch,
   } = useQuery({
+    // Every filter is part of the key so each combination is cached apart
     queryKey: [
       "auditLogs",
       "list",
@@ -92,6 +135,7 @@ const AuditLogs = () => {
       currentPage,
       pageSize,
     ],
+    // Sends only the filters that actually have a value
     queryFn: ({ signal }) =>
       getAuditLogs(
         {
@@ -105,8 +149,11 @@ const AuditLogs = () => {
       ),
   });
 
+  // The rows for the current page of the table
   const logs = extractListData(logsResponse);
+  // Total number of matching logs across every page
   const totalCount = logsResponse?.data?.count ?? logs.length;
+  // Total number of pages, never lower than one
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   // --------------------------------------------------
@@ -114,11 +161,13 @@ const AuditLogs = () => {
   // option that has ever been logged, rather than only the values that
   // happen to be on the current page of rows.
   // --------------------------------------------------
+  // Every distinct entity type that has been logged
   const { data: entitiesResponse } = useQuery({
     queryKey: ["auditLogs", "entities"],
     queryFn: ({ signal }) => getAuditLogEntities(signal),
     staleTime: 1000 * 60 * 5,
   });
+  // Every admin who has performed at least one logged action
   const { data: usersResponse } = useQuery({
     queryKey: ["auditLogs", "users"],
     queryFn: ({ signal }) => getAuditLogUsers(signal),
@@ -150,19 +199,23 @@ const AuditLogs = () => {
   // "create" also counts actions such as create_product and
   // create_notification.
   // --------------------------------------------------
+  // Number of logged create actions
   const { data: createResponse } = useQuery({
     queryKey: ["auditLogs", "count", "create"],
     queryFn: ({ signal }) => getAuditLogs({ action: "create" }, signal),
   });
+  // Number of logged update actions
   const { data: updateResponse } = useQuery({
     queryKey: ["auditLogs", "count", "update"],
     queryFn: ({ signal }) => getAuditLogs({ action: "update" }, signal),
   });
+  // Number of logged delete actions
   const { data: deleteResponse } = useQuery({
     queryKey: ["auditLogs", "count", "delete"],
     queryFn: ({ signal }) => getAuditLogs({ action: "delete" }, signal),
   });
 
+  // Reads the total count from a paginated response, with a safe fallback
   const getCount = (response) =>
     response?.data?.count ?? extractListData(response).length;
 
@@ -172,11 +225,15 @@ const AuditLogs = () => {
   // is one request instead of looping every page of results and
   // building the file in the browser.
   // --------------------------------------------------
+  // True while the CSV download is running
   const [isExporting, setIsExporting] = useState(false);
 
+  // Downloads the CSV for the filters currently applied
   const handleExport = async () => {
+    // Disable the export button while the request runs
     setIsExporting(true);
     try {
+      // Request the CSV with the same filters the table is using
       const { success, message } = await downloadExportCsv(
         exportReport,
         {
@@ -188,18 +245,22 @@ const AuditLogs = () => {
         "audit-logs",
       );
 
+      // Report the outcome to the admin
       if (success) {
         showSuccess("Export downloaded.");
       } else {
         showError(message || "Failed to export logs. Please try again.");
       }
     } finally {
+      // Enable the export button again
       setIsExporting(false);
     }
   };
 
+  // Column definitions for the audit log table
   const columns = [
     {
+      // When the action happened
       key: "created_at",
       label: "Timestamp",
       render: (row) => (
@@ -209,6 +270,7 @@ const AuditLogs = () => {
       ),
     },
     {
+      // Who performed the action
       key: "user",
       label: "User",
       render: (row) => (
@@ -220,6 +282,7 @@ const AuditLogs = () => {
       ),
     },
     {
+      // What kind of action it was
       key: "action",
       label: "Action",
       render: (row) => (
@@ -232,6 +295,7 @@ const AuditLogs = () => {
       ),
     },
     {
+      // Which type of record the action was about
       key: "entity",
       label: "Entity",
       render: (row) => (
@@ -241,19 +305,18 @@ const AuditLogs = () => {
       ),
     },
     {
+      // The record's id together with its name, for example
+      // "7 — Red Cotton Shirt" or "12 — Sara Ahmed"
       key: "entity_id",
       label: "Entity ID",
       render: (row) => (
-        // customer_name is the customer the action was about (for example
-        // "complaint 12 — Sara Ahmed"). It is null for entities with no
-        // customer behind them, so only the id is shown then.
         <span className="text-[10px] sm:text-[11px] text-gray-500">
-          <span className="font-mono">{row.entity_id}</span>
-          {row.customer_name && ` — ${row.customer_name}`}
+          {getEntityLabel(row)}
         </span>
       ),
     },
     {
+      // The network address the action came from
       key: "ip_address",
       label: "IP Address",
       render: (row) => (
@@ -265,15 +328,17 @@ const AuditLogs = () => {
       ),
     },
     {
+      // Opens the detail modal for the row
       key: "actions",
       label: "Actions",
       render: (row) => (
         <button
           onClick={(e) => {
-            e.stopPropagation();
             // Stops this click from also bubbling up to the row's own
             // onClick, which opens the same modal — avoids a redundant
             // double open when the link itself is clicked
+            e.stopPropagation();
+            // Show the details of this row
             setSelectedLog(row);
           }}
           className="text-[10px] sm:text-[11px] text-primary font-medium hover:underline"
@@ -286,10 +351,10 @@ const AuditLogs = () => {
 
   return (
     // Vertical spacing between the header, stats cards, toolbar, and table
-    // reduced from gap-6 to gap-2 so the page matches the tighter rhythm
-    // already used on Product Management, instead of leaving large empty
-    // bands between each section.
+    // is kept tight so the page matches the rhythm used on Product
+    // Management, instead of leaving large empty bands between sections.
     <div className="flex flex-col gap-2 flex-1 min-h-0">
+      {/* Page title */}
       <PageHeader icon={<AiOutlineFileText />} title="Audit Logs" />
 
       {/* Layout: a flex-wrap row rather than a three-column grid.
@@ -299,6 +364,7 @@ const AuditLogs = () => {
           flex row keeps the three cards close together and still
           drops to a single column on narrow screens. */}
       <div className="flex flex-wrap gap-2">
+        {/* Total create actions */}
         <StatsCard
           title="Create Actions"
           value={getCount(createResponse)}
@@ -306,6 +372,7 @@ const AuditLogs = () => {
           iconBg="bg-success-light"
           iconColor="text-success"
         />
+        {/* Total update actions */}
         <StatsCard
           title="Update Actions"
           value={getCount(updateResponse)}
@@ -313,6 +380,7 @@ const AuditLogs = () => {
           iconBg="bg-info-light"
           iconColor="text-info"
         />
+        {/* Total delete actions */}
         <StatsCard
           title="Delete Actions"
           value={getCount(deleteResponse)}
@@ -321,9 +389,9 @@ const AuditLogs = () => {
           iconColor="text-danger"
         />
       </div>
-      {/* Note: "Total Actions Today" card from the design is NOT
-          included — no date-scoped count is reliably available
-          without a confirmed date filter param. */}
+      {/* Note: a "Total Actions Today" card is NOT included — no
+          date-scoped count is reliably available without a confirmed
+          date filter param. */}
 
       {/* Toolbar — search, Filters, Export, and (once opened) the
           Entity/User dropdown chips. Same shared toolbar pattern used
@@ -331,19 +399,25 @@ const AuditLogs = () => {
       <AuditLogFilters
         search={search}
         onSearchChange={(value) => {
+          // Store the typed search text
           setSearch(value);
+          // A new search starts from the first page
           setCurrentPage(1);
         }}
         entityOptions={entityOptions}
         entityFilter={entityFilter}
         onEntityChange={(value) => {
+          // Store the chosen entity type
           setEntityFilter(value);
+          // A new filter starts from the first page
           setCurrentPage(1);
         }}
         userOptions={userOptions}
         userFilter={userFilter}
         onUserChange={(value) => {
+          // Store the chosen user
           setUserFilter(value);
+          // A new filter starts from the first page
           setCurrentPage(1);
         }}
         onClearFilters={handleClearFilters}
@@ -352,6 +426,7 @@ const AuditLogs = () => {
         isExporting={isExporting}
       />
 
+      {/* The audit log table with server-side pagination */}
       <DataTable
         columns={columns}
         data={logs}
@@ -371,6 +446,7 @@ const AuditLogs = () => {
         onPageSizeChange={handlePageSizeChange}
       />
 
+      {/* Detail modal for the selected log row */}
       <AuditLogDetailModal
         isOpen={!!selectedLog}
         onClose={() => setSelectedLog(null)}
