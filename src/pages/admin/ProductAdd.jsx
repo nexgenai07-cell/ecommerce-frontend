@@ -23,6 +23,7 @@ import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
+import getApiErrorMessage from "../../utils/getApiErrorMessage"; // Pulls the backend's own error text out of a failed request
 import generateSku from "../../utils/generateSku";
 import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — builds a readable candidate SKU from name + category,
@@ -317,12 +318,29 @@ const ProductAdd = () => {
       const response = await createMutation.mutateAsync(formData);
       const newProductId = response.data.id;
 
-      for (const image of pendingImages) {
-        await uploadImageMutation.mutateAsync({
-          productId: newProductId,
-          file: image.file,
-          isPrimary: image.isPrimary,
-        });
+      // The product already exists at this point. If an image is then
+      // rejected (too large, wrong type, ...), show the backend's reason
+      // and send the admin to the Edit page of the saved product, so
+      // pressing Save again can't create a duplicate product.
+      try {
+        for (const image of pendingImages) {
+          await uploadImageMutation.mutateAsync({
+            productId: newProductId,
+            file: image.file,
+            isPrimary: image.isPrimary,
+          });
+        }
+      } catch (imageError) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PRODUCTS });
+        queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
+        showError(
+          `Product was saved, but an image failed to upload: ${getApiErrorMessage(
+            imageError,
+            "Image upload failed.",
+          )}`,
+        );
+        navigate(ROUTES.ADMIN_PRODUCT_EDIT.replace(":id", newProductId));
+        return;
       }
 
       // QUERY_KEYS.PRODUCTS ("products") is the storefront's cache key,
@@ -355,9 +373,12 @@ const ProductAdd = () => {
         });
         showError(purchasePriceError);
       } else {
+        // Any other failure: show the backend's own message
         showError(
-          error?.response?.data?.message ||
+          getApiErrorMessage(
+            error,
             "Something went wrong while saving the product.",
+          ),
         );
       }
     } finally {

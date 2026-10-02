@@ -22,7 +22,14 @@ const getApiErrorMessage = (
   fallback = "Something went wrong. Please try again.",
 ) => {
   const data = error?.response?.data;
-  if (!data || typeof data !== "object") return fallback;
+  if (!data || typeof data !== "object") {
+    // A proxy / web server can reject an oversized upload with a plain
+    // HTML 413 page that carries no readable message from the backend.
+    if (error?.response?.status === 413) {
+      return "The file you selected is too large to upload. Please choose a smaller file.";
+    }
+    return fallback;
+  }
 
   const candidates = [
     data.error,

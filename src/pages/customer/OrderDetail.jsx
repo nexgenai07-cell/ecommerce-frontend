@@ -26,6 +26,10 @@ import { ORDER_STATUS, PAYMENT_METHOD } from "../../constants/statusTypes"; // U
 import QrPaymentPanel from "../../components/checkout/QrPaymentPanel"; // Same countdown + upload + extend panel Checkout.jsx uses, reused as-is for a QR order still "order_placed" when the customer lands on (or returns to) this page directly
 import { SkeletonOrderDetail } from "../../components/ui/Skeleton"; // Full-page skeleton shown while the order data is loading — mirrors this exact page's header, stepper, and 2/3+1/3 grid
 import ErrorState from "../../components/ui/ErrorState"; // Error UI with a retry button shown when the API call fails
+import shouldShowEstimatedDelivery, {
+  getDeliveredAt,
+} from "../../utils/shouldShowEstimatedDelivery";
+import formatDate from "../../utils/formatDate"; // "Delivered on" date // Hides the estimate for cancelled/delivered/unpaid/refunded orders
 import Modal from "../../components/ui/Modal"; // Base modal used to build the cancel dialog (with its own reason dropdown) below
 import Select from "../../components/ui/Select"; // Optional cancellation reason dropdown
 import Textarea from "../../components/ui/Textarea"; // Free-text field shown when "Other" is picked as the reason
@@ -342,9 +346,16 @@ const OrderDetail = () => {
             {/* Expected delivery — a simple text line rather than the full
                 date range, since the range's exact start/end matters less
                 to a customer than a quick sense of how long to expect. */}
-            {order.expected_delivery && (
+            {shouldShowEstimatedDelivery(order) && (
               <p className="text-sm text-gray-500">
                 Estimated delivery: {order.expected_delivery}
+              </p>
+            )}
+
+            {/* Delivered on — replaces the estimate once the order has arrived */}
+            {getDeliveredAt(order) && (
+              <p className="text-sm text-gray-500">
+                Delivered on: {formatDate(getDeliveredAt(order))}
               </p>
             )}
 

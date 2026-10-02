@@ -100,14 +100,14 @@ const AdminProfile = () => {
             </div>
 
             <div className="px-6 sm:px-8 pb-6 sm:pb-8">
-              <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-12 sm:-mt-14">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 -mt-12 sm:-mt-14">
                 <Avatar
                   src={user?.profile_picture}
                   name={user?.name}
                   className="w-24 h-24 sm:w-28 sm:h-28 text-3xl sm:text-4xl ring-4 ring-white shadow-lg mx-auto sm:mx-0"
                 />
 
-                <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start gap-1.5 sm:pb-1">
+                <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start gap-1.5 sm:mt-16">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate max-w-full">
                       {user?.name || "Admin"}

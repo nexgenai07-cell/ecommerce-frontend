@@ -22,6 +22,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { HiOutlineEnvelope } from "react-icons/hi2";
+import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai"; // Show / hide password icons
 import { requestEmailChange, confirmEmailChange } from "../../api/auth.api";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
@@ -32,6 +33,7 @@ const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
   // "request" -> step 1 (password + new email), "confirm" -> step 2 (OTP)
   const [step, setStep] = useState("request");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Eye toggle for the password field
   const [newEmail, setNewEmail] = useState("");
   const [otp, setOtp] = useState("");
 
@@ -41,6 +43,7 @@ const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
   const resetState = () => {
     setStep("request");
     setPassword("");
+    setShowPassword(false);
     setNewEmail("");
     setOtp("");
   };
@@ -144,12 +147,26 @@ const ChangeEmailModal = ({ isOpen, onClose, onSuccess }) => {
           >
             <Input
               label="Current Password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="••••••••"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              rightIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="text-gray-400 hover:text-primary transition-colors"
+                >
+                  {showPassword ? (
+                    <AiOutlineEyeInvisible className="w-4 h-4" />
+                  ) : (
+                    <AiOutlineEye className="w-4 h-4" />
+                  )}
+                </button>
+              }
             />
             <Input
               label="New Email Address"

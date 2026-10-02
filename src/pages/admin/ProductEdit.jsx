@@ -47,6 +47,8 @@ import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 
 // Toast helpers for success and error feedback
 import { showSuccess, showError } from "../../components/ui/Toast";
+// Pulls the backend's own error text out of a failed request
+import getApiErrorMessage from "../../utils/getApiErrorMessage";
 // Shared UI building blocks
 import Button from "../../components/ui/Button";
 import Spinner from "../../components/ui/Spinner";
@@ -390,7 +392,8 @@ const ProductEdit = () => {
         queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
       });
     },
-    onError: () => showError("Failed to upload image."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to upload image.")),
   });
 
   // Deletes one image
@@ -404,7 +407,8 @@ const ProductEdit = () => {
         queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
       });
     },
-    onError: () => showError("Failed to remove image."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to remove image.")),
     // Clear the busy marker whether the request worked or not
     onSettled: () => setImageActionKey(null),
   });
@@ -420,7 +424,8 @@ const ProductEdit = () => {
         queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
       });
     },
-    onError: () => showError("Failed to update primary image."),
+    onError: (error) =>
+      showError(getApiErrorMessage(error, "Failed to update primary image.")),
     // Clear the busy marker whether the request worked or not
     onSettled: () => setImageActionKey(null),
   });
@@ -500,10 +505,12 @@ const ProductEdit = () => {
         });
         showError(purchasePriceError);
       } else {
-        // Any other failure: the backend's message or a generic one
+        // Any other failure: the backend's own message
         showError(
-          error?.response?.data?.message ||
+          getApiErrorMessage(
+            error,
             "Something went wrong while updating the product.",
+          ),
         );
       }
     } finally {

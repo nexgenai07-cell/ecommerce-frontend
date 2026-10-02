@@ -1,4 +1,5 @@
 import {
+  AiOutlineArrowLeft,
   AiOutlineLogout,
   AiOutlineMail,
   AiOutlineShopping,
@@ -54,13 +55,27 @@ const AccountNavbar = () => {
         className={cn(
           "sticky top-0 z-sticky", // sticks to the top of the scroll container, layered above page content but below dropdowns/drawers/modals
           "h-14 bg-surface shadow-2xl border-border", // fixed height bar, white background — matches the admin TopHeader's surface language exactly
-          "flex items-center justify-end", // nothing sits on the left on this bar — only the bell and avatar on the right
+          "flex items-center justify-between", // "Back to Home" button on the left, bell and avatar on the right
           "px-4 md:px-6", // tighter padding on mobile, roomier on desktop — fully responsive
         )}
       >
         {/* ============================================
+          LEFT SIDE — "Back to Home" button. Gray pill with a
+          react-icons arrow; on small screens only the icon shows
+          (aria-label keeps it accessible), from sm up the text
+          label appears next to it.
+          ============================================ */}
+        <Link
+          to={ROUTES.HOME}
+          aria-label="Back to Home"
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 hover:text-gray-800 transition-colors shrink-0"
+        >
+          <AiOutlineArrowLeft className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Back to Home</span>
+        </Link>
+
+        {/* ============================================
           RIGHT SIDE — notification bell + profile menu
-          (the only two elements this navbar carries)
           ============================================ */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
           {/* ---------- NOTIFICATION BELL ---------- */}

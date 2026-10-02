@@ -36,6 +36,9 @@ import {
   PAYMENT_METHOD,
   PAYMENT_STATUS,
 } from "../../constants/statusTypes";
+import shouldShowEstimatedDelivery, {
+  getDeliveredAt,
+} from "../../utils/shouldShowEstimatedDelivery"; // Hides the estimate for cancelled/delivered/unpaid/refunded orders
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import formatPrice from "../../utils/formatPrice";
 import formatDate from "../../utils/formatDate";
@@ -435,8 +438,10 @@ const AdminOrderDetail = () => {
             </div>
             <p className="text-sm text-gray-400 mt-1">
               Placed on {formatDate(order.created_at)}
-              {order.expected_delivery &&
+              {shouldShowEstimatedDelivery(order) &&
                 ` · Estimated delivery: ${order.expected_delivery}`}
+              {getDeliveredAt(order) &&
+                ` · Delivered on: ${formatDate(getDeliveredAt(order))}`}
             </p>
             {/* Cancellation Reason — only shown once the order is actually
                 cancelled AND a reason exists on it. Covers both cases: the
