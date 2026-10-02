@@ -137,7 +137,9 @@ const ProductReviews = ({ productId }) => {
   // REVIEWS QUERY (paginated, approved reviews only)
   // =============================================
   const { data: reviewsData, isLoading } = useQuery({
-    queryKey: [...QUERY_KEYS.PRODUCT_REVIEWS(productId), page],
+    // The response depends on who is asking (it says whether this customer
+    // may write a review), so signing in or out loads it again.
+    queryKey: [...QUERY_KEYS.PRODUCT_REVIEWS(productId), page, isAuthenticated],
     queryFn: ({ signal }) => getProductReviews(productId, { page }, signal),
     enabled: !!productId,
     staleTime: 1000 * 30,
@@ -167,6 +169,27 @@ const ProductReviews = ({ productId }) => {
   );
 
   const isWriteBlocked = writeBlocked?.productId === productId;
+
+  // Only customers who received this product may write a review. The
+  // server states this for the signed-in customer as can_review; an
+  // explicit false disables the action. While the server does not send the
+  // value, a signed-in customer keeps the action and the server's 403
+  // answer (handled in addMutation) still blocks anyone who is not
+  // eligible. Visitors who are not signed in cannot review either. A
+  // customer who already has a review keeps the edit action.
+  const canWriteReview =
+    !isWriteBlocked &&
+    (Boolean(myReviewOnThisPage) ||
+      (isAuthenticated && reviewsData?.data?.can_review !== false));
+
+  // Explains why the write action is disabled.
+  const writeDisabledMessage = isWriteBlocked
+    ? writeBlocked.message
+    : !canWriteReview
+      ? isAuthenticated
+        ? "Only customers who have bought and received this product can write a review."
+        : "Sign in to write a review. Only customers who have bought and received this product can review it."
+      : "";
   const activeNotice = notice?.productId === productId ? notice.message : "";
 
   const refreshReviews = () => {
@@ -248,7 +271,10 @@ const ProductReviews = ({ productId }) => {
       setPage(1);
     },
     onError: (error) => {
-      const message = getApiErrorMessage(error, "Failed to submit your review.");
+      const message = getApiErrorMessage(
+        error,
+        "Failed to submit your review.",
+      );
       const status = error?.response?.status;
 
       // The product has not been received by this customer yet.
@@ -309,7 +335,10 @@ const ProductReviews = ({ productId }) => {
       refreshReviews();
     },
     onError: (error) => {
-      const message = getApiErrorMessage(error, "Failed to update your review.");
+      const message = getApiErrorMessage(
+        error,
+        "Failed to update your review.",
+      );
       const status = error?.response?.status;
 
       // The image itself was rejected. Nothing was saved, so the form
@@ -446,7 +475,7 @@ const ProductReviews = ({ productId }) => {
         <Button
           variant={myReviewOnThisPage ? "outline" : "primary"}
           onClick={openWriteForm}
-          disabled={isWriteBlocked}
+          disabled={!canWriteReview}
           className="shrink-0 w-full sm:w-auto"
         >
           {myReviewOnThisPage ? "Edit Your Review" : "Write a Review"}
@@ -454,9 +483,9 @@ const ProductReviews = ({ productId }) => {
       </div>
 
       {/* Explains why the write action is disabled for this customer. */}
-      {isWriteBlocked && (
+      {writeDisabledMessage && (
         <p className="text-xs text-gray-500 leading-relaxed">
-          {writeBlocked.message}
+          {writeDisabledMessage}
         </p>
       )}
 

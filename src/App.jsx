@@ -322,9 +322,10 @@ const PublicRoute = ({ children }) => {
 // Redirects admin accounts to the admin dashboard. Guests and
 // customers pass through unaffected.
 const CustomerOnlyRoute = ({ children }) => {
-  const { role } = useAuth();
+  const { isAuthenticated, role } = useAuth();
 
-  if (role === "admin") {
+  // The admin redirect applies only to a live signed-in session, so a leftover saved role cannot bounce a guest to the admin area
+  if (isAuthenticated && role === "admin") {
     return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />;
   }
 

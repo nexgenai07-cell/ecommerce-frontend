@@ -228,6 +228,7 @@ axiosInstance.interceptors.response.use(
     ) {
       localStorage.removeItem("token"); // clear the invalid access token
       localStorage.removeItem("refreshToken"); // clear the invalid refresh token
+      localStorage.removeItem("user"); // clear the saved user profile so its role cannot outlive the session
       window.location.href = "/login"; // hard redirect to the login page
       return Promise.reject(error);
     }
@@ -257,6 +258,7 @@ axiosInstance.interceptors.response.use(
       isRefreshing = false;
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user"); // clear the saved user profile so its role cannot outlive the session
       window.location.href = "/login";
       return Promise.reject(error);
     }
@@ -289,6 +291,7 @@ axiosInstance.interceptors.response.use(
 
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user"); // clear the saved user profile so its role cannot outlive the session
       window.location.href = "/login"; // hard redirect to the login page
 
       return Promise.reject(refreshError);

@@ -171,7 +171,7 @@ const NotificationTemplates = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Compose form */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4">
+        <div className="lg:col-span-2 min-w-0 bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex flex-col gap-4">
           {/* Target */}
           <div className="flex flex-col gap-2">
             <Toggle
@@ -265,7 +265,7 @@ const NotificationTemplates = () => {
             error={showMessageError ? messageError : undefined}
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
               label="Type"
               options={TYPE_OPTIONS}
@@ -286,7 +286,7 @@ const NotificationTemplates = () => {
             onClick={handleSend}
             disabled={!canSend}
             isLoading={sendMutation.isPending}
-            className="self-end"
+            className="w-full sm:w-auto sm:self-end"
           >
             {isBroadcast ? "Broadcast to Everyone" : "Send Notification"}
           </Button>
@@ -300,17 +300,19 @@ const NotificationTemplates = () => {
         </div>
 
         {/* Live preview — purely visual, reflects what's already typed */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
+        {/* min-w-0 lets this grid column shrink to its track width, so long
+            text wraps inside the card instead of widening the page. */}
+        <div className="min-w-0 bg-white rounded-xl border border-gray-100 p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Preview</h2>
-          <div className="border border-gray-200 rounded-xl p-4 flex gap-3 bg-gray-50">
+          <div className="border border-gray-200 rounded-xl p-4 flex gap-3 bg-gray-50 overflow-hidden">
             <span className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
               Z
             </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 break-words">
                 {title || "Notification title"}
               </p>
-              <p className="text-xs text-gray-600 mt-0.5">
+              <p className="text-xs text-gray-600 mt-0.5 break-words whitespace-pre-line">
                 {message || "Your message will appear here..."}
               </p>
             </div>

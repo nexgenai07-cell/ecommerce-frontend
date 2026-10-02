@@ -29,6 +29,7 @@ import {
 import useComplaintSocket from "../../hooks/useComplaintSocket";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
+import useAuth from "../../hooks/useAuth";
 import {
   getDateDividerLabel,
   formatMessageTime,
@@ -40,6 +41,9 @@ import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
 const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
   const queryClient = useQueryClient();
+  // The signed-in user, whose own picture and name are shown on the
+  // messages this viewer sent.
+  const { user } = useAuth();
   const [draft, setDraft] = useState("");
 
   // Ref to an empty marker element placed after the last message —
@@ -176,15 +180,23 @@ const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
                       isOwn ? "justify-end" : "justify-start"
                     }`}
                   >
-                    {/* Small avatar on the OTHER party's messages only —
-                        own messages sit flush to the right without one,
-                        which keeps the own side of the thread compact. */}
+                    {/* Small avatar beside every message. The other party's
+                        avatar sits on the left and shows the sender's
+                        profile picture when the message carries one; the
+                        viewer's own avatar sits on the right and shows
+                        their own profile picture. Without a picture the
+                        Avatar falls back to initials. */}
                     {!isOwn && (
-                      <Avatar name={otherName} size="sm" className="mb-3.5" />
+                      <Avatar
+                        src={msg.sender_profile_picture || ""}
+                        name={otherName}
+                        size="sm"
+                        className="mb-3.5"
+                      />
                     )}
 
                     <div
-                      className={`flex flex-col max-w-[78%] sm:max-w-[65%] ${
+                      className={`flex flex-col max-w-[70%] sm:max-w-[65%] ${
                         isOwn ? "items-end" : "items-start"
                       }`}
                     >
@@ -213,6 +225,15 @@ const ComplaintThread = ({ complaintId, currentRole, otherPartyName }) => {
                         </p>
                       </div>
                     </div>
+
+                    {isOwn && (
+                      <Avatar
+                        src={user?.profile_picture || ""}
+                        name={user?.name}
+                        size="sm"
+                        className="mb-3.5"
+                      />
+                    )}
                   </motion.div>
                 </div>
               );
