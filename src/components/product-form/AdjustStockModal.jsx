@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { adjustProductStock } from "../../api/products.api";
 import invalidateProductQueries from "../../utils/invalidateProductQueries";
+import { patchProductStock } from "../../utils/productDetailCache";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
@@ -35,10 +36,14 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
       const newStock = response?.data?.total_stock ?? response?.data?.stock;
       showSuccess(`Stock updated. New total quantity: ${newStock}.`);
 
-      // The stock change is stored by the server as soon as it is applied, so
-      // it counts as a product update. The shared helper refreshes the same
-      // views that saving the product form refreshes.
-      invalidateProductQueries(queryClient, productId);
+      // The response carries the new stock figures, so only those fields are
+      // written into the product on screen. The product is not refetched,
+      // which keeps every other value of the edit form untouched.
+      patchProductStock(queryClient, productId, response?.data);
+
+      // The views derived from stock (lists, low stock alerts, dashboard)
+      // are refreshed; the product detail itself was updated above.
+      invalidateProductQueries(queryClient, productId, { skipDetail: true });
 
       resetAndClose();
     },

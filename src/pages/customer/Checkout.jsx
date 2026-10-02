@@ -57,6 +57,7 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 // Confirmation dialog + its form controls — same components OrderDetail.jsx
 // uses for its own "Cancel Order" modal, reused here for consistency
 import Modal from "../../components/ui/Modal";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 import Select from "../../components/ui/Select";
 import Textarea from "../../components/ui/Textarea";
 import Button from "../../components/ui/Button";
@@ -445,6 +446,11 @@ const Checkout = () => {
   // Free-text field shown only when "other" is selected above.
   const [cancelReasonOther, setCancelReasonOther] = useState("");
 
+  // Message shown in the price change confirmation dialog. It is set when the
+  // server reports that the order total differs from the total the customer
+  // saw (HTTP 409), and cleared once the customer decides.
+  const [priceChangeMessage, setPriceChangeMessage] = useState("");
+
   // Login check
   // Side effect that runs whenever isAuthenticated or navigate changes
   useEffect(() => {
@@ -492,7 +498,11 @@ const Checkout = () => {
   // Skipped entirely in Buy Now mode (isBuyNow) — a Buy Now checkout
   // leaves the cart completely untouched (not read, not cleared), so this
   // page has no reason to even fetch it.
-  const { data: cartData, isLoading: cartLoading } = useQuery({
+  const {
+    data: cartData,
+    isLoading: cartLoading,
+    isFetching: cartFetching,
+  } = useQuery({
     queryKey: QUERY_KEYS.CART, // Cache key used to identify and later invalidate this specific query
     queryFn: ({ signal }) => getCart(signal), // Function that performs the actual API call to fetch cart data
     enabled: isAuthenticated && !isBuyNow, // Only run this query for a real cart checkout, not Buy Now
@@ -944,6 +954,10 @@ const Checkout = () => {
         // to its own default (free/standard) shipping regardless of what
         // was actually selected and shown in the on-screen total.
         shipping_method: data.shippingMethod,
+        // The total shown on screen. The server rejects the order with a
+        // 409 when its own total differs, so the customer is never charged
+        // an amount they have not seen.
+        expected_total: total.toFixed(2),
         phone: data.phone,
         notes: "", // Empty notes field sent by default — no order notes feature implemented yet
         ...(isBuyNow && {
@@ -1035,6 +1049,26 @@ const Checkout = () => {
         error,
         "Failed to place order. Please try again.",
       );
+
+      // TOTAL CHANGED: the server total no longer matches the total the
+      // customer saw (a coupon or a price changed). No order was created.
+      // A cart checkout reloads the cart and asks the customer to confirm
+      // the updated total before the order is placed again. A Buy Now
+      // checkout has no cart to reload, so the customer is returned to the
+      // details step with the server message.
+      if (error?.response?.status === 409) {
+        setStep("details");
+
+        if (isBuyNow) {
+          showError(message);
+          return;
+        }
+
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
+        setPriceChangeMessage(message);
+        return;
+      }
+
       // Displaying the error message to the user via toast notification
       showError(message);
 
@@ -1226,6 +1260,14 @@ const Checkout = () => {
     setAddressError("");
     setPendingCheckoutData(data);
     sendOtpMutation.mutate(data);
+  };
+
+  // Places the order again after the customer accepted the updated total.
+  // The email code was already verified earlier in this checkout, so the
+  // order is placed directly with the details captured on the form.
+  const handleConfirmPriceChange = () => {
+    setPriceChangeMessage("");
+    checkoutMutation.mutate(pendingCheckoutData);
   };
 
   // Called by CheckoutOtpStep's form submit, once 6 digits have been typed.
@@ -1591,6 +1633,22 @@ const Checkout = () => {
           </div>
         </div>
       </Container>
+
+      {/* ── Updated total confirmation modal ────────────────────────────────────
+          Shown when the server total differs from the total the customer saw.
+          The confirm button stays locked until the cart has finished
+          reloading, so the amount shown here is always the current one. */}
+      <ConfirmModal
+        isOpen={Boolean(priceChangeMessage)}
+        onClose={() => setPriceChangeMessage("")}
+        onConfirm={handleConfirmPriceChange}
+        title="Order total has changed"
+        message={`${priceChangeMessage} The updated total is ${formatPrice(total)}. Do you want to place the order at this amount?`}
+        confirmLabel="Place Order"
+        cancelLabel="Review Order"
+        variant="primary"
+        isLoading={cartFetching}
+      />
 
       {/* ── Cancel order confirmation modal ─────────────────────────────────────
           Only reachable from the "payment"/"qr" steps (see Cancel Order button

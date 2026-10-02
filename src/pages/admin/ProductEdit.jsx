@@ -42,13 +42,17 @@ import extractListData from "../../utils/extractListData";
 // auto-fill effect on this page — only an explicit, admin-initiated
 // regenerate action.
 import generateSku from "../../utils/generateSku";
+// Writes API response data into the cached product without refetching it
+import { patchProductDetail } from "../../utils/productDetailCache";
 // SKU helpers shared by every SKU field in the admin panel
 import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 
 // Toast helpers for success and error feedback
 import { showSuccess, showError } from "../../components/ui/Toast";
 // Pulls the backend's own error text out of a failed request
-import getApiErrorMessage, { getApiFieldError } from "../../utils/getApiErrorMessage";
+import getApiErrorMessage, {
+  getApiFieldError,
+} from "../../utils/getApiErrorMessage";
 // Shared UI building blocks
 import Button from "../../components/ui/Button";
 import Spinner from "../../components/ui/Spinner";
@@ -184,8 +188,8 @@ const ProductEdit = () => {
   // Whether the "Change SKU" confirmation dialog is open
   const [isSkuUnlockConfirmOpen, setIsSkuUnlockConfirmOpen] = useState(false);
 
-  // Loads the product. The detail query is refetched after an image upload
-  // or a stock adjustment; the form below is protected from those refetches.
+  // Loads the product. Image changes and stock adjustments write their API
+  // response straight into this cached product instead of refetching it.
   const { data: productResponse, isLoading } = useQuery({
     queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
     queryFn: ({ signal }) => getProductById(id, signal),
@@ -254,10 +258,9 @@ const ProductEdit = () => {
     },
     // The form is filled from the saved product through `values`, so it
     // follows the saved data without ever being reset wholesale. Whenever
-    // the saved product changes (after an image upload, a stock adjustment,
-    // a window refocus or a live update), only the fields the admin has NOT
-    // edited are refreshed; every field the admin has typed into keeps its
-    // unsaved value.
+    // the saved product changes (a stock adjustment, a window refocus or a
+    // live update), only the fields the admin has NOT edited are refreshed;
+    // every field the admin has changed keeps its unsaved value.
     values: savedFormValues,
     resetOptions: { keepDirtyValues: true },
   });
@@ -376,10 +379,27 @@ const ProductEdit = () => {
       formData.append("is_primary", (product?.images?.length || 0) === 0);
       return uploadProductImage(id, formData);
     },
-    onSuccess: () => {
-      // Refresh the product so the new image appears in the gallery
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
+    onSuccess: (response) => {
+      const uploadedImage = response?.data;
+
+      // The uploaded image is added to the gallery from the response. The
+      // product is refetched only when the response does not describe the
+      // image.
+      if (uploadedImage?.id === undefined || uploadedImage?.id === null) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
+        });
+        return;
+      }
+
+      patchProductDetail(queryClient, id, (current) => {
+        const images = current.images || [];
+        // A new primary image replaces the previous primary flag
+        const base = uploadedImage.is_primary
+          ? images.map((image) => ({ ...image, is_primary: false }))
+          : images;
+
+        return { images: [...base, uploadedImage] };
       });
     },
     onError: (error) =>
@@ -391,11 +411,24 @@ const ProductEdit = () => {
     mutationFn: (imageId) => deleteProductImage(id, imageId),
     // Mark the image as busy while the request runs
     onMutate: (imageId) => setImageActionKey(imageId),
-    onSuccess: () => {
-      // Refresh the product so the image disappears from the gallery
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
-      });
+    onSuccess: (_response, imageId) => {
+      const images = product?.images || [];
+      const removedImage = images.find((image) => image.id === imageId);
+      const wasPrimaryWithOthersLeft =
+        removedImage?.is_primary && images.length > 1;
+
+      // The image is removed from the gallery directly.
+      patchProductDetail(queryClient, id, (current) => ({
+        images: (current.images || []).filter((image) => image.id !== imageId),
+      }));
+
+      // When the primary image was removed, only the server knows which
+      // image took its place, so the product is refetched in that case.
+      if (wasPrimaryWithOthersLeft) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
+        });
+      }
     },
     onError: (error) =>
       showError(getApiErrorMessage(error, "Failed to remove image.")),
@@ -408,11 +441,14 @@ const ProductEdit = () => {
     mutationFn: (imageId) => setPrimaryImage(id, imageId),
     // Mark the image as busy while the request runs
     onMutate: (imageId) => setImageActionKey(imageId),
-    onSuccess: () => {
-      // Refresh the product so the new primary image is reflected
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.PRODUCT_DETAIL(id),
-      });
+    onSuccess: (_response, imageId) => {
+      // Only the primary flag changes, so it is moved to the chosen image.
+      patchProductDetail(queryClient, id, (current) => ({
+        images: (current.images || []).map((image) => ({
+          ...image,
+          is_primary: image.id === imageId,
+        })),
+      }));
     },
     onError: (error) =>
       showError(getApiErrorMessage(error, "Failed to update primary image.")),

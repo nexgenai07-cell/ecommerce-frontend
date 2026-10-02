@@ -160,7 +160,9 @@ const BasicInfoSection = ({
               id="is_active"
               label={isActive ? "Published" : "Draft"}
               checked={!!isActive}
-              onChange={(e) => setValue("is_active", e.target.checked)}
+              onChange={(e) =>
+                setValue("is_active", e.target.checked, { shouldDirty: true })
+              }
             />
           </div>
         </div>
@@ -177,6 +179,7 @@ const BasicInfoSection = ({
           // dropdown and find it themselves.
           setValue("category_id", String(newCategory.id), {
             shouldValidate: true,
+            shouldDirty: true,
           });
         }}
       />

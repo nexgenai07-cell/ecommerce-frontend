@@ -12,6 +12,13 @@
 //    they are written straight into every cached product object. Screens
 //    reflect the change instantly with no network request.
 //
+// Product list membership
+//    A product_update can also change which products belong in a list: a
+//    newly created product, or a product moved into or out of a category.
+//    Lists of the affected categories are refetched when a product joins
+//    them, and the product is removed from the cached lists of the category
+//    it left. Lists of unrelated categories are not touched.
+//
 // 2. Invalidation (every other event)
 //    The event only tells the client that something changed. The affected
 //    queries are marked stale and the ones currently on screen are refetched,
@@ -186,6 +193,72 @@ const patchProductTree = (node, update, stats, depth = 0) => {
 };
 
 // ------------------------------------------------------------
+// Product list membership helpers
+// ------------------------------------------------------------
+
+const PRODUCT_LIST_ROOT = "products-list";
+const PRODUCT_PAGE_ROOT = "products-backend-page";
+
+const hasValue = (value) => value !== undefined && value !== null;
+
+// Splits a comma-separated category parameter such as "5,8" into its ids.
+const parseCategoryParam = (value) =>
+  hasValue(value) && value !== ""
+    ? String(value)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+    : [];
+
+// Returns the category ids a cached product list was requested for. The
+// page-level lists store them in the filters object, the backend page
+// entries store them as the comma-separated category_id parameter.
+const getQueryCategoryIds = (query) => {
+  const [root, details] = query.queryKey;
+
+  if (root === PRODUCT_LIST_ROOT) {
+    return Array.isArray(details?.categories) ? details.categories : [];
+  }
+
+  if (root === PRODUCT_PAGE_ROOT) {
+    return parseCategoryParam(details?.category_id);
+  }
+
+  return [];
+};
+
+const queryHasCategory = (query, categoryId) =>
+  hasValue(categoryId) &&
+  getQueryCategoryIds(query).some((id) => isSameId(id, categoryId));
+
+const isProductListQuery = (query) => query.queryKey[0] === PRODUCT_LIST_ROOT;
+
+const isProductPageQuery = (query) => query.queryKey[0] === PRODUCT_PAGE_ROOT;
+
+// Removes a product from a cached list response and lowers the total by the
+// number of removed rows. The same reference is returned when the product
+// is not part of the response.
+const removeProductFromList = (data, productId) => {
+  if (!isPlainObject(data) || !Array.isArray(data.results)) return data;
+
+  const remaining = data.results.filter(
+    (product) => !isSameId(product?.id, productId),
+  );
+  const removedCount = data.results.length - remaining.length;
+
+  if (removedCount === 0) return data;
+
+  return {
+    ...data,
+    results: remaining,
+    count:
+      typeof data.count === "number"
+        ? Math.max(data.count - removedCount, 0)
+        : data.count,
+  };
+};
+
+// ------------------------------------------------------------
 // Processor factory
 // ------------------------------------------------------------
 
@@ -306,6 +379,75 @@ export const createLiveEventProcessor = ({
     });
   };
 
+  // Marks the cached backend pages that match the predicate as stale without
+  // refetching them. The list queries that are refetched afterwards then
+  // read fresh pages instead of the cached ones.
+  const markProductPagesStale = (matchesQuery) => {
+    queryClient.invalidateQueries({
+      predicate: (query) => isProductPageQuery(query) && matchesQuery(query),
+      refetchType: "none",
+    });
+  };
+
+  // Refetches the product lists on screen that match the predicate, and marks
+  // the matching lists that are not on screen as stale.
+  const refreshProductLists = (identity, matchesQuery) => {
+    markProductPagesStale(matchesQuery);
+
+    scheduleInvalidation(identity, {
+      predicate: (query) => isProductListQuery(query) && matchesQuery(query),
+    });
+  };
+
+  // Keeps the customer product lists consistent when a product is created or
+  // moves between categories.
+  const syncProductListMembership = (update) => {
+    const currentCategoryId = update.category_id;
+    const previousCategoryId = update.previous_category_id;
+
+    // A new product can appear in any list, so every list is refreshed.
+    if (update.created === true) {
+      refreshProductLists("product-lists:all", () => true);
+      return;
+    }
+
+    // A product that now belongs to a category shown in a list is fetched
+    // again so it appears with its complete data and in the right position.
+    if (hasValue(currentCategoryId)) {
+      refreshProductLists(
+        `product-lists:category:${currentCategoryId}`,
+        (query) => queryHasCategory(query, currentCategoryId),
+      );
+    }
+
+    // A product that left a category is removed from the lists of that
+    // category. Lists that also show its new category keep it, because
+    // they are refetched above.
+    if (
+      hasValue(previousCategoryId) &&
+      !isSameId(previousCategoryId, currentCategoryId)
+    ) {
+      const leftCategory = (query) =>
+        queryHasCategory(query, previousCategoryId) &&
+        !queryHasCategory(query, currentCategoryId);
+
+      queryClient.setQueriesData(
+        {
+          predicate: (query) =>
+            isProductListQuery(query) && leftCategory(query),
+        },
+        (previous) => {
+          const next = removeProductFromList(previous, update.id);
+
+          // Returning undefined tells React Query to leave the entry as is.
+          return next === previous ? undefined : next;
+        },
+      );
+
+      markProductPagesStale(leftCategory);
+    }
+  };
+
   const handleProductUpdate = (update) => {
     if (update.id === undefined || update.id === null) return;
 
@@ -338,6 +480,8 @@ export const createLiveEventProcessor = ({
     if (cartStats.found) {
       invalidateKey(CART_ROOT);
     }
+
+    syncProductListMembership(update);
   };
 
   const refreshOrderViews = (order) => {
@@ -433,12 +577,26 @@ export const createLiveEventProcessor = ({
       invalidateKey(CART_ROOT);
     },
 
+    // A coupon changed on the server. The cart holds the applied coupon and
+    // the discount, and the checkout total is derived from it, so refetching
+    // the cart refreshes both the cart page and the checkout summary.
+    coupon_update: () => {
+      invalidateKey(CART_ROOT);
+    },
+
     notification: (notification) => {
       invalidateKey(QUERY_KEYS.NOTIFICATIONS);
 
       if (!wasRecentlyAnnounced(notification)) {
         onNotification?.(notification);
       }
+    },
+
+    // The event carries no order totals or spending figures. Refetching the
+    // customers queries (the list, the summary cards and any open customer
+    // detail) returns the correct values from the server.
+    customer_update: () => {
+      invalidateKey(["adminCustomers"]);
     },
 
     dashboard_update: scheduleDashboardRefresh,

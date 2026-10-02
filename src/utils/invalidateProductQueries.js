@@ -13,7 +13,15 @@ import { QUERY_KEYS } from "../constants/queryKeys";
 //   derived from stock levels and the low stock threshold
 // - the Audit Logs page and the dashboard activity feed, so the entry the
 //   server records for the change shows up without a manual refresh
-const invalidateProductQueries = (queryClient, productId) => {
+//
+// When the caller has already written the new values into the single product
+// detail (for example from an API response), `skipDetail` leaves that entry
+// alone so the screen showing it is not refetched.
+const invalidateProductQueries = (
+  queryClient,
+  productId,
+  { skipDetail = false } = {},
+) => {
   const queryKeys = [
     QUERY_KEYS.PRODUCTS,
     ["products-list"],
@@ -28,7 +36,7 @@ const invalidateProductQueries = (queryClient, productId) => {
 
   // The detail entry is keyed by product id, so it is added only when the
   // id is known.
-  if (productId !== undefined && productId !== null) {
+  if (!skipDetail && productId !== undefined && productId !== null) {
     queryKeys.push(QUERY_KEYS.PRODUCT_DETAIL(productId));
   }
 
