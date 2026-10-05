@@ -27,6 +27,13 @@ import { showSuccess, showError } from "../../components/ui/Toast";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import {
+  savePostLoginRedirect,
+  readPostLoginRedirect,
+  clearPostLoginRedirect,
+  toFullPath,
+  resolveSafeRedirect,
+} from "../../utils/postLoginRedirect";
 
 const loginSchema = z.object({
   email: z
@@ -97,13 +104,27 @@ const Login = () => {
     }
   }, []);
 
-  // The full path of the page that redirected the visitor here, including
-  // its query string and hash, so the customer returns to exactly the same
-  // view (for example a filtered product listing) after signing in.
-  const fromLocation = location.state?.from;
-  const fromPath = fromLocation?.pathname
-    ? `${fromLocation.pathname}${fromLocation.search ?? ""}${fromLocation.hash ?? ""}`
-    : null;
+  // The target remembered from an earlier visit to this page, read once on
+  // mount. It is what brings a new customer back to the cart after they
+  // registered and verified their email, because by then the router state
+  // of the original redirect no longer exists.
+  const [savedRedirect] = useState(() => readPostLoginRedirect());
+
+  useEffect(() => {
+    // When a protected page sent the visitor here, remember where they were
+    // headed so it survives a trip through registration and verification.
+    savePostLoginRedirect(location.state?.from);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The page that redirected the visitor here, including its query string
+  // and hash, so the customer returns to exactly the same view (for example
+  // a filtered product listing) after signing in. The router state wins;
+  // the remembered target is the fallback.
+  const fromLocation = location.state?.from?.pathname
+    ? location.state.from
+    : savedRedirect;
+  const fromPath = toFullPath(fromLocation);
 
   // "from" is normally just wherever router state says redirected here.
   // BUT on the exact hard-reload this backup exists to cover, router
@@ -128,7 +149,7 @@ const Login = () => {
   // Undefined for every other "please sign in first" redirect, which is
   // exactly what we want — nothing extra gets replayed for those.
   const fromState =
-    location.state?.from?.state ??
+    fromLocation?.state ??
     (buyNowFallback ? { buyNow: buyNowFallback } : undefined);
 
   // ----------------------------------------------------------------
@@ -143,13 +164,7 @@ const Login = () => {
   // items, coupon and totals before proceeding to Checkout again. A
   // Buy Now checkout does not use the cart at all, so it returns
   // straight to Checkout with its product and quantity.
-  const isCartCheckout =
-    from.split(/[?#]/)[0] === ROUTES.CHECKOUT && !fromState?.buyNow;
-  const safeFrom = isCartCheckout
-    ? ROUTES.CART
-    : from.startsWith("/admin")
-      ? ROUTES.HOME
-      : from;
+  const safeFrom = resolveSafeRedirect(from, fromState);
 
   const { login, isAuthenticated, role } = useAuth();
   const queryClient = useQueryClient();
@@ -265,6 +280,7 @@ const Login = () => {
     // completeLogin's destination/state logic here exactly closes that
     // gap regardless of the timing.
     if (isAuthenticated) {
+      clearPostLoginRedirect();
       const destination = getPostLoginDestination(role);
       navigate(destination, {
         replace: true,
@@ -295,6 +311,7 @@ const Login = () => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
 
     login({ user, tokens });
+    clearPostLoginRedirect();
     showSuccess(`Welcome back, ${user.name}!`);
 
     const destination = getPostLoginDestination(user.role);

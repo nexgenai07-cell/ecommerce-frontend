@@ -1,6 +1,7 @@
+import { Controller } from "react-hook-form";
 import { AiOutlineDollarCircle } from "react-icons/ai";
 
-import Input from "../ui/Input";
+import FormattedNumberInput from "../ui/FormattedNumberInput";
 import Badge from "../ui/Badge";
 import calculateDiscount from "../../utils/calculateDiscount";
 import calculateProfitMetrics from "../../utils/calculateProfitMetrics";
@@ -17,7 +18,7 @@ const ProfitFigure = ({ label, value }) => (
   </div>
 );
 
-const PricingSection = ({ register, errors, watch, trigger }) => {
+const PricingSection = ({ control, errors, watch, trigger }) => {
   const originalPrice = parseFloat(watch("original_price")) || 0;
   const salePrice = parseFloat(watch("price")) || 0;
 
@@ -40,12 +41,8 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
   // single field, so the cross-field issue would not surface until the
   // whole form is submitted. Calling trigger() for both field names on
   // either field's blur re-checks the pair right away. This runs in
-  // addition to register()'s own onBlur, not instead of it.
+  // addition to the field's own onBlur, not instead of it.
   const revalidatePricePair = () => trigger(["price", "original_price"]);
-
-  const originalPriceField = register("original_price");
-  const salePriceField = register("price");
-  const purchasePriceField = register("purchase_price");
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-md hover:shadow-lg transition-shadow duration-300 p-5 sm:p-6 flex flex-col gap-5">
@@ -60,38 +57,50 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
 
       {/* Two fields side by side on larger screens, stacked on mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-        <Input
-          label="Original Price"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="e.g. 2500"
-          hint="Optional — only fill this in if you want to show a discount"
-          leftIcon={<span className="text-gray-400">Rs.</span>}
-          {...originalPriceField}
-          onBlur={(e) => {
-            originalPriceField.onBlur(e); // Keep react-hook-form's own per-field validation
-            revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
-          }}
-          error={errors.original_price?.message}
+        <Controller
+          control={control}
+          name="original_price"
+          render={({ field }) => (
+            <FormattedNumberInput
+              label="Original Price"
+              placeholder="e.g. 2,500"
+              hint="Optional — only fill this in if you want to show a discount"
+              leftIcon={<span className="text-gray-400">Rs.</span>}
+              ref={field.ref}
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={() => {
+                field.onBlur(); // Keep react-hook-form's own per-field validation
+                revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
+              }}
+              error={errors.original_price?.message}
+            />
+          )}
         />
 
         <div className="flex flex-col gap-1.5">
-          <Input
-            label="Price"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="e.g. 1999"
-            required
-            hint="The price customers will pay for this product"
-            leftIcon={<span className="text-gray-400">Rs.</span>}
-            {...salePriceField}
-            onBlur={(e) => {
-              salePriceField.onBlur(e); // Keep react-hook-form's own per-field validation
-              revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
-            }}
-            error={errors.price?.message}
+          <Controller
+            control={control}
+            name="price"
+            render={({ field }) => (
+              <FormattedNumberInput
+                label="Price"
+                placeholder="e.g. 1,999"
+                required
+                hint="The price customers will pay for this product"
+                leftIcon={<span className="text-gray-400">Rs.</span>}
+                ref={field.ref}
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={() => {
+                  field.onBlur(); // Keep react-hook-form's own per-field validation
+                  revalidatePricePair(); // Also re-check the pair, so the cross-field error shows immediately
+                }}
+                error={errors.price?.message}
+              />
+            )}
           />
 
           {/* Discount badge, only rendered when there is a real discount
@@ -112,17 +121,24 @@ const PricingSection = ({ register, errors, watch, trigger }) => {
           required, because profit, markup and margin are calculated from
           it everywhere in the admin panel. Zero is accepted. It is never
           shown to customers. */}
-      <Input
-        label="Purchase Price"
-        type="number"
-        step="0.01"
-        min="0"
-        placeholder="e.g. 1200"
-        required
-        hint="Your cost price for this product. Used to calculate profit and never shown to customers."
-        leftIcon={<span className="text-gray-400">Rs.</span>}
-        {...purchasePriceField}
-        error={errors.purchase_price?.message}
+      <Controller
+        control={control}
+        name="purchase_price"
+        render={({ field }) => (
+          <FormattedNumberInput
+            label="Purchase Price"
+            placeholder="e.g. 1,200"
+            required
+            hint="Your cost price for this product. Used to calculate profit and never shown to customers."
+            leftIcon={<span className="text-gray-400">Rs.</span>}
+            ref={field.ref}
+            name={field.name}
+            value={field.value}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+            error={errors.purchase_price?.message}
+          />
+        )}
       />
 
       {/* Live profit preview, shown once both prices are valid numbers */}

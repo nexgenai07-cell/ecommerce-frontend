@@ -224,6 +224,7 @@ const ProductEdit = () => {
   // react-hook-form instance for the whole edit form
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -601,7 +602,7 @@ const ProductEdit = () => {
           />
           {/* Selling price, original price and purchase price */}
           <PricingSection
-            register={register}
+            control={control}
             errors={errors}
             watch={watch}
             trigger={trigger}
@@ -621,6 +622,7 @@ const ProductEdit = () => {
           {/* SKU, stock figures and low stock threshold */}
           <InventorySection
             register={register}
+            control={control}
             errors={errors}
             totalStock={product?.total_stock}
             reservedStock={product?.reserved_stock}

@@ -6,7 +6,8 @@ import invalidateProductQueries from "../../utils/invalidateProductQueries";
 import { patchProductStock } from "../../utils/productDetailCache";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
-import Input from "../ui/Input";
+import FormattedNumberInput from "../ui/FormattedNumberInput";
+import { formatNumberWithCommas } from "../../utils/numberInput";
 import Button from "../ui/Button";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 
@@ -91,7 +92,9 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
       <div className="flex flex-col gap-4">
         <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
           Current total stock:{" "}
-          <span className="font-semibold text-gray-900">{currentStock}</span>
+          <span className="font-semibold text-gray-900">
+            {formatNumberWithCommas(currentStock)}
+          </span>
         </div>
 
         {/* Add / Remove toggle */}
@@ -116,13 +119,12 @@ const AdjustStockModal = ({ isOpen, onClose, productId, currentStock }) => {
           </Button>
         </div>
 
-        <Input
+        <FormattedNumberInput
           label="Quantity"
-          type="number"
-          min="1"
-          placeholder="e.g. 20"
+          placeholder="e.g. 1,000"
+          allowDecimal={false}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={setAmount}
           error={fieldError}
           required
         />

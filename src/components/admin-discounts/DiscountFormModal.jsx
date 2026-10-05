@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { QUERY_KEYS } from "../../constants/queryKeys";
 import { showSuccess, showError } from "../ui/Toast";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
+import FormattedNumberInput from "../ui/FormattedNumberInput";
 import Select from "../ui/Select";
 import Toggle from "../ui/Toggle";
 import Button from "../ui/Button";
@@ -316,6 +317,7 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -524,28 +526,46 @@ const DiscountFormModal = ({ isOpen, onClose, activeDiscount }) => {
             {...register("type")}
             error={errors.type?.message}
           />
-          <Input
-            label={watch("type") === "percent" ? "Value (%)" : "Value (Rs.)"}
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder={watch("type") === "percent" ? "e.g. 25" : "e.g. 500"}
-            required
-            {...register("value")}
-            error={errors.value?.message}
+          <Controller
+            control={control}
+            name="value"
+            render={({ field }) => (
+              <FormattedNumberInput
+                label={
+                  watch("type") === "percent" ? "Value (%)" : "Value (Rs.)"
+                }
+                placeholder={
+                  watch("type") === "percent" ? "e.g. 25" : "e.g. 1,500"
+                }
+                required
+                ref={field.ref}
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                error={errors.value?.message}
+              />
+            )}
           />
         </div>
 
-        <Input
-          label="Minimum Order Amount"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="0.00"
-          hint="Optional — leave blank for no minimum"
-          leftIcon={<span className="text-gray-400">Rs.</span>}
-          {...register("min_order_amount")}
-          error={errors.min_order_amount?.message}
+        <Controller
+          control={control}
+          name="min_order_amount"
+          render={({ field }) => (
+            <FormattedNumberInput
+              label="Minimum Order Amount"
+              placeholder="0.00"
+              hint="Optional — leave blank for no minimum"
+              leftIcon={<span className="text-gray-400">Rs.</span>}
+              ref={field.ref}
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={errors.min_order_amount?.message}
+            />
+          )}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

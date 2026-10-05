@@ -49,6 +49,11 @@ const sanitizePriceInput = (raw) => {
   return digitsOnly.replace(/^0+(?=\d)/, "");
 };
 
+// Adds thousands separators for display only, e.g. "50000" -> "50,000".
+// The stored filter value always stays the plain digit string.
+const formatPriceDisplay = (digits) =>
+  digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "";
+
 // ----------------------------------------------------------------------------
 // FilterSection — a single collapsible block inside the panel (Category,
 // Price Range, etc). Handles its own expand/collapse animation so the main
@@ -355,7 +360,7 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="0"
-              value={local.minPrice}
+              value={formatPriceDisplay(local.minPrice)}
               onChange={handleMinPriceChange}
               onBlur={handleMinPriceBlur}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -371,7 +376,7 @@ const ProductsFilters = ({ filters, onFiltersChange, onClose }) => {
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="50k+"
-              value={local.maxPrice}
+              value={formatPriceDisplay(local.maxPrice)}
               onChange={handleMaxPriceChange}
               onBlur={handleMaxPriceBlur}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"

@@ -23,7 +23,9 @@ import { getCategories } from "../../api/categories.api";
 import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 import extractListData from "../../utils/extractListData";
-import getApiErrorMessage, { getApiFieldError } from "../../utils/getApiErrorMessage"; // Pulls the backend's own error text out of a failed request
+import getApiErrorMessage, {
+  getApiFieldError,
+} from "../../utils/getApiErrorMessage"; // Pulls the backend's own error text out of a failed request
 import generateSku from "../../utils/generateSku";
 import { sanitizeSkuValue, validateSku } from "../../utils/skuValidation";
 // generateSku — builds a readable candidate SKU from name + category,
@@ -153,6 +155,7 @@ const ProductAdd = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -412,7 +415,7 @@ const ProductAdd = () => {
             onNameBlur={checkNameOnBlur}
           />
           <PricingSection
-            register={register}
+            control={control}
             errors={errors}
             watch={watch}
             trigger={trigger}
@@ -429,6 +432,7 @@ const ProductAdd = () => {
         <div className="flex flex-col gap-6">
           <InventorySection
             register={register}
+            control={control}
             errors={errors}
             isNewProduct={true}
             totalStock={parseInt(watchedValues.stock, 10) || 0}

@@ -69,6 +69,10 @@ import CartSummary from "../../components/cart/CartSummary";
 // The sticky order-summary card on the right: price breakdown, coupon input,
 // and the "Proceed to Checkout" button.
 
+import CheckoutStepper from "../../components/checkout/CheckoutStepper";
+// Order progress stepper (Cart -> Checkout -> Payment). On this page the
+// Cart step is the current one.
+
 import ProductGrid from "../../components/shared/ProductGrid";
 // Shared responsive product grid, reused here for the recommended products.
 
@@ -432,6 +436,13 @@ const Cart = () => {
   if (cartLoading) {
     return (
       <div className="relative overflow-hidden min-h-screen bg-gray-50 md:px-20">
+        {/* Order progress stepper: the Cart step is current on this page */}
+        <div className="bg-white border-b border-gray-100 py-4">
+          <Container>
+            <CheckoutStepper currentStep={1} />
+          </Container>
+        </div>
+
         <Container className="py-6 sm:py-8">
           <div className="flex flex-col gap-8">
             {/* Page heading — icon box + title/subtitle stack */}
@@ -559,6 +570,13 @@ const Cart = () => {
   return (
     <div className="relative overflow-hidden min-h-screen bg-gray-50 md:px-20">
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-xl h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      {/* Order progress stepper: the Cart step is current on this page */}
+      <div className="bg-white border-b border-gray-100 py-4">
+        <Container>
+          <CheckoutStepper currentStep={1} />
+        </Container>
+      </div>
 
       <Container className="py-6 sm:py-8">
         <div className="flex flex-col gap-8">

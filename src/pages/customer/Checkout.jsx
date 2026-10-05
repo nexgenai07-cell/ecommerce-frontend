@@ -67,7 +67,7 @@ import { ROUTES } from "../../constants/routes";
 import { QUERY_KEYS } from "../../constants/queryKeys";
 // Layout wrapper component that applies consistent max-width/padding container styling
 import Container from "../../components/layouts/Container";
-// Stepper component showing progress through Cart > Checkout > Confirmation stages
+// Stepper component showing progress through the Cart > Checkout > Payment stages
 import CheckoutStepper from "../../components/checkout/CheckoutStepper";
 // Sub-component handling contact information fields (email, phone)
 import ContactForm from "../../components/checkout/ContactForm";
@@ -175,16 +175,18 @@ const resolveProductImage = (product) =>
 // The page header (CheckoutStepper) never depends on the cart request, so
 // it is reused here directly instead of being re-implemented as a
 // placeholder — this guarantees it is pixel-identical to the real header
-// in every state. Only the parts that actually depend on the cart data —
+// in every state. The current step is passed in by the caller, because the
+// skeleton is also shown while a payment is being resumed (Payment step).
+// Only the parts that actually depend on the cart data —
 // the three form cards on the left and the order summary card on the
 // right — are mocked, matching each real component's structure, spacing,
 // and element sizes one-for-one.
-const CheckoutSkeleton = () => (
+const CheckoutSkeleton = ({ currentStep = 2 }) => (
   <div className="min-h-screen bg-gray-50 lg:px-20">
     {/* Stepper — identical to the real header, not a placeholder */}
     <div className="bg-white border-b border-gray-100 py-4">
       <Container>
-        <CheckoutStepper currentStep={2} />
+        <CheckoutStepper currentStep={currentStep} />
       </Container>
     </div>
 
@@ -403,6 +405,10 @@ const Checkout = () => {
   // that actually matter right before the cart gets cleared, and use that
   // frozen snapshot instead of the live cart once we're on the payment step.
   const [orderSnapshot, setOrderSnapshot] = useState(null);
+  // Becomes true once the customer has uploaded and submitted the QR payment
+  // proof. It only drives the order progress stepper, which turns every step
+  // green (Payment included) from that point on.
+  const [isPaymentSubmitted, setIsPaymentSubmitted] = useState(false);
 
   // =============================================
   // CHECKOUT OTP VERIFICATION STATE
@@ -1303,6 +1309,9 @@ const Checkout = () => {
   // (see checkoutMutation.onSuccess above for why it's deliberately
   // NOT cleared when the order is first placed).
   const handleQrProofUploaded = () => {
+    // Marks the Payment step of the stepper as completed. This runs for Buy
+    // Now orders as well, so it must come before the early return below.
+    setIsPaymentSubmitted(true);
     if (isBuyNow) return;
     handleClearCart();
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CART });
@@ -1349,6 +1358,14 @@ const Checkout = () => {
     checkoutMutation.isPending ||
     createIntentMutation.isPending;
 
+  // Order progress stepper state:
+  //   details / otp   -> Checkout is the current step
+  //   payment / qr    -> Payment is the current step
+  //   proof submitted -> every step is completed
+  const isOnPaymentStep = step === "payment" || step === "qr";
+  const stepperCurrentStep = isOnPaymentStep ? 3 : 2;
+  const isStepperComplete = isOnPaymentStep && isPaymentSubmitted;
+
   // While the cart is still being fetched, show the full-page skeleton
   // instead of letting the form and order summary render with empty/zero
   // values first and then jump to their real size the moment the request
@@ -1356,7 +1373,7 @@ const Checkout = () => {
   // since cartItems is still an empty array at this point regardless of
   // whether the cart is genuinely empty or simply hasn't loaded yet.
   if (cartLoading) {
-    return <CheckoutSkeleton />;
+    return <CheckoutSkeleton currentStep={resumeOrderNumber ? 3 : 2} />;
   }
 
   // Resuming payment for an existing order — keep showing the skeleton
@@ -1364,7 +1381,7 @@ const Checkout = () => {
   // Without this, the details form (with empty fields, since there is no
   // cart to prefill from) would flash on screen for a moment first.
   if (resumeOrderNumber && step === "details") {
-    return <CheckoutSkeleton />;
+    return <CheckoutSkeleton currentStep={3} />;
   }
 
   // Cart empty ho toh cart pe redirect — sirf details step par, aur sirf
@@ -1394,7 +1411,10 @@ const Checkout = () => {
       {/* Stepper — top */}
       <div className="bg-white border-b border-gray-100 py-4">
         <Container>
-          <CheckoutStepper currentStep={2} />
+          <CheckoutStepper
+            currentStep={stepperCurrentStep}
+            isComplete={isStepperComplete}
+          />
         </Container>
       </div>
 

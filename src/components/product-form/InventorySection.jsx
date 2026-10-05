@@ -1,3 +1,5 @@
+import { Controller } from "react-hook-form";
+
 // Icons: section header, SKU regenerate button, and the lock / unlock controls
 import {
   AiOutlineDatabase,
@@ -8,6 +10,8 @@ import {
 
 // Shared UI building blocks
 import Input from "../ui/Input";
+import FormattedNumberInput from "../ui/FormattedNumberInput";
+import { formatNumberWithCommas } from "../../utils/numberInput";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 // SKU helpers shared by every SKU field in the admin panel
@@ -20,6 +24,8 @@ import {
 
 // Props:
 //   register           — react-hook-form register function of the parent form.
+//   control            — react-hook-form control object of the parent form,
+//                        used by the fields that show thousands separators.
 //   errors             — react-hook-form errors object of the parent form.
 //   totalStock / reservedStock / availableStock — stock figures shown for an
 //                        existing product.
@@ -44,6 +50,7 @@ import {
 //                        parent restores the original SKU and locks it again.
 const InventorySection = ({
   register,
+  control,
   errors,
   totalStock,
   reservedStock,
@@ -201,14 +208,23 @@ const InventorySection = ({
         // so a plain starting-quantity field is fine here.
         <div className="flex flex-col gap-1.5">
           {/* Starting stock entered by the admin */}
-          <Input
-            label="Starting Quantity"
-            type="number"
-            min="0"
-            placeholder="e.g. 50"
-            required
-            {...register("stock")}
-            error={errors.stock?.message}
+          <Controller
+            control={control}
+            name="stock"
+            render={({ field }) => (
+              <FormattedNumberInput
+                label="Starting Quantity"
+                placeholder="e.g. 1,000"
+                required
+                allowDecimal={false}
+                ref={field.ref}
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                error={errors.stock?.message}
+              />
+            )}
           />
           {/* Availability badge based on the starting quantity */}
           <Badge
@@ -234,7 +250,9 @@ const InventorySection = ({
           </label>
           {/* Read-only total stock with an availability badge */}
           <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5">
-            <span className="text-lg font-semibold text-gray-900">{total}</span>
+            <span className="text-lg font-semibold text-gray-900">
+              {formatNumberWithCommas(total)}
+            </span>
             <Badge
               label={available > 0 ? "In Stock" : "Out of Stock"}
               variant={available > 0 ? "success" : "danger"}
@@ -245,9 +263,10 @@ const InventorySection = ({
           {/* Breakdown of reserved and sellable units, when any are reserved */}
           {reserved > 0 && (
             <p className="text-xs text-gray-400">
-              {reserved} reserved by pending orders &middot;{" "}
+              {formatNumberWithCommas(reserved)} reserved by pending orders
+              &middot;{" "}
               <span className="font-medium text-gray-600">
-                {available} available to sell
+                {formatNumberWithCommas(available)} available to sell
               </span>
             </p>
           )}
@@ -265,14 +284,23 @@ const InventorySection = ({
       )}
 
       {/* Threshold below which the admin is alerted about low stock */}
-      <Input
-        label="Low Stock Threshold"
-        type="number"
-        min="0"
-        placeholder="e.g. 5"
-        hint="Admin gets alerted when stock falls to or below this number"
-        {...register("low_stock_threshold")}
-        error={errors.low_stock_threshold?.message}
+      <Controller
+        control={control}
+        name="low_stock_threshold"
+        render={({ field }) => (
+          <FormattedNumberInput
+            label="Low Stock Threshold"
+            placeholder="e.g. 5"
+            hint="Admin gets alerted when stock falls to or below this number"
+            allowDecimal={false}
+            ref={field.ref}
+            name={field.name}
+            value={field.value}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+            error={errors.low_stock_threshold?.message}
+          />
+        )}
       />
     </div>
   );

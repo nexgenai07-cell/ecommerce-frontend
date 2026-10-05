@@ -122,28 +122,50 @@ const BasicInfoSection = ({
       />
 
       {/* Category + Visibility side by side on larger screens, stacked
-          on mobile — grid-cols-1 falls back to a single column below
-          the sm breakpoint so nothing gets cramped on small phones. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          on mobile. grid-cols-1 falls back to a single column below the
+          sm breakpoint so nothing gets cramped on small phones.
+          items-start keeps both columns anchored to the top, so a
+          validation message that grows the Category column never
+          shifts the Visibility column. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-end gap-2">
+          {/* The label is rendered here instead of inside Select so the
+              dropdown and the Add New button can share one row that is
+              independent of the error message below the dropdown. */}
+          <label
+            htmlFor="category_id"
+            className="text-sm font-medium text-gray-700"
+          >
+            Category
+            <span className="text-danger ml-1">*</span>
+          </label>
+
+          {/* items-start pins the button to the top of the row, level
+              with the dropdown itself. The validation message is part
+              of the Select block and extends below that level, so it
+              can never pull the button out of alignment. */}
+          <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <Select
-                label="Category"
-                required
+                id="category_id"
                 options={categoryOptions}
                 placeholder="Select a category"
                 {...register("category_id")}
                 error={errors.category_id?.message}
               />
             </div>
+
+            {/* h-10.5 matches the exact height of the Select control
+                (py-2.5 + text-sm line height + 1px borders). */}
             <button
               type="button"
               onClick={openCategoryModal}
               title="Add New Category"
-              className="h-9 shrink-0 self-end flex items-center gap-1 pl-2.5 pr-3 rounded-full bg-primary-50 border  text-primary text-xs font-semibold hover:bg-primary hover:text-white hover:border-primary active:scale-95 transition-colors duration-150 "
+              className="group h-10.5 shrink-0 inline-flex items-center gap-2 pl-2.5 pr-4 rounded-lg border-[1.5px] border-primary bg-primary-50 text-primary-dark text-sm font-semibold shadow-sm hover:bg-primary hover:border-primary-dark hover:text-white hover:shadow-md hover:shadow-primary/25 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all duration-200"
             >
-              <AiOutlinePlus className="w-3.5 h-3.5" />
+              <span className="w-5 h-5 rounded-md bg-primary text-white flex items-center justify-center transition-colors duration-200 group-hover:bg-white group-hover:text-primary">
+                <AiOutlinePlus className="w-3.5 h-3.5" />
+              </span>
               Add New
             </button>
           </div>

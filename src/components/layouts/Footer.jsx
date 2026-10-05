@@ -9,7 +9,9 @@
 //      so the first column sits on the left edge and the last column
 //      sits on the right edge. Mobile shows them as collapsible
 //      accordion sections.
-//   2. Bottom bar: copyright notice and legal links.
+//   2. Bottom bar: copyright notice and legal links (Privacy Policy,
+//      Terms of Service). Legal links appear only here, never in the
+//      main columns.
 //
 // The background is an interactive gravity-star field. Categories are
 // loaded from the backend, and icons come from "react-icons".
@@ -44,11 +46,19 @@ const QUICK_LINKS = [
   { label: "New Arrivals", route: `${ROUTES.PRODUCTS}?sort=new` },
 ];
 
-// Static legal and help links shown in the "Support" column.
+// Customer service links shown in the "Support" column.
 const SUPPORT_LINKS = [
+  { label: "My Orders", route: ROUTES.ACCOUNT_ORDERS },
+  { label: "Returns & Refunds", route: ROUTES.ACCOUNT_RETURNS },
+  { label: "Contact Support", route: ROUTES.ACCOUNT_COMPLAINTS },
+];
+
+// Legal links shown only in the bottom bar, so each policy is linked
+// from a single place in the footer.
+const LEGAL_LINKS = [
   { label: "Privacy Policy", route: "/privacy" },
   { label: "Terms of Service", route: "/terms" },
-  { label: "Help Center", route: "/help" },
+  { label: "Payments", route: "/payments" },
 ];
 
 // Social profiles, shared by the desktop and mobile layouts.
@@ -355,24 +365,15 @@ const Footer = () => {
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-6">
-              <Link
-                to="/privacy"
-                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
-              >
-                Privacy
-              </Link>
-              <Link
-                to="/payments"
-                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
-              >
-                Payments
-              </Link>
-              <Link
-                to="/terms"
-                className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
-              >
-                Terms
-              </Link>
+              {LEGAL_LINKS.map((link) => (
+                <Link
+                  key={link.label}
+                  to={link.route}
+                  className="text-[11px] text-primary-light transition-colors duration-200 hover:text-emerald-200"
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
           </div>
         </Container>

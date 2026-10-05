@@ -31,6 +31,11 @@ import {
   generateStrongPassword,
 } from "../../utils/passwordStrength";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import {
+  readPostLoginRedirect,
+  toFullPath,
+  resolveSafeRedirect,
+} from "../../utils/postLoginRedirect";
 
 // =============================================
 // ZOD VALIDATION SCHEMA
@@ -144,7 +149,22 @@ const Register = () => {
   // decides automatically whether to create a new account or log an
   // existing one in.
   // =============================================
-  useGoogleSignIn("google-signin-button-register");
+  //
+  // A customer who was sent to sign in from a protected page (for example
+  // the cart's checkout button) and chose to register instead is returned
+  // to that page after a Google sign-up as well. Without a remembered
+  // target the visitor goes to the storefront home page.
+  const [redirectOptions] = useState(() => {
+    const saved = readPostLoginRedirect();
+    const savedPath = toFullPath(saved);
+    return savedPath
+      ? {
+          safeFrom: resolveSafeRedirect(savedPath, saved.state),
+          fromState: saved.state,
+        }
+      : {};
+  });
+  useGoogleSignIn("google-signin-button-register", redirectOptions);
 
   // =============================================
   // CONFIRMATION-CARD STATE (Double Opt-In)

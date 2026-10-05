@@ -42,8 +42,9 @@
 // and replay extra router state once signed in, exactly like the normal
 // email/password flow's own "from" handling. Login.jsx uses this to send a
 // customer back to whatever page (e.g. a Buy Now checkout) redirected them
-// here instead of always landing on Home. Register.jsx doesn't pass this,
-// so it keeps going to Home exactly as before.
+// here instead of always landing on Home. Register.jsx passes the same
+// options when a remembered target exists, so a new customer who signs up
+// with Google returns to that page too.
 // ============================================================================
 
 import { useEffect, useRef } from "react";
@@ -55,6 +56,7 @@ import { showSuccess, showError } from "../components/ui/Toast";
 import { ROUTES } from "../constants/routes";
 import { QUERY_KEYS } from "../constants/queryKeys";
 import getApiErrorMessage from "../utils/getApiErrorMessage";
+import { clearPostLoginRedirect } from "../utils/postLoginRedirect";
 
 // Read once from the environment. Vite only exposes variables prefixed with
 // VITE_ to client-side code, and only variables that exist at build time —
@@ -123,6 +125,7 @@ const useGoogleSignIn = (containerId, redirectOptions = {}) => {
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WISHLIST });
 
         login({ user: data.user, tokens: data.tokens });
+        clearPostLoginRedirect();
         showSuccess(`Welcome, ${data.user.name}!`);
 
         // Same role-based redirect rule used everywhere else in the auth

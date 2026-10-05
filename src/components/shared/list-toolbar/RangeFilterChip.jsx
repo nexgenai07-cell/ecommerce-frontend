@@ -86,7 +86,7 @@ const RangeFilterChip = ({
 }) => {
   const valueLabel =
     minValue || maxValue
-      ? `${minValue || "0"} - ${maxValue || "max"}`
+      ? `${formatWithThousands(minValue) || "0"} - ${formatWithThousands(maxValue) || "max"}`
       : `select range`;
 
   return (
